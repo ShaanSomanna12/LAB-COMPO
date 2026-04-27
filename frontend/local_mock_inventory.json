@@ -1,0 +1,51 @@
+[
+  {
+    "id": 1,
+    "name": "Raspberry Pi 4 Model B",
+    "available": 4,
+    "total": 5,
+    "desc": "High-performance single-board computer.",
+    "department": "CSE",
+    "location": "Lab 201",
+    "status": "Available"
+  },
+  {
+    "id": 2,
+    "name": "Arduino Mega 2560",
+    "available": 0,
+    "total": 2,
+    "desc": "Advanced microcontroller board based on the ATmega2560.",
+    "department": "MECH",
+    "location": "Mechatronics Lab",
+    "status": "Available"
+  },
+  {
+    "id": 3,
+    "name": "NVIDIA Jetson Nano",
+    "available": 2,
+    "total": 2,
+    "desc": "Small, powerful computer for embedded AI.",
+    "department": "CSE",
+    "location": "AI Lab 404",
+    "status": "Available"
+  },
+  {
+    "id": 4,
+    "name": "Fluke 117 Multimeter",
+    "available": 12,
+    "total": 15,
+    "desc": "True-RMS digital multimeter with integrated non-contact voltage detection.",
+    "department": "EEE",
+    "location": "Circuits Lab",
+    "status": "Available"
+  },
+  {
+    "id": 1777218164312,
+    "name": "GRAPHIC CARD",
+    "department": "CSE",
+    "total": 4,
+    "available": 4,
+    "desc": "",
+    "status": "Available"
+  }
+]
