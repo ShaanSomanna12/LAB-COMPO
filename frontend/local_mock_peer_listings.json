@@ -1,0 +1,56 @@
+[
+  {
+    "id": "LIST-1001",
+    "studentName": "Rahul Kumar",
+    "usn": "4VV25CS045",
+    "component": "STM32 Blue Pill Board",
+    "department": "ECE",
+    "type": "Sell",
+    "price": 450,
+    "condition": "Like New",
+    "description": "Bought for microcontrollers lab but ended up using Arduino. Working perfectly.",
+    "status": "Active",
+    "contact": "rahul.kumar@phoenix.edu"
+  },
+  {
+    "id": "LIST-1002",
+    "studentName": "Aditi Sharma",
+    "usn": "4VV25EC012",
+    "component": "Raspberry Pi Camera Module V2",
+    "department": "EDL",
+    "type": "Rent",
+    "price": 80,
+    "condition": "Brand New",
+    "description": "Unopened box camera module. Renting for academic project timelines.",
+    "status": "Active",
+    "contact": "aditi.sharma@phoenix.edu"
+  },
+  {
+    "id": "LIST-5042",
+    "studentName": "SAM",
+    "usn": "4VV25CE009",
+    "component": "BREADBOARD",
+    "department": "EDL",
+    "type": "Sell",
+    "price": 50,
+    "condition": "Like New",
+    "description": "",
+    "status": "Active",
+    "contact": "somzshaan@gmail.com",
+    "image": null
+  },
+  {
+    "id": "LIST-9414",
+    "studentName": "SAMARTH",
+    "usn": "4VV25CS176",
+    "component": "BREADBOARD",
+    "department": "EDL",
+    "type": "Sell",
+    "price": 50,
+    "condition": "Like New",
+    "description": "",
+    "status": "Active",
+    "contact": "somzshaan@gmail.com",
+    "image": null
+  }
+]

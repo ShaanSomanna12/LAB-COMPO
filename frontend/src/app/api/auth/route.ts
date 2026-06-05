@@ -31,9 +31,18 @@ export async function POST(request: Request) {
       // Auto-create user for demo/hackathon purposes if they do not exist
       if (!user) {
         const hashedPassword = await bcrypt.hash(password, 10);
+        const assignedRole = isEmail 
+          ? (usn.toLowerCase().startsWith('hod') ? 4 : 3) 
+          : 1;
         const insertRes = await query(
           'INSERT INTO users (usn, name, email, password_hash, role_id) VALUES ($1, $2, $3, $4, $5) RETURNING user_id, usn, role_id',
-          [usn.toUpperCase(), `Student ${usn}`, `${usn.toLowerCase()}@college.edu`, hashedPassword, 1]
+          [
+            isEmail ? usn.toLowerCase() : usn.toUpperCase(),
+            isEmail ? (assignedRole === 4 ? `HOD ${usn}` : `Admin ${usn}`) : `Student ${usn}`,
+            isEmail ? usn.toLowerCase() : `${usn.toLowerCase()}@college.edu`,
+            hashedPassword,
+            assignedRole
+          ]
         );
         user = insertRes.rows[0];
       } else {
@@ -51,7 +60,7 @@ export async function POST(request: Request) {
       user = {
         user_id: 'mock-uuid-1234',
         usn: isEmail ? usn.toLowerCase() : usn.toUpperCase(),
-        role_id: isEmail ? 3 : 1
+        role_id: isEmail ? (usn.toLowerCase().startsWith('hod') ? 4 : 3) : 1
       };
     }
 

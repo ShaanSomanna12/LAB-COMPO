@@ -1,0 +1,54 @@
+[
+  {
+    "id": "PASS-8041",
+    "studentName": "Rohan Sharma",
+    "usn": "4VV25CS001",
+    "labName": "CSE Lab",
+    "department": "EDL",
+    "accessDate": "2026-05-28",
+    "timeSlot": "Morning Shift (9:00 AM - 1:00 PM)",
+    "purpose": "Working on Next.js frontend state optimization",
+    "status": "APPROVED",
+    "hodRemarks": "Approved from EDL Department. Excellent research direction.",
+    "adminRemarks": "Pass granted. Please bring your institutional ID card."
+  },
+  {
+    "id": "PASS-3920",
+    "studentName": "Rahul Kumar",
+    "usn": "4VV25CS045",
+    "labName": "Mechanical Lab",
+    "department": "MECH",
+    "accessDate": "2026-05-29",
+    "timeSlot": "Full Day (9:00 AM - 5:00 PM)",
+    "purpose": "Mechatronics arm torque testing",
+    "status": "PENDING_HOD",
+    "hodRemarks": "",
+    "adminRemarks": ""
+  },
+  {
+    "id": "PASS-7721",
+    "studentName": "Rohan Sharma",
+    "usn": "4VV25CS001",
+    "labName": "EEE Lab",
+    "department": "EEE",
+    "accessDate": "2026-05-30",
+    "timeSlot": "Afternoon Shift (2:00 PM - 5:00 PM)",
+    "purpose": "Smart grid micro-controller simulation testing",
+    "status": "APPROVED",
+    "hodRemarks": "Approved by EEE HOD. The micro-grid simulation setup looks correct.",
+    "adminRemarks": "Pass granted. Please bring your institutional ID card."
+  },
+  {
+    "id": "PASS-5291",
+    "studentName": "Aditi Sharma",
+    "usn": "4VV25EC012",
+    "labName": "ECE Lab",
+    "department": "ECE",
+    "accessDate": "2026-05-27",
+    "timeSlot": "Afternoon Shift (2:00 PM - 5:00 PM)",
+    "purpose": "Oscilloscope frequency response validation",
+    "status": "REJECTED_HOD",
+    "hodRemarks": "Safety training not completed. Please finish lab safety video first.",
+    "adminRemarks": ""
+  }
+]
