@@ -3,12 +3,13 @@ import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
   const token = request.cookies.get('phoenix_token')?.value;
+  const path = request.nextUrl.pathname;
 
-  // Protect student and admin routes natively
-  if (request.nextUrl.pathname.startsWith('/student') || request.nextUrl.pathname.startsWith('/admin')) {
+  // Protect all student and admin routes EXCEPT the actual /student login page
+  if ((path.startsWith('/student') && path !== '/student') || path.startsWith('/admin')) {
     if (!token) {
-      // No token found, redirect to login which we assume is root "/"
-      return NextResponse.redirect(new URL('/', request.url));
+      // If they don't have a token, kick them back to the student login screen
+      return NextResponse.redirect(new URL('/student', request.url));
     }
   }
 
