@@ -134,10 +134,10 @@ export default function StudentAuth() {
           {/* Diagnostic Display Message Area */}
           {message && (
             <div className={`mb-5 p-3.5 rounded-xl text-sm font-medium transition-all duration-200 ${message.startsWith('Error')
-                ? 'bg-red-950/40 border border-red-900/50 text-red-400'
-                : message.startsWith('Success') || message.includes('complete')
-                  ? 'bg-emerald-950/40 border border-emerald-900/50 text-emerald-400'
-                  : 'bg-zinc-800/60 border border-zinc-700/50 text-zinc-300'
+              ? 'bg-red-950/40 border border-red-900/50 text-red-400'
+              : message.startsWith('Success') || message.includes('complete')
+                ? 'bg-emerald-950/40 border border-emerald-900/50 text-emerald-400'
+                : 'bg-zinc-800/60 border border-zinc-700/50 text-zinc-300'
               }`}>
               {message}
             </div>
