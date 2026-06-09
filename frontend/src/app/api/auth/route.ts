@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { query } from '@/lib/db'; // <--- THIS IS THE NEW LINE FIXING THE ERROR
 import { isValidUSN, generateToken } from '@/lib/auth';
 import bcrypt from 'bcrypt';
 

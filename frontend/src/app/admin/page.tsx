@@ -632,8 +632,8 @@ export default function AdminDashboard() {
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${req.status === 'Pending HOD' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
-                          req.status === 'Ready for Collection' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' :
-                            'bg-green-500/10 text-green-400 border-green-500/20'
+                        req.status === 'Ready for Collection' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' :
+                          'bg-green-500/10 text-green-400 border-green-500/20'
                         }`}>
                         {req.status}
                       </span>
@@ -713,14 +713,14 @@ export default function AdminDashboard() {
                       </td>
                       <td className="px-6 py-4">
                         <span className={`px-2.5 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 w-fit ${req.status === 'APPROVED' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                            req.status === 'PENDING_ADMIN' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
-                              req.status === 'PENDING_HOD' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                                'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                          req.status === 'PENDING_ADMIN' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                            req.status === 'PENDING_HOD' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                              'bg-rose-500/10 text-rose-400 border-rose-500/20'
                           }`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${req.status === 'APPROVED' ? 'bg-emerald-400' :
-                              req.status === 'PENDING_ADMIN' ? 'bg-purple-400 animate-pulse' :
-                                req.status === 'PENDING_HOD' ? 'bg-amber-400 animate-pulse' :
-                                  'bg-rose-400'
+                            req.status === 'PENDING_ADMIN' ? 'bg-purple-400 animate-pulse' :
+                              req.status === 'PENDING_HOD' ? 'bg-amber-400 animate-pulse' :
+                                'bg-rose-400'
                             }`}></span>
                           {req.status === 'PENDING_HOD' ? 'Awaiting HOD' :
                             req.status === 'PENDING_ADMIN' ? 'Awaiting Admin' :
@@ -898,8 +898,8 @@ export default function AdminDashboard() {
                         <button
                           onClick={() => toggleRepairStatus(item.id)}
                           className={`px-2.5 py-1 border rounded text-[9px] font-mono font-bold tracking-wide uppercase transition-all cursor-pointer ${item.status === 'Available'
-                              ? 'bg-zinc-950 hover:bg-rose-950/20 border-zinc-850 hover:border-rose-900/60 hover:text-rose-400'
-                              : 'bg-rose-950/15 border-rose-900/30 text-rose-400 hover:bg-zinc-950 hover:border-zinc-850 hover:text-zinc-300'
+                            ? 'bg-zinc-950 hover:bg-rose-950/20 border-zinc-850 hover:border-rose-900/60 hover:text-rose-400'
+                            : 'bg-rose-950/15 border-rose-900/30 text-rose-400 hover:bg-zinc-950 hover:border-zinc-850 hover:text-zinc-300'
                             }`}
                         >
                           {item.status === 'Available' ? 'Repair' : 'Fixed'}
@@ -1118,10 +1118,10 @@ export default function AdminDashboard() {
                       <div className="flex justify-between items-start gap-2">
                         <span className="font-medium text-white text-xs leading-tight">{activity.title}</span>
                         <span className={`px-1.5 py-0.5 rounded-[4px] text-[9px] font-bold border uppercase shrink-0 ${activity.status.includes('Approved') || activity.status === 'Ready for Collection' || activity.status === 'APPROVED' || activity.status === 'Active'
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                            : activity.status.includes('Reject') || activity.status.includes('DENIED')
-                              ? 'bg-red-500/10 text-red-400 border-red-500/20'
-                              : 'bg-zinc-800 text-zinc-400 border-zinc-750'
+                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                          : activity.status.includes('Reject') || activity.status.includes('DENIED')
+                            ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                            : 'bg-zinc-800 text-zinc-400 border-zinc-750'
                           }`}>
                           {activity.status === 'Approved by HOD' ? 'Approved' : activity.status}
                         </span>
@@ -1239,8 +1239,8 @@ export default function AdminDashboard() {
                         type="button"
                         onClick={() => setImageTab(tab)}
                         className={`flex-1 py-2 text-center rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider transition-all cursor-pointer ${imageTab === tab
-                            ? 'bg-zinc-800 text-white shadow-sm border border-zinc-700/60'
-                            : 'text-zinc-500 hover:text-zinc-300'
+                          ? 'bg-zinc-800 text-white shadow-sm border border-zinc-700/60'
+                          : 'text-zinc-500 hover:text-zinc-300'
                           }`}
                       >
                         {tab === 'upload' ? 'Upload File' : tab === 'preset' ? 'Presets' : 'Image URL'}
@@ -1274,8 +1274,8 @@ export default function AdminDashboard() {
                           key={index}
                           onClick={() => setNewDevice({ ...newDevice, photoUrl: preset.url })}
                           className={`relative h-20 rounded-xl overflow-hidden border cursor-pointer group transition-all duration-300 ${newDevice.photoUrl === preset.url
-                              ? 'border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.25)] ring-1 ring-cyan-400/40'
-                              : 'border-zinc-950 opacity-65 hover:opacity-100 hover:border-zinc-800'
+                            ? 'border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.25)] ring-1 ring-cyan-400/40'
+                            : 'border-zinc-950 opacity-65 hover:opacity-100 hover:border-zinc-800'
                             }`}
                         >
                           <img src={preset.url} alt={preset.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
