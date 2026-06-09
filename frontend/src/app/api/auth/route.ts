@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import { isValidUSN, generateToken } from '@/lib/auth';
 import bcrypt from 'bcrypt';
 
@@ -31,8 +31,8 @@ export async function POST(request: Request) {
       // Auto-create user for demo/hackathon purposes if they do not exist
       if (!user) {
         const hashedPassword = await bcrypt.hash(password, 10);
-        const assignedRole = isEmail 
-          ? (usn.toLowerCase().startsWith('hod') ? 4 : 3) 
+        const assignedRole = isEmail
+          ? (usn.toLowerCase().startsWith('hod') ? 4 : 3)
           : 1;
         const insertRes = await query(
           'INSERT INTO users (usn, name, email, password_hash, role_id) VALUES ($1, $2, $3, $4, $5) RETURNING user_id, usn, role_id',
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
     });
 
     const response = NextResponse.json({ success: true, user: { usn: user.usn, roleId: user.role_id } }, { status: 200 });
-    
+
     // Set secure HTTP-Only cookie
     response.cookies.set({
       name: 'phoenix_token',

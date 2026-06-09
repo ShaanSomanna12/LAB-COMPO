@@ -29,14 +29,14 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }: Ima
   const [dragMode, setDragMode] = useState<'move' | 'nw' | 'ne' | 'se' | 'sw' | null>(null);
   const [startMouse, setStartMouse] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [startCrop, setStartCrop] = useState<CropArea>({ x: 0, y: 0, width: 100, height: 100 });
-  
+
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const handleImageLoaded = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
     const { clientWidth, clientHeight, naturalWidth, naturalHeight } = img;
-    
+
     setDimensions({
       width: clientWidth,
       height: clientHeight,
@@ -55,20 +55,20 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }: Ima
   useEffect(() => {
     if (!dimensions) return;
     const { width: containerWidth, height: containerHeight } = dimensions;
-    
+
     if (aspectRatio === 'free') return;
-    
+
     const r = aspectRatio === '1:1' ? 1 : aspectRatio === '4:3' ? 4 / 3 : 16 / 9;
-    
+
     // Recenter crop with new aspect ratio bounds
     let w = Math.min(containerWidth * 0.8, containerHeight * 0.8 * r);
     let h = w / r;
-    
+
     if (h > containerHeight) {
       h = containerHeight * 0.8;
       w = h * r;
     }
-    
+
     const x = (containerWidth - w) / 2;
     const y = (containerHeight - h) / 2;
     setCrop({ x, y, width: w, height: h });
@@ -82,17 +82,17 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }: Ima
       if (!dimensions) return;
       const dx = e.clientX - startMouse.x;
       const dy = e.clientY - startMouse.y;
-      
+
       const { width: containerWidth, height: containerHeight } = dimensions;
 
       if (dragMode === 'move') {
         let newX = startCrop.x + dx;
         let newY = startCrop.y + dy;
-        
+
         // Keep within bounds
         newX = Math.max(0, Math.min(newX, containerWidth - startCrop.width));
         newY = Math.max(0, Math.min(newY, containerHeight - startCrop.height));
-        
+
         setCrop(prev => ({ ...prev, x: newX, y: newY }));
       } else {
         // Resize corner modes
@@ -185,14 +185,14 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }: Ima
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-    
+
     const handleTouchMove = (e: TouchEvent) => {
       if (e.touches.length === 0) return;
       const touch = e.touches[0];
       const fakeEvent = { clientX: touch.clientX, clientY: touch.clientY } as MouseEvent;
       handleMouseMove(fakeEvent);
     };
-    
+
     window.addEventListener('touchmove', handleTouchMove);
     window.addEventListener('touchend', handleMouseUp);
 
@@ -247,7 +247,7 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }: Ima
     <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center z-60 p-4 animate-in fade-in duration-200">
       <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-3xl shadow-2xl p-6 relative flex flex-col max-h-[92vh]">
         <button onClick={onCancel} className="absolute top-4 right-4 text-zinc-400 hover:text-white transition">✕</button>
-        
+
         <h3 className="text-xl font-bold text-white mb-2">Crop Image</h3>
         <p className="text-xs text-zinc-400 mb-4">Drag inside the box to move it. Drag the white handles to resize the crop selection.</p>
 
@@ -267,7 +267,7 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }: Ima
 
         {/* Image Workspace Area */}
         <div className="flex-1 min-h-[300px] bg-zinc-950 rounded-lg overflow-hidden border border-zinc-850 flex items-center justify-center p-4 relative">
-          <div 
+          <div
             ref={containerRef}
             className="relative select-none"
             style={{ maxWidth: '100%', maxHeight: '60vh' }}
@@ -279,7 +279,7 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }: Ima
               onLoad={handleImageLoaded}
               className="block max-w-full max-h-[60vh] w-auto h-auto select-none pointer-events-none rounded-sm"
             />
-            
+
             {dimensions && (
               <>
                 {/* Crop Overlay selection viewport */}
@@ -307,7 +307,7 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }: Ima
                   <div className="absolute top-2/3 left-0 right-0 h-[1px] border-t border-dashed border-white/35 pointer-events-none"></div>
                   <div className="absolute left-1/3 top-0 bottom-0 w-[1px] border-l border-dashed border-white/35 pointer-events-none"></div>
                   <div className="absolute left-2/3 top-0 bottom-0 w-[1px] border-l border-dashed border-white/35 pointer-events-none"></div>
-                  
+
                   {/* Aspect Ratio Box Text */}
                   <div className="absolute bottom-1 right-2 bg-black/60 px-1 py-0.5 rounded text-[8px] font-black font-mono text-white/80 pointer-events-none uppercase tracking-wider">
                     {aspectRatio === 'free' ? 'Custom' : aspectRatio}

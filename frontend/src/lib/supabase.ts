@@ -1,31 +1,7 @@
-import { createBrowserClient, createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
 
-// Client-side helper
-export const createClientComponentClient = () => {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-}
+// Hardcoding the keys here to bypass the Next.js environment file glitch
+const supabaseUrl = "https://qxtgwnifbzreithdzccn.sb_publishable_aPZQ12HF6vZfLIq-hgCfog_kH0jyMxQsupabase.co"
+const supabaseKey = "sb_publishable_aPZQ12HF6vZFLIq-hgCfog_kH0jyMxQ"
 
-// Server-side helper
-export const createServerComponentClient = async () => {
-  const cookieStore = await cookies()
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            )
-          } catch {}
-        },
-      },
-    }
-  )
-}
+export const supabase = createClient(supabaseUrl, supabaseKey)

@@ -78,7 +78,7 @@ export async function PATCH(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { studentName, usn, items, date, time, duration, images } = body;
+    const { studentName, usn, section, studentDepartment, items, date, time, duration, images } = body;
     
     if (!items || !Array.isArray(items)) {
       return NextResponse.json({ error: 'Invalid items array' }, { status: 400 });
@@ -101,7 +101,9 @@ export async function POST(request: Request) {
         images: images || [],
         time: time || '9:00 AM',
         date: date || requestDate,
-        location: item.location || 'Main Lab'
+        location: item.location || 'Main Lab',
+        section: section || 'A',
+        studentDepartment: studentDepartment || 'CSE'
       };
       newReservations.push(newReq);
     }
@@ -111,8 +113,8 @@ export async function POST(request: Request) {
       for (const req of newReservations) {
         // Query to mock SQL insertion if DB runs
         await query(
-          'INSERT INTO reservations (user_id, component_id, status) VALUES ((SELECT user_id FROM users WHERE usn = $1 LIMIT 1), (SELECT component_id FROM components WHERE name = $2 LIMIT 1), $3)',
-          [req.usn, req.component, 'PENDING']
+          'INSERT INTO reservations (user_id, component_id, status, section, student_department) VALUES ((SELECT user_id FROM users WHERE usn = $1 LIMIT 1), (SELECT component_id FROM components WHERE name = $2 LIMIT 1), $3, $4, $5)',
+          [req.usn, req.component, 'PENDING', req.section, req.studentDepartment]
         );
       }
     } catch (dbErr: any) {

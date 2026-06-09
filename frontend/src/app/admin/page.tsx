@@ -43,6 +43,8 @@ interface RequestItem {
   duration: number;
   requestDate: string;
   status: RequestStatus;
+  section?: string;
+  studentDepartment?: string;
 }
 
 interface InventoryItem {
@@ -122,7 +124,7 @@ const calculatePenalty = (requestDateStr: string, durationDays: number, componen
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'requests' | 'inventory' | 'lab-access' | 'analytics'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'inventory' | 'lab-access' | 'analytics' | 'section-tracking'>('requests');
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [labRequests, setLabRequests] = useState<any[]>([]);
@@ -142,6 +144,8 @@ export default function AdminDashboard() {
     photoUrl: IMAGE_PRESETS[0].url
   });
   const [adminDept, setAdminDept] = useState<string | null>(null);
+  const [sectionFilter, setSectionFilter] = useState<string>('A');
+  const [studentDeptFilter, setStudentDeptFilter] = useState<string>('CSE');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -537,6 +541,12 @@ export default function AdminDashboard() {
               >
                 Monthly Updates
               </button>
+              <button 
+                onClick={() => setActiveTab('section-tracking')} 
+                className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'section-tracking' ? 'bg-zinc-800 text-white border border-zinc-700' : 'text-zinc-400 hover:text-white'}`}
+              >
+                Section Tracking
+              </button>
             </>
           )}
           <button onClick={() => router.push('/')} className="px-5 py-2 bg-red-600/10 text-red-500 border border-red-500/20 hover:bg-red-600/20 rounded-lg text-sm transition-colors font-medium ml-4">
@@ -831,9 +841,11 @@ export default function AdminDashboard() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {inventory.filter(item => item.department === adminDept).map(item => (
+              {inventory.filter(item => item.department === adminDept).map((item, index) => (
+
                 <div 
-                  key={item.id} 
+                 
+                key={item.id || item.component_id || index}
                   className="bg-zinc-900/60 border border-zinc-800 rounded-xl overflow-hidden flex flex-col justify-between min-h-[350px] group hover:border-zinc-700 transition-all duration-300 relative"
                 >
                   {/* Photo Header */}
@@ -1324,6 +1336,78 @@ export default function AdminDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {adminDept && activeTab === 'section-tracking' && (
+        <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-300">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold">{adminDept} Section Tracking</h2>
+            <div className="flex gap-4">
+              <select value={studentDeptFilter} onChange={e => setStudentDeptFilter(e.target.value)} className="bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2 text-sm text-zinc-300 focus:outline-none focus:border-cyan-500">
+                <option value="CSE">CSE</option>
+                <option value="MECH">Mechanical</option>
+                <option value="ECE">ECE</option>
+                <option value="EEE">EEE</option>
+                <option value="CIVIL">CIVIL</option>
+              </select>
+              <select value={sectionFilter} onChange={e => setSectionFilter(e.target.value)} className="bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2 text-sm text-zinc-300 focus:outline-none focus:border-cyan-500">
+                <option value="A">Section A</option>
+                <option value="B">Section B</option>
+                <option value="C">Section C</option>
+                <option value="D">Section D</option>
+              </select>
+            </div>
+          </div>
+          
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-zinc-800/50 text-zinc-400 uppercase text-xs font-semibold">
+                <tr>
+                  <th className="px-6 py-4">Request ID</th>
+                  <th className="px-6 py-4">Student Info</th>
+                  <th className="px-6 py-4">Section</th>
+                  <th className="px-6 py-4">Component</th>
+                  <th className="px-6 py-4">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800">
+                {requests.filter(r => r.department === adminDept && r.studentDepartment === studentDeptFilter && r.section === sectionFilter).length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-8 text-center text-zinc-500">No requests found for this section.</td>
+                  </tr>
+                )}
+                {requests.filter(req => req.department === adminDept && req.studentDepartment === studentDeptFilter && req.section === sectionFilter).map(req => {
+                  const isUnreturned = req.status !== 'Returned';
+                  return (
+                    <tr key={req.id} className={`hover:bg-zinc-800/30 transition-colors ${isUnreturned ? 'bg-rose-950/10' : ''}`}>
+                      <td className="px-6 py-4 font-mono text-zinc-300">{req.id}</td>
+                      <td className="px-6 py-4">
+                        <div className="font-semibold text-white">{req.studentName}</div>
+                        <div className="text-zinc-500 font-mono text-xs mt-0.5">{req.usn}</div>
+                      </td>
+                      <td className="px-6 py-4 text-zinc-300">{req.studentDepartment || 'CSE'} - {req.section || 'A'}</td>
+                      <td className="px-6 py-4">
+                        <div className="text-blue-400">{req.component}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {isUnreturned ? (
+                          <span className="px-2 py-1 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded text-xs font-bold flex items-center w-fit gap-1.5">
+                             <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                             Unreturned ({req.status})
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded text-xs font-bold">
+                             Returned
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
