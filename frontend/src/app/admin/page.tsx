@@ -92,26 +92,26 @@ const getComponentPrice = (componentName: string) => {
 
 const calculatePenalty = (requestDateStr: string, durationDays: number, componentName: string) => {
   if (!requestDateStr) return { isDelayed: false, delayDays: 0, penalty: 0, dueDateStr: '' };
-  
+
   const reqDate = new Date(requestDateStr);
   const duration = parseInt(String(durationDays), 10) || 7;
-  
+
   const dueDate = new Date(reqDate.getTime() + duration * 24 * 60 * 60 * 1000);
   const currentDate = new Date("2026-06-05"); // Simulated current date aligning with project lifecycle
-  
+
   const dueDateStr = dueDate.toISOString().split('T')[0];
   if (currentDate.getTime() <= dueDate.getTime()) {
     return { isDelayed: false, delayDays: 0, penalty: 0, dueDateStr };
   }
-  
+
   const diffTime = currentDate.getTime() - dueDate.getTime();
   const delayDays = Math.ceil(diffTime / (24 * 60 * 60 * 1000));
-  
+
   const price = getComponentPrice(componentName);
   const weeksDelayed = Math.ceil(delayDays / 7);
   const penaltyRate = 0.05; // 5%
   const penalty = price * penaltyRate * weeksDelayed;
-  
+
   return {
     isDelayed: true,
     delayDays,
@@ -181,7 +181,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     const storedCollege = localStorage.getItem('collegeName');
     if (storedCollege) setCollegeName(storedCollege.toUpperCase());
-    
+
     // Fetch unified data from API
     fetch('/api/inventory').then(res => res.json()).then(data => setInventory(data));
     fetch('/api/requests').then(res => res.json()).then(data => setRequests(data));
@@ -428,7 +428,7 @@ export default function AdminDashboard() {
     if (!item) return;
     const newTotalStr = window.prompt(`Enter new total stock count for ${item.name}:`, item.total.toString());
     if (newTotalStr === null) return;
-    
+
     const newTotal = parseInt(newTotalStr, 10);
     if (isNaN(newTotal) || newTotal < 0) {
       alert("Please enter a valid positive number.");
@@ -458,7 +458,7 @@ export default function AdminDashboard() {
   const handleAddDevice = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!newDevice.name.trim()) return;
-    
+
     try {
       const res = await fetch('/api/inventory', {
         method: 'POST',
@@ -469,7 +469,7 @@ export default function AdminDashboard() {
         })
       });
       const data = await res.json();
-      
+
       if (data.success) {
         setInventory(prev => [...prev, data.item]);
         setShowAddModal(false);
@@ -512,37 +512,37 @@ export default function AdminDashboard() {
         <div className="flex gap-4">
           {adminDept && (
             <button onClick={() => setAdminDept(null)} className="px-5 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-sm transition-colors font-medium">
-               ← Back to Departments
+              ← Back to Departments
             </button>
           )}
           {adminDept && (
             <>
-              <button 
-                onClick={() => setActiveTab('requests')} 
+              <button
+                onClick={() => setActiveTab('requests')}
                 className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'requests' ? 'bg-zinc-800 text-white border border-zinc-700' : 'text-zinc-400 hover:text-white'}`}
               >
                 Requests Workflow
               </button>
-              <button 
-                onClick={() => setActiveTab('lab-access')} 
+              <button
+                onClick={() => setActiveTab('lab-access')}
                 className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'lab-access' ? 'bg-zinc-800 text-white border border-zinc-700' : 'text-zinc-400 hover:text-white'}`}
               >
                 Lab Workspace Access
               </button>
-              <button 
-                onClick={() => setActiveTab('inventory')} 
+              <button
+                onClick={() => setActiveTab('inventory')}
                 className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'inventory' ? 'bg-zinc-800 text-white border border-zinc-700' : 'text-zinc-400 hover:text-white'}`}
               >
                 Inventory Management
               </button>
-              <button 
-                onClick={() => setActiveTab('analytics')} 
+              <button
+                onClick={() => setActiveTab('analytics')}
                 className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'analytics' ? 'bg-zinc-800 text-white border border-zinc-700' : 'text-zinc-400 hover:text-white'}`}
               >
                 Monthly Updates
               </button>
-              <button 
-                onClick={() => setActiveTab('section-tracking')} 
+              <button
+                onClick={() => setActiveTab('section-tracking')}
                 className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'section-tracking' ? 'bg-zinc-800 text-white border border-zinc-700' : 'text-zinc-400 hover:text-white'}`}
               >
                 Section Tracking
@@ -563,16 +563,16 @@ export default function AdminDashboard() {
             <p className="text-lg text-zinc-400">Please select your administrative department to manage requests and inventory.</p>
           </div>
           {DEPT_INFO.map(dept => (
-            <div 
-              key={dept.id} 
+            <div
+              key={dept.id}
               onClick={() => setAdminDept(dept.id)}
               className="group cursor-pointer rounded-2xl p-[1px] bg-gradient-to-r transition-all duration-300 hover:scale-[1.02] w-full"
             >
               <div className={`w-full bg-zinc-900 rounded-2xl p-6 hover:bg-gradient-to-r ${dept.color} transition-all duration-300 flex items-center gap-8 border border-zinc-800 hover:border-transparent opacity-90 hover:opacity-100`}>
                 <div className="flex-1">
                   <h2 className="text-4xl font-black mb-1 flex items-center gap-3 tracking-tight drop-shadow-md">
-                     <span className={`bg-gradient-to-r ${dept.color} bg-clip-text text-transparent brightness-110`}>{dept.id}</span> 
-                     <span className="text-white text-2xl font-bold text-zinc-300">HQ</span>
+                    <span className={`bg-gradient-to-r ${dept.color} bg-clip-text text-transparent brightness-110`}>{dept.id}</span>
+                    <span className="text-white text-2xl font-bold text-zinc-300">HQ</span>
                   </h2>
                   <p className="text-zinc-500 group-hover:text-white/70 text-sm mt-1">{dept.desc}</p>
                 </div>
@@ -589,7 +589,7 @@ export default function AdminDashboard() {
       {adminDept && activeTab === 'requests' && (
         <div className="space-y-6 max-w-6xl mx-auto">
           <h2 className="text-2xl font-bold mb-4">{adminDept} Pending & Active Requests</h2>
-          
+
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
             <table className="w-full text-left text-sm">
               <thead className="bg-zinc-800/50 text-zinc-400 uppercase text-xs font-semibold">
@@ -631,11 +631,10 @@ export default function AdminDashboard() {
                       })()}
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
-                        req.status === 'Pending HOD' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' : 
-                        req.status === 'Ready for Collection' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' : 
-                        'bg-green-500/10 text-green-400 border-green-500/20'
-                      }`}>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${req.status === 'Pending HOD' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
+                          req.status === 'Ready for Collection' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' :
+                            'bg-green-500/10 text-green-400 border-green-500/20'
+                        }`}>
                         {req.status}
                       </span>
                     </td>
@@ -665,8 +664,8 @@ export default function AdminDashboard() {
         <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-300">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-2xl font-bold">{adminDept} Lab Workspace Access Requests</h2>
-            <button 
-              onClick={fetchLabRequests} 
+            <button
+              onClick={fetchLabRequests}
               className="px-4 py-2 bg-zinc-900 border border-zinc-800 text-xs font-semibold rounded-lg hover:bg-zinc-800 text-zinc-300 flex items-center gap-1.5 transition"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -675,7 +674,7 @@ export default function AdminDashboard() {
               Refresh Queue
             </button>
           </div>
-          
+
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
             <table className="w-full text-left text-sm">
               <thead className="bg-zinc-800/50 text-zinc-400 uppercase text-xs font-semibold">
@@ -713,23 +712,21 @@ export default function AdminDashboard() {
                         <div className="text-xs text-zinc-500 mt-0.5">{req.timeSlot}</div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 w-fit ${
-                          req.status === 'APPROVED' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                          req.status === 'PENDING_ADMIN' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
-                          req.status === 'PENDING_HOD' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                          'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                        }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${
-                            req.status === 'APPROVED' ? 'bg-emerald-400' :
-                            req.status === 'PENDING_ADMIN' ? 'bg-purple-400 animate-pulse' :
-                            req.status === 'PENDING_HOD' ? 'bg-amber-400 animate-pulse' :
-                            'bg-rose-400'
-                          }`}></span>
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 w-fit ${req.status === 'APPROVED' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                            req.status === 'PENDING_ADMIN' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                              req.status === 'PENDING_HOD' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                                'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                          }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${req.status === 'APPROVED' ? 'bg-emerald-400' :
+                              req.status === 'PENDING_ADMIN' ? 'bg-purple-400 animate-pulse' :
+                                req.status === 'PENDING_HOD' ? 'bg-amber-400 animate-pulse' :
+                                  'bg-rose-400'
+                            }`}></span>
                           {req.status === 'PENDING_HOD' ? 'Awaiting HOD' :
-                           req.status === 'PENDING_ADMIN' ? 'Awaiting Admin' :
-                           req.status === 'APPROVED' ? 'Approved & Active' : 'Declined'}
+                            req.status === 'PENDING_ADMIN' ? 'Awaiting Admin' :
+                              req.status === 'APPROVED' ? 'Approved & Active' : 'Declined'}
                         </span>
-                        
+
                         {req.hodRemarks && (
                           <div className="mt-2 text-[11px] text-purple-400 max-w-xs leading-tight">
                             <span className="font-semibold font-sans">HOD Remarks:</span> {req.hodRemarks}
@@ -817,7 +814,7 @@ export default function AdminDashboard() {
 
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-2xl font-bold tracking-tight text-white uppercase font-mono">[{adminDept}_INVENTORY_CATALOG]</h2>
-            <button 
+            <button
               onClick={() => {
                 setNewDevice({
                   name: '',
@@ -828,13 +825,13 @@ export default function AdminDashboard() {
                   photoUrl: IMAGE_PRESETS[0].url
                 });
                 setShowAddModal(true);
-              }} 
+              }}
               className="px-5 py-2 bg-zinc-50 hover:bg-white text-zinc-950 font-bold rounded-lg text-xs font-mono tracking-widest uppercase transition-all shadow-[0_0_10px_rgba(255,255,255,0.1)] cursor-pointer"
             >
               + ADD NEW DEVICE
             </button>
           </div>
-          
+
           {inventory.filter(item => item.department === adminDept).length === 0 ? (
             <div className="text-center py-16 bg-zinc-900/30 border border-zinc-850 border-dashed rounded-xl">
               <p className="text-zinc-500 text-sm font-mono uppercase tracking-wider">No cataloged hardware in this department.</p>
@@ -843,16 +840,16 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {inventory.filter(item => item.department === adminDept).map((item, index) => (
 
-                <div 
-                 
-                key={item.id || item.component_id || index}
+                <div
+
+                  key={item.id || index}
                   className="bg-zinc-900/60 border border-zinc-800 rounded-xl overflow-hidden flex flex-col justify-between min-h-[350px] group hover:border-zinc-700 transition-all duration-300 relative"
                 >
                   {/* Photo Header */}
                   <div className="relative w-full h-36 bg-zinc-950 overflow-hidden border-b border-zinc-850 flex items-center justify-center">
-                    <img 
-                      src={item.photo_url || 'https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?q=80&w=600&auto=format&fit=crop'} 
-                      alt={item.name} 
+                    <img
+                      src={item.photo_url || 'https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?q=80&w=600&auto=format&fit=crop'}
+                      alt={item.name}
                       className="max-w-full max-h-full object-contain group-hover:scale-102 transition-transform duration-500 opacity-90"
                     />
                     {item.status === 'Under Repair' && (
@@ -869,7 +866,7 @@ export default function AdminDashboard() {
                     <div>
                       <div className="flex justify-between items-start gap-2">
                         <h3 className="font-semibold text-base text-zinc-100 group-hover:text-white truncate">{item.name}</h3>
-                        <button 
+                        <button
                           onClick={() => handleDeleteDevice(item.id)}
                           className="p-1 bg-zinc-950 border border-zinc-850 rounded hover:text-rose-400 hover:border-rose-905 transition-colors opacity-0 group-hover:opacity-100"
                         >
@@ -890,21 +887,20 @@ export default function AdminDashboard() {
                         </div>
                         <div className="text-[7px] font-mono text-zinc-500 uppercase tracking-wider mt-0.5">Available Stock</div>
                       </div>
-                      
+
                       <div className="flex gap-2">
-                        <button 
+                        <button
                           onClick={() => handleUpdateStock(item.id)}
                           className="px-2.5 py-1 bg-zinc-950 hover:bg-zinc-850 border border-zinc-850 rounded text-[9px] font-mono font-bold tracking-wide uppercase text-zinc-300 transition-all cursor-pointer"
                         >
                           Adjust Qty
                         </button>
-                        <button 
+                        <button
                           onClick={() => toggleRepairStatus(item.id)}
-                          className={`px-2.5 py-1 border rounded text-[9px] font-mono font-bold tracking-wide uppercase transition-all cursor-pointer ${
-                            item.status === 'Available'
+                          className={`px-2.5 py-1 border rounded text-[9px] font-mono font-bold tracking-wide uppercase transition-all cursor-pointer ${item.status === 'Available'
                               ? 'bg-zinc-950 hover:bg-rose-950/20 border-zinc-850 hover:border-rose-900/60 hover:text-rose-400'
                               : 'bg-rose-950/15 border-rose-900/30 text-rose-400 hover:bg-zinc-950 hover:border-zinc-850 hover:text-zinc-300'
-                          }`}
+                            }`}
                         >
                           {item.status === 'Available' ? 'Repair' : 'Fixed'}
                         </button>
@@ -928,7 +924,7 @@ export default function AdminDashboard() {
               <p className="text-xs text-zinc-400 mt-0.5">Historical activity performance and transaction summaries.</p>
             </div>
             <div className="flex gap-3">
-              <select 
+              <select
                 value={selectedAnalyticsMonth}
                 onChange={e => setSelectedAnalyticsMonth(e.target.value)}
                 className="bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 cursor-pointer appearance-none"
@@ -949,9 +945,8 @@ export default function AdminDashboard() {
               <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Total Monthly Updates</p>
               <h2 className="text-4xl font-extrabold mt-3 text-white tracking-tight">{analyticsStats.curr.total}</h2>
               <div className="mt-4 flex items-center gap-1.5 text-xs">
-                <span className={`font-bold px-1.5 py-0.5 rounded ${
-                  parseInt(totalChangeStr) >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
-                }`}>
+                <span className={`font-bold px-1.5 py-0.5 rounded ${parseInt(totalChangeStr) >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                  }`}>
                   {totalChangeStr}
                 </span>
                 <span className="text-zinc-500">vs previous month ({analyticsStats.prev.total})</span>
@@ -963,9 +958,8 @@ export default function AdminDashboard() {
               <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Component Reservations</p>
               <h2 className="text-4xl font-extrabold mt-3 text-white tracking-tight">{analyticsStats.curr.reqs}</h2>
               <div className="mt-4 flex items-center gap-1.5 text-xs">
-                <span className={`font-bold px-1.5 py-0.5 rounded ${
-                  parseInt(reqsChangeStr) >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
-                }`}>
+                <span className={`font-bold px-1.5 py-0.5 rounded ${parseInt(reqsChangeStr) >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                  }`}>
                   {reqsChangeStr}
                 </span>
                 <span className="text-zinc-500">vs previous month ({analyticsStats.prev.reqs})</span>
@@ -977,9 +971,8 @@ export default function AdminDashboard() {
               <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Workspace Access Permits</p>
               <h2 className="text-4xl font-extrabold mt-3 text-white tracking-tight">{analyticsStats.curr.labs}</h2>
               <div className="mt-4 flex items-center gap-1.5 text-xs">
-                <span className={`font-bold px-1.5 py-0.5 rounded ${
-                  parseInt(labsChangeStr) >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
-                }`}>
+                <span className={`font-bold px-1.5 py-0.5 rounded ${parseInt(labsChangeStr) >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                  }`}>
                   {labsChangeStr}
                 </span>
                 <span className="text-zinc-500">vs previous month ({analyticsStats.prev.labs})</span>
@@ -1077,7 +1070,7 @@ export default function AdminDashboard() {
 
                 {/* HTML Tooltip overlay */}
                 {hoveredAnalyticsIdx !== null && analyticsChartData[hoveredAnalyticsIdx] && (
-                  <div 
+                  <div
                     className="absolute bg-zinc-950/95 border border-zinc-800 rounded-xl p-3 shadow-xl backdrop-blur-md pointer-events-none transition-all duration-150 z-20 text-xs flex flex-col gap-1"
                     style={{
                       left: `${Math.min(Math.max(45 + hoveredAnalyticsIdx * (530 / (analyticsChartData.length - 1)) - 60, 10), 460) / 600 * 100}%`,
@@ -1124,13 +1117,12 @@ export default function AdminDashboard() {
                     <div key={idx} className="bg-zinc-950/40 border border-zinc-850 p-3 rounded-xl flex flex-col gap-1.5 hover:border-zinc-805 transition">
                       <div className="flex justify-between items-start gap-2">
                         <span className="font-medium text-white text-xs leading-tight">{activity.title}</span>
-                        <span className={`px-1.5 py-0.5 rounded-[4px] text-[9px] font-bold border uppercase shrink-0 ${
-                          activity.status.includes('Approved') || activity.status === 'Ready for Collection' || activity.status === 'APPROVED' || activity.status === 'Active'
+                        <span className={`px-1.5 py-0.5 rounded-[4px] text-[9px] font-bold border uppercase shrink-0 ${activity.status.includes('Approved') || activity.status === 'Ready for Collection' || activity.status === 'APPROVED' || activity.status === 'Active'
                             ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                             : activity.status.includes('Reject') || activity.status.includes('DENIED')
-                            ? 'bg-red-500/10 text-red-400 border-red-500/20'
-                            : 'bg-zinc-800 text-zinc-400 border-zinc-750'
-                        }`}>
+                              ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                              : 'bg-zinc-800 text-zinc-400 border-zinc-750'
+                          }`}>
                           {activity.status === 'Approved by HOD' ? 'Approved' : activity.status}
                         </span>
                       </div>
@@ -1151,7 +1143,7 @@ export default function AdminDashboard() {
       {showAddModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-zinc-950 border border-zinc-800 p-6 md:p-8 rounded-2xl w-full max-w-2xl shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            
+
             {/* Corner decors */}
             <div className="absolute top-3 left-3 text-zinc-700 font-mono text-[9px] select-none">+</div>
             <div className="absolute top-3 right-3 text-zinc-700 font-mono text-[9px] select-none">+</div>
@@ -1163,8 +1155,8 @@ export default function AdminDashboard() {
                 <h2 className="text-xl font-bold tracking-tight text-white uppercase">[{adminDept}_Register_New_Hardware]</h2>
                 <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider mt-0.5">Database Registration Node</p>
               </div>
-              <button 
-                onClick={() => setShowAddModal(false)} 
+              <button
+                onClick={() => setShowAddModal(false)}
                 className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg hover:bg-zinc-800 hover:text-white transition cursor-pointer"
               >
                 ✕
@@ -1176,12 +1168,12 @@ export default function AdminDashboard() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-[10px] font-mono text-zinc-400 mb-1.5 uppercase tracking-wider">Component Name</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     required
                     placeholder="e.g. Logic Analyzer 16-Ch"
                     value={newDevice.name}
-                    onChange={e => setNewDevice({...newDevice, name: e.target.value})}
+                    onChange={e => setNewDevice({ ...newDevice, name: e.target.value })}
                     className="w-full bg-zinc-950 border border-zinc-800 focus:border-cyan-500/80 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-cyan-500/30 transition-all font-mono"
                   />
                 </div>
@@ -1189,7 +1181,7 @@ export default function AdminDashboard() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] font-mono text-zinc-400 mb-1.5 uppercase tracking-wider">Department</label>
-                    <input 
+                    <input
                       type="text"
                       readOnly
                       value={adminDept || 'EDL'}
@@ -1199,12 +1191,12 @@ export default function AdminDashboard() {
 
                   <div>
                     <label className="block text-[10px] font-mono text-zinc-400 mb-1.5 uppercase tracking-wider">Stock Qty</label>
-                    <input 
-                      type="number" 
+                    <input
+                      type="number"
                       min="1"
                       required
                       value={newDevice.total}
-                      onChange={e => setNewDevice({...newDevice, total: parseInt(e.target.value) || 1})}
+                      onChange={e => setNewDevice({ ...newDevice, total: parseInt(e.target.value) || 1 })}
                       className="w-full bg-zinc-950 border border-zinc-800 focus:border-cyan-500/80 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-cyan-500/30 transition-all font-mono"
                     />
                   </div>
@@ -1212,22 +1204,22 @@ export default function AdminDashboard() {
 
                 <div>
                   <label className="block text-[10px] font-mono text-zinc-400 mb-1.5 uppercase tracking-wider">Lab Location</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     required
                     placeholder="e.g. IoT Lab room 304"
                     value={newDevice.location}
-                    onChange={e => setNewDevice({...newDevice, location: e.target.value})}
+                    onChange={e => setNewDevice({ ...newDevice, location: e.target.value })}
                     className="w-full bg-zinc-950 border border-zinc-800 focus:border-cyan-500/80 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-cyan-500/30 transition-all font-mono"
                   />
                 </div>
 
                 <div>
                   <label className="block text-[10px] font-mono text-zinc-400 mb-1.5 uppercase tracking-wider">Specifications (Description)</label>
-                  <textarea 
+                  <textarea
                     placeholder="e.g. 100MHz bandwidth, 1 GSa/s sample rate..."
                     value={newDevice.desc}
-                    onChange={e => setNewDevice({...newDevice, desc: e.target.value})}
+                    onChange={e => setNewDevice({ ...newDevice, desc: e.target.value })}
                     className="w-full bg-zinc-950 border border-zinc-800 focus:border-cyan-500/80 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-cyan-500/30 transition-all leading-relaxed"
                     rows={3}
                   />
@@ -1238,7 +1230,7 @@ export default function AdminDashboard() {
               <div className="space-y-4 flex flex-col justify-between">
                 <div>
                   <label className="block text-xs font-mono text-zinc-400 mb-2.5 uppercase tracking-wider">Configure Component Image</label>
-                  
+
                   {/* Tabs header */}
                   <div className="flex bg-zinc-900/80 p-1 border border-zinc-800/80 rounded-xl mb-4 gap-1">
                     {(['upload', 'preset', 'url'] as const).map(tab => (
@@ -1246,11 +1238,10 @@ export default function AdminDashboard() {
                         key={tab}
                         type="button"
                         onClick={() => setImageTab(tab)}
-                        className={`flex-1 py-2 text-center rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                          imageTab === tab 
-                            ? 'bg-zinc-800 text-white shadow-sm border border-zinc-700/60' 
+                        className={`flex-1 py-2 text-center rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider transition-all cursor-pointer ${imageTab === tab
+                            ? 'bg-zinc-800 text-white shadow-sm border border-zinc-700/60'
                             : 'text-zinc-500 hover:text-zinc-300'
-                        }`}
+                          }`}
                       >
                         {tab === 'upload' ? 'Upload File' : tab === 'preset' ? 'Presets' : 'Image URL'}
                       </button>
@@ -1266,8 +1257,8 @@ export default function AdminDashboard() {
                         </svg>
                         <span className="text-xs font-mono text-zinc-300 group-hover:text-white font-semibold">Select Local Image File</span>
                         <span className="text-[10px] font-mono text-zinc-600 mt-1 uppercase">PNG, JPG, JPEG</span>
-                        <input 
-                          type="file" 
+                        <input
+                          type="file"
                           accept="image/*"
                           onChange={handleFileChange}
                           className="hidden"
@@ -1279,14 +1270,13 @@ export default function AdminDashboard() {
                   {imageTab === 'preset' && (
                     <div className="grid grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-1 animate-in fade-in duration-200">
                       {IMAGE_PRESETS.map((preset, index) => (
-                        <div 
+                        <div
                           key={index}
-                          onClick={() => setNewDevice({...newDevice, photoUrl: preset.url})}
-                          className={`relative h-20 rounded-xl overflow-hidden border cursor-pointer group transition-all duration-300 ${
-                            newDevice.photoUrl === preset.url 
-                              ? 'border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.25)] ring-1 ring-cyan-400/40' 
+                          onClick={() => setNewDevice({ ...newDevice, photoUrl: preset.url })}
+                          className={`relative h-20 rounded-xl overflow-hidden border cursor-pointer group transition-all duration-300 ${newDevice.photoUrl === preset.url
+                              ? 'border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.25)] ring-1 ring-cyan-400/40'
                               : 'border-zinc-950 opacity-65 hover:opacity-100 hover:border-zinc-800'
-                          }`}
+                            }`}
                         >
                           <img src={preset.url} alt={preset.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent flex items-end p-2">
@@ -1299,11 +1289,11 @@ export default function AdminDashboard() {
 
                   {imageTab === 'url' && (
                     <div className="space-y-2 animate-in fade-in duration-200">
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         placeholder="https://example.com/image.jpg"
                         value={newDevice.photoUrl && !newDevice.photoUrl.startsWith('data:') ? newDevice.photoUrl : ''}
-                        onChange={e => setNewDevice({...newDevice, photoUrl: e.target.value})}
+                        onChange={e => setNewDevice({ ...newDevice, photoUrl: e.target.value })}
                         className="w-full bg-zinc-950 border border-zinc-850 focus:border-cyan-500/80 rounded-xl px-4 py-2.5 text-xs text-zinc-300 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 transition-all font-mono"
                       />
                       <p className="text-[9px] font-mono text-zinc-550 uppercase tracking-wide">Enter a direct image link from the web.</p>
@@ -1328,7 +1318,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <button 
+                <button
                   type="submit"
                   className="w-full py-3.5 px-4 bg-zinc-50 hover:bg-white text-zinc-950 font-bold rounded-xl text-xs font-mono tracking-widest uppercase transition-all duration-300 hover:shadow-[0_0_20px_rgba(255,255,255,0.4)] active:scale-[0.98] cursor-pointer mt-2"
                 >
@@ -1360,7 +1350,7 @@ export default function AdminDashboard() {
               </select>
             </div>
           </div>
-          
+
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
             <table className="w-full text-left text-sm">
               <thead className="bg-zinc-800/50 text-zinc-400 uppercase text-xs font-semibold">
@@ -1394,12 +1384,12 @@ export default function AdminDashboard() {
                       <td className="px-6 py-4">
                         {isUnreturned ? (
                           <span className="px-2 py-1 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded text-xs font-bold flex items-center w-fit gap-1.5">
-                             <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
-                             Unreturned ({req.status})
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                            Unreturned ({req.status})
                           </span>
                         ) : (
                           <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded text-xs font-bold">
-                             Returned
+                            Returned
                           </span>
                         )}
                       </td>
@@ -1413,7 +1403,7 @@ export default function AdminDashboard() {
       )}
 
       {showCropper && imageToCrop && (
-        <ImageCropper 
+        <ImageCropper
           imageSrc={imageToCrop}
           onCropComplete={(croppedBase64) => {
             setNewDevice({ ...newDevice, photoUrl: croppedBase64 });
