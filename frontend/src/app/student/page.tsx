@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 export default function StudentAuth() {
   // Navigation & Step Tracking States
   const [isRegistering, setIsRegistering] = useState(false);
-  const [isOtpStep, setIsOtpStep] = useState(false); // Tracks if we are waiting for the 6-digit OTP
+  const [isOtpStep, setIsOtpStep] = useState(false);
 
   // Form Fields
   const [email, setEmail] = useState('');
@@ -17,73 +17,90 @@ export default function StudentAuth() {
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    setMessage('Processing request...');
+    setMessage('Hold up, cooking... 🍳');
 
     const formattedUSN = usn.toUpperCase();
 
     try {
       if (isRegistering) {
         // =========================================================
-        // REGISTRATION FLOW - STEP 1: INITIALIZE & SEND OTP
+        // REGISTRATION - STEP 1: GENERATE & SEND CUSTOM OTP
         // =========================================================
         if (!isOtpStep) {
           const collegeDomain = "@vvce.ac.in";
           if (!email.toLowerCase().endsWith(collegeDomain)) {
-            setMessage(`Error: You must use a valid official ${collegeDomain} email address.`);
+            setMessage(`Big yikes: You need a valid ${collegeDomain} email to enter. 🛑`);
             return;
           }
 
-          // Trigger Supabase sign-up (sends verification token automatically if enabled)
-          const { data: authData, error: authError } = await supabase.auth.signUp({
+          // 1. Generate a random 6-digit code and an expiry time (10 mins from now)
+          const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+          const expiryTime = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+          // 2. Save the code temporarily to our Supabase 'users' table
+          const { error: dbError } = await supabase
+            .from('users')
+            .upsert({
+              usn: formattedUSN,
+              email: email,
+              otp_code: otpCode,
+              otp_expiry: expiryTime,
+              name: `Student ${formattedUSN}`,
+              role_id: 1
+            }, { onConflict: 'usn' });
+
+          if (dbError) throw new Error("Database error. Couldn't prep your account.");
+
+          // 3. Call the custom Resend API we built to actually send the email!
+          const emailRes = await fetch('/api/send-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, otpCode })
+          });
+
+          if (!emailRes.ok) throw new Error("Failed to send the email. Check your Resend API key!");
+
+          // Advance to the OTP verification view
+          setIsOtpStep(true);
+          setMessage("W! 🚀 Check your college email for the 6-digit code.");
+        }
+        // =========================================================
+        // REGISTRATION - STEP 2: VERIFY CUSTOM OTP & CREATE AUTH
+        // =========================================================
+        else {
+          setMessage('Checking your vibe... 👀');
+
+          // 1. Fetch the code we saved in the database for this USN
+          const { data: userData, error: fetchError } = await supabase
+            .from('users')
+            .select('otp_code, otp_expiry')
+            .eq('usn', formattedUSN)
+            .single();
+
+          if (fetchError || !userData) throw new Error("User not found. Refresh and try again.");
+
+          // 2. Check if the code is wrong or expired
+          if (userData.otp_code !== otp) throw new Error("Nah, wrong code 💀 Try again.");
+          if (new Date(userData.otp_expiry) < new Date()) throw new Error("Bruh, that code expired. ⏳");
+
+          // 3. If the code is perfect, officially register them in Supabase Auth!
+          const { error: authError } = await supabase.auth.signUp({
             email: email,
-            password: password, // Student sets their master login password here
+            password: password,
           });
 
           if (authError) throw authError;
 
-          // Advance to the OTP verification input view
-          setIsOtpStep(true);
-          setMessage("Success: A 6-digit verification token has been dispatched to your institutional email.");
-        }
-        // =========================================================
-        // REGISTRATION FLOW - STEP 2: VERIFY OTP & MAP PROFILE
-        // =========================================================
-        else {
-          setMessage('Validating credentials token...');
+          // Clear the OTP from the database for security
+          await supabase.from('users').update({ otp_code: null, otp_expiry: null }).eq('usn', formattedUSN);
 
-          // Verify the OTP code provided by the student
-          const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
-            email: email,
-            token: otp,
-            type: 'signup'
-          });
-
-          if (verifyError) throw verifyError;
-
-          // If verification passes, insert student profile mapping into the 'users' table
-          if (verifyData.user) {
-            const { error: dbError } = await supabase
-              .from('users')
-              .insert([
-                {
-                  user_id: verifyData.user.id,
-                  usn: formattedUSN,
-                  email: email,
-                  name: `Student ${formattedUSN}`,
-                  role_id: 1 // Default Student clearance level
-                },
-              ]);
-
-            if (dbError) throw dbError;
-
-            setMessage("Verification complete! System access granted.");
-            window.location.href = '/student/dashboard';
-          }
+          setMessage("You're in! 🎉 Booting up the dashboard...");
+          window.location.href = '/student/dashboard';
         }
 
       } else {
         // =========================================================
-        // STANDARD LOGIN FLOW (Password Access)
+        // STANDARD LOGIN FLOW
         // =========================================================
         const { data: userData, error: fetchError } = await supabase
           .from('users')
@@ -92,7 +109,7 @@ export default function StudentAuth() {
           .single();
 
         if (fetchError || !userData) {
-          throw new Error("USN registry sequence not recognized. Please register first.");
+          throw new Error("Who are you? USN not found. Go register first. 🕵️‍♂️");
         }
 
         const { error: loginError } = await supabase.auth.signInWithPassword({
@@ -100,164 +117,143 @@ export default function StudentAuth() {
           password: password,
         });
 
-        if (loginError) throw loginError;
+        if (loginError) throw new Error("Wrong password. Did you forget it already? 😭");
 
-        setMessage("Authentication approved. Connecting to terminal workspace...");
+        setMessage("Vibe check passed. Entering LabNexus... ⚡");
         window.location.href = '/student/dashboard';
       }
     } catch (error: any) {
-      setMessage(`Error: ${error.message}`);
+      setMessage(`L + Ratio: ${error.message}`);
     }
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 select-none">
+    <div className="relative min-h-screen bg-black flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 selection:bg-violet-500/30 overflow-hidden">
 
-      {/* LabNexus Dynamic Branding Block */}
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <h2 className="text-4xl font-black tracking-tight text-white sm:text-5xl">
-          Lab<span className="text-indigo-500">Nexus</span>
+      {/* Background Glowing Ambient Orbs */}
+      <div className="absolute top-0 left-1/4 w-96 h-96 bg-violet-600/20 rounded-full mix-blend-screen filter blur-[128px] opacity-50 animate-pulse pointer-events-none" />
+      <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-fuchsia-600/10 rounded-full mix-blend-screen filter blur-[128px] opacity-50 pointer-events-none" />
+
+      {/* Header Block */}
+      <div className="relative sm:mx-auto sm:w-full sm:max-w-md text-center z-10">
+        <h2 className="text-5xl font-black tracking-tighter text-white">
+          Lab<span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-fuchsia-500">Nexus</span>
         </h2>
-        <p className="mt-3 text-sm text-zinc-400 max-w-xs mx-auto leading-relaxed font-medium">
-          Smart component checkout. Secure workspace access.
+        <p className="mt-3 text-sm text-zinc-400 font-medium">
+          Ditch the paperwork. Flex your components. 🛠️
         </p>
-        <div className="mt-4 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-xs font-semibold text-indigo-400">
-          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-          {isOtpStep ? 'Security Token Challenge' : isRegistering ? 'Identity Provisioning Active' : 'Secure Vault Gateway Entry'}
+
+        <div className="mt-5 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-bold text-zinc-300 backdrop-blur-md">
+          <span className={`w-2 h-2 rounded-full animate-pulse ${isOtpStep ? 'bg-fuchsia-500' : isRegistering ? 'bg-violet-500' : 'bg-emerald-500'}`} />
+          {isOtpStep ? 'Verify Your Email' : isRegistering ? 'New Account Setup' : 'System Login'}
         </div>
       </div>
 
-      {/* Main Terminal UI Window */}
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-zinc-900 py-8 px-4 shadow-2xl border border-zinc-800/80 sm:rounded-2xl sm:px-10 backdrop-blur-sm">
+      {/* Main Glassmorphism Card */}
+      <div className="relative mt-8 sm:mx-auto sm:w-full sm:max-w-md z-10">
+        <div className="bg-zinc-900/40 backdrop-blur-2xl py-8 px-4 shadow-[0_0_40px_rgba(0,0,0,0.5)] border border-white/10 sm:rounded-3xl sm:px-10">
 
-          {/* Diagnostic Display Message Area */}
+          {/* Dynamic Message Box */}
           {message && (
-            <div className={`mb-5 p-3.5 rounded-xl text-sm font-medium transition-all duration-200 ${message.startsWith('Error')
-              ? 'bg-red-950/40 border border-red-900/50 text-red-400'
-              : message.startsWith('Success') || message.includes('complete')
-                ? 'bg-emerald-950/40 border border-emerald-900/50 text-emerald-400'
-                : 'bg-zinc-800/60 border border-zinc-700/50 text-zinc-300'
+            <div className={`mb-6 p-4 rounded-2xl text-sm font-semibold backdrop-blur-md transition-all duration-300 border ${message.includes('L + Ratio') || message.includes('yikes')
+                ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                : message.includes('W!') || message.includes('in!')
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                  : 'bg-white/5 border-white/10 text-zinc-300'
               }`}>
               {message}
             </div>
           )}
 
-          <form onSubmit={handleAuth} className="space-y-6">
+          <form onSubmit={handleAuth} className="space-y-5">
 
-            {/* PHASE A: Collect Core Credentials */}
+            {/* PHASE A: Collect Credentials */}
             {!isOtpStep && (
               <>
                 {isRegistering && (
                   <div>
-                    <label htmlFor="email" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                      Official Institution Email
+                    <label htmlFor="email" className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">
+                      College Email
                     </label>
-                    <div className="mt-1.5">
-                      <input
-                        id="email"
-                        name="email"
-                        type="email"
-                        required
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="username@vvce.ac.in"
-                        className="appearance-none block w-full px-3.5 py-2.5 border border-zinc-800 rounded-xl shadow-sm placeholder-zinc-600 bg-zinc-950/80 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 sm:text-sm transition-all duration-200"
-                      />
-                    </div>
+                    <input
+                      id="email" name="email" type="email" required
+                      value={email} onChange={(e) => setEmail(e.target.value)}
+                      placeholder="username@vvce.ac.in"
+                      className="block w-full px-4 py-3.5 bg-black/50 border border-white/5 rounded-2xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-all sm:text-sm"
+                    />
                   </div>
                 )}
 
                 <div>
-                  <label htmlFor="usn" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                    University Seat Number (USN)
+                  <label htmlFor="usn" className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">
+                    USN
                   </label>
-                  <div className="mt-1.5">
-                    <input
-                      id="usn"
-                      name="usn"
-                      type="text"
-                      required
-                      value={usn}
-                      onChange={(e) => setUsn(e.target.value)}
-                      placeholder="e.g., 4VV23CS000"
-                      className="appearance-none block w-full px-3.5 py-2.5 border border-zinc-800 rounded-xl shadow-sm placeholder-zinc-600 bg-zinc-950/80 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 sm:text-sm transition-all duration-200"
-                    />
-                  </div>
+                  <input
+                    id="usn" name="usn" type="text" required
+                    value={usn} onChange={(e) => setUsn(e.target.value)}
+                    placeholder="e.g., 4VV25CS000"
+                    className="block w-full px-4 py-3.5 bg-black/50 border border-white/5 rounded-2xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-all sm:text-sm uppercase"
+                  />
                 </div>
 
                 <div>
-                  <label htmlFor="password" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                    {isRegistering ? 'Create Account Access Password' : 'Security Token / Password'}
+                  <label htmlFor="password" className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">
+                    {isRegistering ? 'Create Password' : 'Password'}
                   </label>
-                  <div className="mt-1.5">
-                    <input
-                      id="password"
-                      name="password"
-                      type="password"
-                      required
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="appearance-none block w-full px-3.5 py-2.5 border border-zinc-800 rounded-xl shadow-sm placeholder-zinc-600 bg-zinc-950/80 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 sm:text-sm transition-all duration-200"
-                    />
-                  </div>
+                  <input
+                    id="password" name="password" type="password" required
+                    value={password} onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="block w-full px-4 py-3.5 bg-black/50 border border-white/5 rounded-2xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-all sm:text-sm"
+                  />
                 </div>
               </>
             )}
 
             {/* PHASE B: Collect Verification OTP Token */}
             {isRegistering && isOtpStep && (
-              <div className="animate-fade-in">
-                <label htmlFor="otp" className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider text-center mb-1">
-                  Enter 6-Digit Email Code
+              <div className="animate-in fade-in zoom-in duration-300">
+                <label htmlFor="otp" className="block text-sm font-bold text-zinc-300 text-center mb-2">
+                  Drop the 6-digit code here 👀
                 </label>
-                <p className="text-zinc-500 text-xs text-center mb-3">
-                  Sent directly to tracking terminal identifier: <span className="text-zinc-300 font-mono">{email}</span>
+                <p className="text-zinc-500 text-xs text-center mb-5">
+                  Sent to <span className="text-violet-400">{email}</span>
                 </p>
-                <div className="mt-1.5">
-                  <input
-                    id="otp"
-                    name="otp"
-                    type="text"
-                    maxLength={6}
-                    required
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
-                    placeholder="000000"
-                    className="appearance-none block w-full text-center tracking-[0.75em] font-mono font-bold text-xl px-3.5 py-3 border border-zinc-800 rounded-xl placeholder-zinc-700 bg-zinc-950 text-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                  />
-                </div>
+                <input
+                  id="otp" name="otp" type="text" maxLength={6} required
+                  value={otp} onChange={(e) => setOtp(e.target.value)}
+                  placeholder="000000"
+                  className="block w-full text-center tracking-[0.5em] sm:tracking-[0.75em] font-mono font-black text-3xl px-4 py-4 bg-black/60 border border-violet-500/30 rounded-2xl text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-fuchsia-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-all shadow-[0_0_15px_rgba(139,92,246,0.1)]"
+                />
               </div>
             )}
 
-            {/* Core Interaction Action Trigger Button */}
-            <div>
+            {/* Glowing Action Button */}
+            <div className="pt-2">
               <button
                 type="submit"
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-md text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-900 focus:ring-indigo-500 transition-all duration-200"
+                className="w-full flex justify-center py-4 px-4 rounded-2xl text-sm font-bold text-white bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black focus:ring-violet-500 transition-all duration-200 shadow-[0_0_20px_rgba(139,92,246,0.3)] hover:shadow-[0_0_30px_rgba(139,92,246,0.5)] active:scale-[0.98]"
               >
-                {isOtpStep ? 'Confirm Clearance Code' : isRegistering ? 'Dispatched Access Token' : 'Authenticate Credentials'}
+                {isOtpStep ? 'Verify & Enter' : isRegistering ? "Let's Go 🚀" : 'Log In ⚡'}
               </button>
             </div>
-
           </form>
 
-          {/* Subsystem Redirection / Switch Controller */}
-          <div className="mt-6 text-center">
+          {/* Toggle between Login and Register */}
+          <div className="mt-8 text-center border-t border-white/5 pt-6">
             <button
               onClick={() => {
                 setIsRegistering(!isRegistering);
                 setIsOtpStep(false);
                 setMessage('');
               }}
-              className="text-xs font-medium text-zinc-500 hover:text-indigo-400 transition-colors duration-200"
+              className="text-sm font-medium text-zinc-400 hover:text-white transition-colors duration-200"
             >
               {isOtpStep
-                ? "Wrong email address configured? Restart Terminal Registry"
+                ? "Wait, I used the wrong email. Take me back."
                 : isRegistering
-                  ? "Already registered in LabNexus hardware matrix? Sign In"
-                  : "New terminal assignment? Request Verification ID"}
+                  ? "Already got an account? Slide in here."
+                  : "New here? Set up your account."}
             </button>
           </div>
 
