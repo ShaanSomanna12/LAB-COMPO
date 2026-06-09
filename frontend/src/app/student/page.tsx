@@ -38,19 +38,33 @@ export default function StudentAuth() {
           const expiryTime = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
           // 2. Save the code temporarily to our Supabase 'users' table
-          const { error: dbError } = await supabase
-            .from('users')
-            .upsert({
+          // Bypassing the Supabase library to catch the hidden server error!
+          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+          const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+          const testRes = await fetch(`${supabaseUrl}/rest/v1/users`, {
+            method: 'POST',
+            headers: {
+              'apikey': supabaseKey as string,
+              'Authorization': `Bearer ${supabaseKey}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'resolution=merge-duplicates'
+            },
+            body: JSON.stringify({
               usn: formattedUSN,
               email: email,
               otp_code: otpCode,
               otp_expiry: expiryTime,
               name: `Student ${formattedUSN}`,
               role_id: 1
-            }, { onConflict: 'usn' });
+            })
+          });
 
-          if (dbError) throw new Error("Database error. Couldn't prep your account.");
-
+          if (!testRes.ok) {
+            const rawText = await testRes.text();
+            console.error("RAW SERVER RESPONSE:", rawText);
+            throw new Error(`HTTP ${testRes.status} -> ${rawText}`);
+          }
           // 3. Call the custom Resend API we built to actually send the email!
           const emailRes = await fetch('/api/send-otp', {
             method: 'POST',
@@ -75,7 +89,7 @@ export default function StudentAuth() {
             .from('users')
             .select('otp_code, otp_expiry')
             .eq('usn', formattedUSN)
-            .single();
+            .maybeSingle();
 
           if (fetchError || !userData) throw new Error("User not found. Refresh and try again.");
 
@@ -106,7 +120,7 @@ export default function StudentAuth() {
           .from('users')
           .select('email')
           .eq('usn', formattedUSN)
-          .single();
+          .maybeSingle();
 
         if (fetchError || !userData) {
           throw new Error("Who are you? USN not found. Go register first. 🕵️‍♂️");
