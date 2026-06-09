@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { query } from '@/lib/db'; // <--- THIS IS THE NEW LINE FIXING THE ERROR
+import { query } from '@/lib/db';
 import { isValidUSN, generateToken } from '@/lib/auth';
 import bcrypt from 'bcrypt';
 
@@ -17,7 +17,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid Identity format. Enter valid USN or College Email.' }, { status: 400 });
     }
 
-    let user;
+    // FIX: Added ': any' so TypeScript knows this object can hold database results
+    let user: any;
 
     try {
       // Query DB for user
