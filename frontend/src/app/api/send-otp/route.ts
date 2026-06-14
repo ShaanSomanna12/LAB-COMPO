@@ -1,27 +1,30 @@
 import { NextResponse } from 'next/server';
-import { Resend } from 'resend';
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import nodemailer from 'nodemailer';
 
 export async function POST(request: Request) {
     try {
         const { email, otpCode } = await request.json();
 
-        console.log(`Sending OTP to ${email}`);
+        console.log(`Sending OTP to ${email} via Gmail`);
 
-        const { data, error } = await resend.emails.send({
-            from: 'LabNexus <onboarding@resend.dev>', // Update this to your verified domain later if you have one
-            to: email,
-            subject: 'Your Lab Authentication Code',
-            html: `<p>Your OTP is: <strong>${otpCode}</strong></p>`
+        const transporter = nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+                user: process.env.GMAIL_USER,
+                pass: process.env.GMAIL_APP_PASSWORD,
+            },
         });
 
-        if (error) {
-            console.error("Resend Error:", error);
-            return NextResponse.json({ success: false, error: error.message }, { status: 400 });
-        }
+        const mailOptions = {
+            from: `"LabNexus Admin" <${process.env.GMAIL_USER}>`,
+            to: email,
+            subject: 'Your Lab Authentication Code',
+            html: `<p>Your OTP is: <strong style="font-size: 24px;">${otpCode}</strong></p>`
+        };
 
-        return NextResponse.json({ success: true, data });
+        const info = await transporter.sendMail(mailOptions);
+
+        return NextResponse.json({ success: true, message: 'Email sent successfully', info });
 
     } catch (error: any) {
         console.error("SERVER CRASH:", error);
