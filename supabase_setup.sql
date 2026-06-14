@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS public.users (
     email VARCHAR(255) NOT NULL,
     role_id INTEGER NOT NULL DEFAULT 1, -- 1:Student, 2:Faculty, 3:LabAdmin, 4:HOD, 5:SuperAdmin
     password_hash VARCHAR(255) NOT NULL,
+    otp_code VARCHAR(10),
+    otp_expiry TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -45,6 +47,8 @@ CREATE TABLE IF NOT EXISTS public.reservations (
     user_id UUID NOT NULL REFERENCES public.users(user_id) ON DELETE CASCADE,
     component_id UUID NOT NULL REFERENCES public.components(component_id) ON DELETE CASCADE,
     status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+    section VARCHAR(10) NOT NULL DEFAULT 'A',
+    student_department VARCHAR(50) NOT NULL DEFAULT 'CSE',
     before_img_url VARCHAR(1000),
     after_img_url VARCHAR(1000),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL

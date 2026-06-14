@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { query } from '@/lib/db';
 import { isValidUSN, generateToken } from '@/lib/auth';
 import bcrypt from 'bcrypt';
 
@@ -17,18 +16,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid Identity format. Enter valid USN or College Email.' }, { status: 400 });
     }
 
-    // FIX: Added ': any' so TypeScript knows this object can hold database results
     let user: any;
 
     try {
-      // Query DB for user
-      let res;
-      if (isEmail) {
-        res = await query('SELECT user_id, usn, password_hash, role_id FROM users WHERE email = $1', [usn.toLowerCase()]);
-      } else {
-        res = await query('SELECT user_id, usn, password_hash, role_id FROM users WHERE usn = $1', [usn.toUpperCase()]);
+      // Query DB for user using Supabase
+      const { data, error } = await supabase
+        .from('users')
+        .select('user_id, usn, password_hash, role_id')
+        .eq(isEmail ? 'email' : 'usn', isEmail ? usn.toLowerCase() : usn.toUpperCase())
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        throw error;
       }
-      user = res?.rows?.[0];
+      user = data;
 
       // Auto-create user for demo/hackathon purposes if they do not exist
       if (!user) {
@@ -36,17 +37,21 @@ export async function POST(request: Request) {
         const assignedRole = isEmail
           ? (usn.toLowerCase().startsWith('hod') ? 4 : 3)
           : 1;
-        const insertRes = await query(
-          'INSERT INTO users (usn, name, email, password_hash, role_id) VALUES ($1, $2, $3, $4, $5) RETURNING user_id, usn, role_id',
-          [
-            isEmail ? usn.toLowerCase() : usn.toUpperCase(),
-            isEmail ? (assignedRole === 4 ? `HOD ${usn}` : `Admin ${usn}`) : `Student ${usn}`,
-            isEmail ? usn.toLowerCase() : `${usn.toLowerCase()}@college.edu`,
-            hashedPassword,
-            assignedRole
-          ]
-        );
-        user = insertRes.rows[0];
+        
+        const { data: insertData, error: insertError } = await supabase
+          .from('users')
+          .insert([{
+            usn: isEmail ? usn.toLowerCase() : usn.toUpperCase(),
+            name: isEmail ? (assignedRole === 4 ? `HOD ${usn}` : `Admin ${usn}`) : `Student ${usn}`,
+            email: isEmail ? usn.toLowerCase() : `${usn.toLowerCase()}@college.edu`,
+            password_hash: hashedPassword,
+            role_id: assignedRole
+          }])
+          .select('user_id, usn, role_id')
+          .single();
+          
+        if (insertError) throw insertError;
+        user = insertData;
       } else {
         // Secure password check
         const isMatch = await bcrypt.compare(password, user.password_hash);
@@ -56,9 +61,9 @@ export async function POST(request: Request) {
       }
     } catch (dbErr: any) {
       if (process.env.NODE_ENV === 'production') {
-        throw dbErr;
+        return NextResponse.json({ error: 'Internal Server Error', details: dbErr.message }, { status: 500 });
       }
-      console.warn('Local database offline, using development mock auth:', dbErr.message);
+      console.warn('Database error, using development mock auth:', dbErr.message);
       user = {
         user_id: 'mock-uuid-1234',
         usn: isEmail ? usn.toLowerCase() : usn.toUpperCase(),

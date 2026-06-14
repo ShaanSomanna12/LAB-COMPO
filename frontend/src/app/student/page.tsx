@@ -38,32 +38,19 @@ export default function StudentAuth() {
           const expiryTime = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
           // 2. Save the code temporarily to our Supabase 'users' table
-          // Bypassing the Supabase library to catch the hidden server error!
-          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-          const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-          const testRes = await fetch(`${supabaseUrl}/rest/v1/users`, {
-            method: 'POST',
-            headers: {
-              'apikey': supabaseKey as string,
-              'Authorization': `Bearer ${supabaseKey}`,
-              'Content-Type': 'application/json',
-              'Prefer': 'resolution=merge-duplicates'
-            },
-            body: JSON.stringify({
+          const { error: dbError } = await supabase
+            .from('users')
+            .upsert({
               usn: formattedUSN,
               email: email,
               otp_code: otpCode,
               otp_expiry: expiryTime,
               name: `Student ${formattedUSN}`,
               role_id: 1
-            })
-          });
+            }, { onConflict: 'usn' });
 
-          if (!testRes.ok) {
-            const rawText = await testRes.text();
-            console.error("RAW SERVER RESPONSE:", rawText);
-            throw new Error(`HTTP ${testRes.status} -> ${rawText}`);
+          if (dbError) {
+            throw new Error(`Supabase Error -> Code: ${dbError.code || 'None'}, Msg: ${dbError.message || 'Blank'}`);
           }
           // 3. Call the custom Resend API we built to actually send the email!
           const emailRes = await fetch('/api/send-otp', {

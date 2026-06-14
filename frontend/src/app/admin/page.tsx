@@ -4,35 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import ImageCropper from './ImageCropper';
 
-// Curated high-fidelity hardware component image presets from Unsplash
-const IMAGE_PRESETS = [
-  {
-    name: 'Microcontrollers / Arduino',
-    url: 'https://images.unsplash.com/photo-1608564697071-ddf911d81370?q=80&w=600&auto=format&fit=crop',
-  },
-  {
-    name: 'AI Computing / GPU',
-    url: 'https://images.unsplash.com/photo-1591488320449-011701bb6704?q=80&w=600&auto=format&fit=crop',
-  },
-  {
-    name: 'Single Board Computers / Pi',
-    url: 'https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=600&auto=format&fit=crop',
-  },
-  {
-    name: 'Oscilloscopes / Test Gear',
-    url: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?q=80&w=600&auto=format&fit=crop',
-  },
-  {
-    name: 'Lidar / Robotics Sensors',
-    url: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?q=80&w=600&auto=format&fit=crop',
-  },
-  {
-    name: 'Multimeters / Tools',
-    url: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?q=80&w=600&auto=format&fit=crop',
-  }
-];
 
-type RequestStatus = 'Pending HOD' | 'Ready for Collection' | 'Active' | 'Returned';
+type RequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'Pending HOD' | 'Ready for Collection' | 'Active' | 'Returned';
 
 interface RequestItem {
   id: string;
@@ -132,7 +105,6 @@ export default function AdminDashboard() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const [showCropper, setShowCropper] = useState(false);
-  const [imageTab, setImageTab] = useState<'upload' | 'preset' | 'url'>('upload');
   const [selectedAnalyticsMonth, setSelectedAnalyticsMonth] = useState('2026-06');
   const [hoveredAnalyticsIdx, setHoveredAnalyticsIdx] = useState<number | null>(null);
   const [newDevice, setNewDevice] = useState({
@@ -141,7 +113,7 @@ export default function AdminDashboard() {
     total: 1,
     desc: '',
     location: 'Main Lab',
-    photoUrl: IMAGE_PRESETS[0].url
+    photoUrl: ''
   });
   const [adminDept, setAdminDept] = useState<string | null>(null);
   const [sectionFilter, setSectionFilter] = useState<string>('A');
@@ -369,12 +341,12 @@ export default function AdminDashboard() {
   };
 
   const handleApprove = async (id: string) => {
-    await updateRequestStatus(id, 'Ready for Collection');
-    setRequests(reqs => reqs.map(r => r.id === id ? { ...r, status: 'Ready for Collection' } : r));
+    await updateRequestStatus(id, 'APPROVED');
+    setRequests(reqs => reqs.map(r => r.id === id ? { ...r, status: 'APPROVED' } : r));
   };
 
   const handleReject = async (id: string) => {
-    await updateRequestStatus(id, 'Rejected');
+    await updateRequestStatus(id, 'REJECTED');
     setRequests(reqs => reqs.filter(r => r.id !== id));
   };
 
@@ -479,7 +451,7 @@ export default function AdminDashboard() {
           total: 1,
           desc: '',
           location: 'Main Lab',
-          photoUrl: IMAGE_PRESETS[0].url
+          photoUrl: ''
         });
       }
     } catch (err) {
@@ -631,21 +603,21 @@ export default function AdminDashboard() {
                       })()}
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${req.status === 'Pending HOD' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
-                        req.status === 'Ready for Collection' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' :
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${req.status === 'PENDING' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
+                        req.status === 'APPROVED' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' :
                           'bg-green-500/10 text-green-400 border-green-500/20'
                         }`}>
                         {req.status}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right space-x-2">
-                      {req.status === 'Pending HOD' && (
+                      {req.status === 'PENDING' && (
                         <>
                           <button onClick={() => handleApprove(req.id)} className="px-3 py-1.5 bg-green-600/20 text-green-500 hover:bg-green-600/30 border border-green-500/30 rounded text-xs font-semibold transition">Approve</button>
                           <button onClick={() => handleReject(req.id)} className="px-3 py-1.5 bg-red-600/20 text-red-500 hover:bg-red-600/30 border border-red-500/30 rounded text-xs font-semibold transition">Reject</button>
                         </>
                       )}
-                      {req.status === 'Ready for Collection' && (
+                      {req.status === 'APPROVED' && (
                         <button onClick={() => handleCheckout(req.id)} className="px-4 py-1.5 bg-cyan-600 text-white hover:bg-cyan-500 rounded text-xs font-bold transition shadow-lg shadow-cyan-500/20">Check Out</button>
                       )}
                       {req.status === 'Active' && (
@@ -822,7 +794,7 @@ export default function AdminDashboard() {
                   total: 1,
                   desc: '',
                   location: 'Main Lab',
-                  photoUrl: IMAGE_PRESETS[0].url
+                  photoUrl: ''
                 });
                 setShowAddModal(true);
               }}
@@ -1231,74 +1203,21 @@ export default function AdminDashboard() {
                 <div>
                   <label className="block text-xs font-mono text-zinc-400 mb-2.5 uppercase tracking-wider">Configure Component Image</label>
 
-                  {/* Tabs header */}
-                  <div className="flex bg-zinc-900/80 p-1 border border-zinc-800/80 rounded-xl mb-4 gap-1">
-                    {(['upload', 'preset', 'url'] as const).map(tab => (
-                      <button
-                        key={tab}
-                        type="button"
-                        onClick={() => setImageTab(tab)}
-                        className={`flex-1 py-2 text-center rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider transition-all cursor-pointer ${imageTab === tab
-                          ? 'bg-zinc-800 text-white shadow-sm border border-zinc-700/60'
-                          : 'text-zinc-500 hover:text-zinc-300'
-                          }`}
-                      >
-                        {tab === 'upload' ? 'Upload File' : tab === 'preset' ? 'Presets' : 'Image URL'}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Tab Contents */}
-                  {imageTab === 'upload' && (
-                    <div className="animate-in fade-in duration-200">
-                      <label className="border-2 border-dashed border-zinc-800 hover:border-cyan-500/60 bg-zinc-950/60 rounded-xl h-52 flex flex-col items-center justify-center cursor-pointer transition-all duration-300 group hover:shadow-[0_0_20px_rgba(6,182,212,0.08)]">
-                        <svg className="w-12 h-12 text-zinc-500 group-hover:text-cyan-400 transition-colors mb-3 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        <span className="text-xs font-mono text-zinc-300 group-hover:text-white font-semibold">Select Local Image File</span>
-                        <span className="text-[10px] font-mono text-zinc-600 mt-1 uppercase">PNG, JPG, JPEG</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleFileChange}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
-                  )}
-
-                  {imageTab === 'preset' && (
-                    <div className="grid grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-1 animate-in fade-in duration-200">
-                      {IMAGE_PRESETS.map((preset, index) => (
-                        <div
-                          key={index}
-                          onClick={() => setNewDevice({ ...newDevice, photoUrl: preset.url })}
-                          className={`relative h-20 rounded-xl overflow-hidden border cursor-pointer group transition-all duration-300 ${newDevice.photoUrl === preset.url
-                            ? 'border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.25)] ring-1 ring-cyan-400/40'
-                            : 'border-zinc-950 opacity-65 hover:opacity-100 hover:border-zinc-800'
-                            }`}
-                        >
-                          <img src={preset.url} alt={preset.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent flex items-end p-2">
-                            <span className="text-[9px] font-mono font-bold text-zinc-200 truncate w-full group-hover:text-white transition-colors">{preset.name}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {imageTab === 'url' && (
-                    <div className="space-y-2 animate-in fade-in duration-200">
+                  <div className="animate-in fade-in duration-200">
+                    <label className="border-2 border-dashed border-zinc-800 hover:border-cyan-500/60 bg-zinc-950/60 rounded-xl h-52 flex flex-col items-center justify-center cursor-pointer transition-all duration-300 group hover:shadow-[0_0_20px_rgba(6,182,212,0.08)]">
+                      <svg className="w-12 h-12 text-zinc-500 group-hover:text-cyan-400 transition-colors mb-3 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <span className="text-xs font-mono text-zinc-300 group-hover:text-white font-semibold">Select Local Image File</span>
+                      <span className="text-[10px] font-mono text-zinc-600 mt-1 uppercase">PNG, JPG, JPEG</span>
                       <input
-                        type="text"
-                        placeholder="https://example.com/image.jpg"
-                        value={newDevice.photoUrl && !newDevice.photoUrl.startsWith('data:') ? newDevice.photoUrl : ''}
-                        onChange={e => setNewDevice({ ...newDevice, photoUrl: e.target.value })}
-                        className="w-full bg-zinc-950 border border-zinc-850 focus:border-cyan-500/80 rounded-xl px-4 py-2.5 text-xs text-zinc-300 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 transition-all font-mono"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileChange}
+                        className="hidden"
                       />
-                      <p className="text-[9px] font-mono text-zinc-550 uppercase tracking-wide">Enter a direct image link from the web.</p>
-                    </div>
-                  )}
+                    </label>
+                  </div>
                 </div>
 
                 {/* Selection Preview Box - Highly Visual */}
@@ -1313,7 +1232,7 @@ export default function AdminDashboard() {
                   <div className="overflow-hidden">
                     <div className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">SELECTED PREVIEW</div>
                     <div className="text-xs font-mono font-semibold text-cyan-400 uppercase truncate mt-0.5">
-                      {newDevice.photoUrl && newDevice.photoUrl.startsWith('data:') ? '✓ CUSTOM CROPPED FILE' : (IMAGE_PRESETS.find(p => p.url === newDevice.photoUrl)?.name || '✓ CUSTOM URL LINKED')}
+                      {newDevice.photoUrl ? '✓ CUSTOM CROPPED FILE' : ''}
                     </div>
                   </div>
                 </div>
@@ -1347,6 +1266,15 @@ export default function AdminDashboard() {
                 <option value="B">Section B</option>
                 <option value="C">Section C</option>
                 <option value="D">Section D</option>
+                <option value="E">Section E</option>
+                <option value="F">Section F</option>
+                <option value="G">Section G</option>
+                <option value="H">Section H</option>
+                <option value="I">Section I</option>
+                <option value="J">Section J</option>
+                <option value="K">Section K</option>
+                <option value="L">Section L</option>
+                <option value="M">Section M</option>
               </select>
             </div>
           </div>
