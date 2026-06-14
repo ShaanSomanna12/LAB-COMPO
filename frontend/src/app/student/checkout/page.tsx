@@ -13,6 +13,7 @@ interface InventoryItem {
   status: string;
   photo_url?: string;
   desc?: string;
+  location?: string;
 }
 
 const DEPARTMENTS = [
