@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 export default function StudentAuth() {
   // Navigation & Step Tracking States
   const [isRegistering, setIsRegistering] = useState(false);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [isOtpStep, setIsOtpStep] = useState(false);
 
   // Form Fields
@@ -22,9 +23,77 @@ export default function StudentAuth() {
     const formattedUSN = usn.toUpperCase();
 
     try {
-      if (isRegistering) {
+      if (isForgotPassword) {
         // =========================================================
-        // REGISTRATION - STEP 1: GENERATE & SEND CUSTOM OTP
+        // FORGOT PASSWORD FLOW
+        // =========================================================
+        if (!isOtpStep) {
+          // STEP 1: Verify USN and send OTP
+          const { data: userData, error: fetchError } = await supabase
+            .from('users')
+            .select('email')
+            .eq('usn', formattedUSN)
+            .maybeSingle();
+
+          if (fetchError || !userData) {
+            throw new Error("Who are you? USN not found. 🕵️‍♂️");
+          }
+
+          const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+          const expiryTime = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+          const { error: dbError } = await supabase
+            .from('users')
+            .update({ otp_code: otpCode, otp_expiry: expiryTime })
+            .eq('usn', formattedUSN);
+
+          if (dbError) throw new Error("Failed to generate OTP.");
+
+          const emailRes = await fetch('/api/send-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: userData.email, otpCode })
+          });
+
+          if (!emailRes.ok) {
+            const errData = await emailRes.json().catch(() => ({}));
+            throw new Error(errData.error || "Failed to send the email via Gmail.");
+          }
+
+          setIsOtpStep(true);
+          setMessage("W! 🚀 OTP sent to your registered email.");
+        } else {
+          // STEP 2: Verify OTP and Reset Password via API
+          if (password.length < 6) {
+            throw new Error("Password must be at least 6 characters.");
+          }
+
+          const resetRes = await fetch('/api/reset-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ usn: formattedUSN, otpCode: otp, newPassword: password })
+          });
+
+          if (!resetRes.ok) {
+            const errData = await resetRes.json().catch(() => ({}));
+            throw new Error(errData.error || "Failed to reset password.");
+          }
+
+          setMessage("Password reset successful! 🎉 Logging you in...");
+          
+          // Log them in automatically
+          const { data: userData } = await supabase.from('users').select('email').eq('usn', formattedUSN).single();
+          if (userData) {
+            await supabase.auth.signInWithPassword({ email: userData.email, password });
+            window.location.href = '/student/dashboard';
+          } else {
+            setIsForgotPassword(false);
+            setIsOtpStep(false);
+          }
+        }
+      } else if (isRegistering) {
+        // =========================================================
+        // REGISTRATION FLOW
         // =========================================================
         if (!isOtpStep) {
           const collegeDomain = "@vvce.ac.in";
@@ -33,11 +102,9 @@ export default function StudentAuth() {
             return;
           }
 
-          // 1. Generate a random 6-digit code and an expiry time (10 mins from now)
           const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
           const expiryTime = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-          // 2. Save the code temporarily to our Supabase 'users' table
           const { error: dbError } = await supabase
             .from('users')
             .upsert({
@@ -52,7 +119,7 @@ export default function StudentAuth() {
           if (dbError) {
             throw new Error(`Supabase Error -> Code: ${dbError.code || 'None'}, Msg: ${dbError.message || 'Blank'}`);
           }
-          // 3. Call the custom Resend API we built to actually send the email!
+
           const emailRes = await fetch('/api/send-otp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -63,17 +130,12 @@ export default function StudentAuth() {
             const errData = await emailRes.json().catch(() => ({}));
             throw new Error(errData.error || "Failed to send the email via Gmail.");
           }
-          // Advance to the OTP verification view
+
           setIsOtpStep(true);
           setMessage("W! 🚀 Check your college email for the 6-digit code.");
-        }
-        // =========================================================
-        // REGISTRATION - STEP 2: VERIFY CUSTOM OTP & CREATE AUTH
-        // =========================================================
-        else {
+        } else {
           setMessage('Checking your vibe... 👀');
 
-          // 1. Fetch the code we saved in the database for this USN
           const { data: userData, error: fetchError } = await supabase
             .from('users')
             .select('otp_code, otp_expiry')
@@ -81,12 +143,9 @@ export default function StudentAuth() {
             .maybeSingle();
 
           if (fetchError || !userData) throw new Error("User not found. Refresh and try again.");
-
-          // 2. Check if the code is wrong or expired
           if (userData.otp_code !== otp) throw new Error("Nah, wrong code 💀 Try again.");
           if (new Date(userData.otp_expiry) < new Date()) throw new Error("Bruh, that code expired. ⏳");
 
-          // 3. If the code is perfect, officially register them in Supabase Auth!
           const { error: authError } = await supabase.auth.signUp({
             email: email,
             password: password,
@@ -94,13 +153,11 @@ export default function StudentAuth() {
 
           if (authError) throw authError;
 
-          // Clear the OTP from the database for security
           await supabase.from('users').update({ otp_code: null, otp_expiry: null }).eq('usn', formattedUSN);
 
           setMessage("You're in! 🎉 Booting up the dashboard...");
           window.location.href = '/student/dashboard';
         }
-
       } else {
         // =========================================================
         // STANDARD LOGIN FLOW
@@ -132,7 +189,6 @@ export default function StudentAuth() {
 
   return (
     <div className="relative min-h-screen bg-black flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 selection:bg-violet-500/30 overflow-hidden">
-
       {/* Background Glowing Ambient Orbs */}
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-violet-600/20 rounded-full mix-blend-screen filter blur-[128px] opacity-50 animate-pulse pointer-events-none" />
       <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-fuchsia-600/10 rounded-full mix-blend-screen filter blur-[128px] opacity-50 pointer-events-none" />
@@ -147,20 +203,20 @@ export default function StudentAuth() {
         </p>
 
         <div className="mt-5 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-bold text-zinc-300 backdrop-blur-md">
-          <span className={`w-2 h-2 rounded-full animate-pulse ${isOtpStep ? 'bg-fuchsia-500' : isRegistering ? 'bg-violet-500' : 'bg-emerald-500'}`} />
-          {isOtpStep ? 'Verify Your Email' : isRegistering ? 'New Account Setup' : 'System Login'}
+          <span className={`w-2 h-2 rounded-full animate-pulse ${isOtpStep ? 'bg-fuchsia-500' : isRegistering ? 'bg-violet-500' : isForgotPassword ? 'bg-orange-500' : 'bg-emerald-500'}`} />
+          {isOtpStep ? 'Verify Your Email' : isForgotPassword ? 'Reset Password' : isRegistering ? 'New Account Setup' : 'System Login'}
         </div>
       </div>
 
       {/* Main Glassmorphism Card */}
       <div className="relative mt-8 sm:mx-auto sm:w-full sm:max-w-md z-10">
         <div className="bg-zinc-900/40 backdrop-blur-2xl py-8 px-4 shadow-[0_0_40px_rgba(0,0,0,0.5)] border border-white/10 sm:rounded-3xl sm:px-10">
-
+          
           {/* Dynamic Message Box */}
           {message && (
             <div className={`mb-6 p-4 rounded-2xl text-sm font-semibold backdrop-blur-md transition-all duration-300 border ${message.includes('L + Ratio') || message.includes('yikes')
               ? 'bg-red-500/10 border-red-500/30 text-red-400'
-              : message.includes('W!') || message.includes('in!')
+              : message.includes('W!') || message.includes('in!') || message.includes('successful!')
                 ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
                 : 'bg-white/5 border-white/10 text-zinc-300'
               }`}>
@@ -169,7 +225,6 @@ export default function StudentAuth() {
           )}
 
           <form onSubmit={handleAuth} className="space-y-5">
-
             {/* PHASE A: Collect Credentials */}
             {!isOtpStep && (
               <>
@@ -199,35 +254,64 @@ export default function StudentAuth() {
                   />
                 </div>
 
-                <div>
-                  <label htmlFor="password" className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">
-                    {isRegistering ? 'Create Password' : 'Password'}
-                  </label>
-                  <input
-                    id="password" name="password" type="password" required
-                    value={password} onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="block w-full px-4 py-3.5 bg-black/50 border border-white/5 rounded-2xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-all sm:text-sm"
-                  />
-                </div>
+                {!isForgotPassword && (
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <label htmlFor="password" className="block text-xs font-bold text-zinc-400 uppercase tracking-widest">
+                        {isRegistering ? 'Create Password' : 'Password'}
+                      </label>
+                      {!isRegistering && (
+                        <button 
+                          type="button" 
+                          onClick={() => { setIsForgotPassword(true); setMessage(''); }}
+                          className="text-xs font-medium text-violet-400 hover:text-violet-300 transition-colors"
+                        >
+                          Forgot?
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      id="password" name="password" type="password" required
+                      value={password} onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="block w-full px-4 py-3.5 bg-black/50 border border-white/5 rounded-2xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-all sm:text-sm"
+                    />
+                  </div>
+                )}
               </>
             )}
 
             {/* PHASE B: Collect Verification OTP Token */}
-            {isRegistering && isOtpStep && (
-              <div className="animate-in fade-in zoom-in duration-300">
-                <label htmlFor="otp" className="block text-sm font-bold text-zinc-300 text-center mb-2">
-                  Drop the 6-digit code here 👀
-                </label>
-                <p className="text-zinc-500 text-xs text-center mb-5">
-                  Sent to <span className="text-violet-400">{email}</span>
-                </p>
-                <input
-                  id="otp" name="otp" type="text" maxLength={6} required
-                  value={otp} onChange={(e) => setOtp(e.target.value)}
-                  placeholder="000000"
-                  className="block w-full text-center tracking-[0.5em] sm:tracking-[0.75em] font-mono font-black text-3xl px-4 py-4 bg-black/60 border border-violet-500/30 rounded-2xl text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-fuchsia-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-all shadow-[0_0_15px_rgba(139,92,246,0.1)]"
-                />
+            {(isRegistering || isForgotPassword) && isOtpStep && (
+              <div className="animate-in fade-in zoom-in duration-300 space-y-5">
+                <div>
+                  <label htmlFor="otp" className="block text-sm font-bold text-zinc-300 text-center mb-2">
+                    Drop the 6-digit code here 👀
+                  </label>
+                  <p className="text-zinc-500 text-xs text-center mb-5">
+                    Sent to your registered email.
+                  </p>
+                  <input
+                    id="otp" name="otp" type="text" maxLength={6} required
+                    value={otp} onChange={(e) => setOtp(e.target.value)}
+                    placeholder="000000"
+                    className="block w-full text-center tracking-[0.5em] sm:tracking-[0.75em] font-mono font-black text-3xl px-4 py-4 bg-black/60 border border-violet-500/30 rounded-2xl text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-fuchsia-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-all shadow-[0_0_15px_rgba(139,92,246,0.1)]"
+                  />
+                </div>
+                
+                {isForgotPassword && (
+                  <div>
+                    <label htmlFor="new_password" className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2 text-center">
+                      Create New Password
+                    </label>
+                    <input
+                      id="new_password" name="new_password" type="password" required
+                      value={password} onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="block w-full px-4 py-3.5 bg-black/50 border border-white/5 rounded-2xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-all sm:text-sm"
+                    />
+                  </div>
+                )}
               </div>
             )}
 
@@ -237,7 +321,7 @@ export default function StudentAuth() {
                 type="submit"
                 className="w-full flex justify-center py-4 px-4 rounded-2xl text-sm font-bold text-white bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black focus:ring-violet-500 transition-all duration-200 shadow-[0_0_20px_rgba(139,92,246,0.3)] hover:shadow-[0_0_30px_rgba(139,92,246,0.5)] active:scale-[0.98]"
               >
-                {isOtpStep ? 'Verify & Enter' : isRegistering ? "Let's Go 🚀" : 'Log In ⚡'}
+                {isOtpStep ? (isForgotPassword ? 'Reset Password' : 'Verify & Enter') : isForgotPassword ? 'Send Reset OTP' : isRegistering ? "Let's Go 🚀" : 'Log In ⚡'}
               </button>
             </div>
           </form>
@@ -246,14 +330,17 @@ export default function StudentAuth() {
           <div className="mt-8 text-center border-t border-white/5 pt-6">
             <button
               onClick={() => {
-                setIsRegistering(!isRegistering);
+                setIsRegistering(isForgotPassword ? false : !isRegistering);
+                setIsForgotPassword(false);
                 setIsOtpStep(false);
                 setMessage('');
+                setPassword('');
+                setOtp('');
               }}
               className="text-sm font-medium text-zinc-400 hover:text-white transition-colors duration-200"
             >
-              {isOtpStep
-                ? "Wait, I used the wrong email. Take me back."
+              {isOtpStep || isForgotPassword
+                ? "Wait, take me back to login."
                 : isRegistering
                   ? "Already got an account? Slide in here."
                   : "New here? Set up your account."}
