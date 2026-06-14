@@ -175,17 +175,8 @@ export default function StudentAuth() {
         // =========================================================
         // STANDARD LOGIN FLOW
         // =========================================================
-        const { data: userData, error: fetchError } = await supabase
-          .from('users')
-          .select('email, role_id, name')
-          .eq('usn', formattedUSN)
-          .maybeSingle();
-
-        if (fetchError || !userData) {
-          throw new Error("Who are you? USN not found. Go register first. 🕵️‍♂️");
-        }
-
-        // --- ADMIN BYPASS LOGIC ---
+        
+        // --- ADMIN & HOD BYPASS LOGIC ---
         const ADMIN_PASSWORDS: Record<string, string> = {
           'ADMIN_EDL': 'Adminedlvvce@00123',
           'ADMIN_ECE': 'Adminecevvce@00123',
@@ -194,7 +185,15 @@ export default function StudentAuth() {
           'ADMIN_MECH': 'Adminmechvvce@00123'
         };
 
-        if (userData.role_id >= 3 && ADMIN_PASSWORDS[formattedUSN]) {
+        const HOD_PASSWORDS: Record<string, string> = {
+          'HODEDL_VVCE': 'HODedl@00055',
+          'HODECE_VVCE': 'HODece@00055',
+          'HODEEE_VVCE': 'HODeee@00055',
+          'HODCIVIL_VVCE': 'HODcivil@00055',
+          'HODMECH_VVCE': 'HODmech@00055'
+        };
+
+        if (ADMIN_PASSWORDS[formattedUSN]) {
           if (password !== ADMIN_PASSWORDS[formattedUSN]) {
             throw new Error("Wrong password. Did you forget it already? 😭");
           }
@@ -206,7 +205,34 @@ export default function StudentAuth() {
           }, 500);
           return;
         }
-        // --- END ADMIN BYPASS LOGIC ---
+
+        if (HOD_PASSWORDS[formattedUSN]) {
+          if (password !== HOD_PASSWORDS[formattedUSN]) {
+            throw new Error("Wrong password. Did you forget it already? 😭");
+          }
+          
+          // Set department context for HOD dashboard
+          const dept = formattedUSN.replace('HOD', '').replace('_VVCE', '');
+          localStorage.setItem('hod_dept', dept);
+
+          document.cookie = "hod_access=true; path=/; max-age=86400";
+          setMessage(" Entering HOD Workspace..⚡");
+          setTimeout(() => {
+            window.location.href = '/hod';
+          }, 500);
+          return;
+        }
+        // --- END ADMIN & HOD BYPASS LOGIC ---
+
+        const { data: userData, error: fetchError } = await supabase
+          .from('users')
+          .select('email, role_id, name')
+          .eq('usn', formattedUSN)
+          .maybeSingle();
+
+        if (fetchError || !userData) {
+          throw new Error("Who are you? USN not found. Go register first. 🕵️‍♂️");
+        }
 
         const { error: loginError } = await supabase.auth.signInWithPassword({
           email: userData.email,

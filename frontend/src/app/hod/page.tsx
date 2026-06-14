@@ -36,7 +36,7 @@ export default function HodDashboard() {
   const [hodLabRemarksInput, setHodLabRemarksInput] = useState<string>('');
   
   // Interactive view switcher and graphing states
-  const [viewMode, setViewMode] = useState<'requests' | 'lab-access' | 'analytics'>('requests');
+  const [viewMode, setViewMode] = useState<'requests' | 'lab-access' | 'analytics'>('lab-access');
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
   const DEPT_INFO = [
@@ -49,6 +49,10 @@ export default function HodDashboard() {
   useEffect(() => {
     const storedCollege = localStorage.getItem('collegeName');
     if (storedCollege) setCollegeName(storedCollege.toUpperCase());
+
+    const hodDept = localStorage.getItem('hod_dept');
+    if (hodDept) setActiveDept(hodDept);
+
     fetchRequests();
     fetchInventory();
     fetchLabRequests();
@@ -274,12 +278,6 @@ export default function HodDashboard() {
 
       {/* View Switcher Tabs */}
       <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800 flex-row gap-1 max-w-md mb-8">
-        <button 
-          onClick={() => setViewMode('requests')} 
-          className={`flex-1 text-center py-1.5 rounded text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${viewMode === 'requests' ? 'bg-zinc-800 text-white border border-zinc-700' : 'text-zinc-400 hover:text-white border border-transparent'}`}
-        >
-          Hardware Requisitions
-        </button>
         <button 
           onClick={() => setViewMode('lab-access')} 
           className={`flex-1 text-center py-1.5 rounded text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${viewMode === 'lab-access' ? 'bg-zinc-800 text-white border border-zinc-700' : 'text-zinc-400 hover:text-white border border-transparent'}`}
