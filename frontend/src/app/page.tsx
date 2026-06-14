@@ -62,16 +62,14 @@ export default function StudentAuth() {
           const emailRes = await fetch('/api/send-otp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            // 🚨 THE HACK: Ignore the typed email, send it straight to Gmail!
-            body: JSON.stringify({ email: "somzshaan@gmail.com", otpCode })
+            body: JSON.stringify({ email: email, otpCode })
           });
 
           if (!emailRes.ok) throw new Error("Failed to send the email. Check your Resend API key!");
 
           // Advance to the OTP verification view
           setIsOtpStep(true);
-          // 🚨 DEVELOPMENT HACK: Show the OTP on the screen since emails are failing!
-          setMessage(`W! 🚀 (Dev Bypass: Your OTP is ${otpCode})`);
+          setMessage(`W! 🚀 OTP sent to your email!`);
         }
         // =========================================================
         // REGISTRATION - STEP 2: VERIFY CUSTOM OTP & CREATE AUTH
