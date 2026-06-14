@@ -65,8 +65,10 @@ export default function StudentAuth() {
             body: JSON.stringify({ email: email, otpCode })
           });
 
-          if (!emailRes.ok) throw new Error("Failed to send the email. Check your Resend API key!");
-
+          if (!emailRes.ok) {
+            const errData = await emailRes.json().catch(() => ({}));
+            throw new Error(errData.error || "Failed to send the email via Gmail.");
+          }
           // Advance to the OTP verification view
           setIsOtpStep(true);
           setMessage(`W! 🚀 OTP sent to your email!`);
