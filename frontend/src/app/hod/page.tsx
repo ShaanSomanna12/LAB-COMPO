@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 
 interface RequestItem {
   id: string;
@@ -37,7 +38,6 @@ export default function HodDashboard() {
   
   // Interactive view switcher and graphing states
   const [viewMode, setViewMode] = useState<'requests' | 'lab-access' | 'analytics'>('lab-access');
-  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
   const DEPT_INFO = [
     { id: 'EDL', title: 'Engineering Dev. Lab', color: 'from-blue-600 to-indigo-600' },
@@ -937,148 +937,31 @@ export default function HodDashboard() {
                   </div>
                 </div>
 
-                {/* SVG Visual Graph */}
-                <div className="relative w-full h-[260px] select-none">
-                  <svg viewBox="0 0 600 250" className="w-full h-full">
-                    <defs>
-                      <linearGradient id="gradient-borrow-hod" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#d946ef" stopOpacity="0.25" />
-                        <stop offset="100%" stopColor="#d946ef" stopOpacity="0.0" />
-                      </linearGradient>
-                      <linearGradient id="gradient-stock-hod" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.2" />
-                        <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.0" />
-                      </linearGradient>
-                    </defs>
-
-                    {/* Chart Grid Lines */}
-                    <line x1="50" y1="220" x2="570" y2="220" stroke="rgba(255, 255, 255, 0.1)" strokeWidth={1.5} />
-                    <line x1="50" y1="40" x2="50" y2="220" stroke="rgba(255, 255, 255, 0.1)" strokeWidth={1.5} />
-                    
-                    {/* Horizontal subdivisions */}
-                    {[0, 1, 2, 3, 4].map(idx => {
-                      const val = (yMax / 4) * idx;
-                      const y = 220 - (val / yMax) * 180;
-                      return (
-                        <g key={idx}>
-                          {idx > 0 && (
-                            <line x1="50" y1={y} x2="570" y2={y} stroke="rgba(255, 255, 255, 0.05)" strokeDasharray="3,3" />
-                          )}
-                          <text x="40" y={y + 4} textAnchor="end" className="text-[10px] font-mono fill-zinc-500">{val}</text>
-                        </g>
-                      );
-                    })}
-
-                    {/* X-Axis Month names */}
-                    {chartData.map((d, idx) => {
-                      const x = 50 + idx * 104;
-                      return (
-                        <g key={idx}>
-                          <line x1={x} y1="220" x2={x} y2="225" stroke="rgba(255, 255, 255, 0.15)" />
-                          <text x={x} y="240" textAnchor="middle" className="text-[10px] font-bold fill-zinc-400 uppercase tracking-wider">{d.label}</text>
-                        </g>
-                      );
-                    })}
-
-                    {/* Area fills */}
-                    {chartData.length > 0 && (
-                      <>
-                        <path d={stockArea} fill="url(#gradient-stock-hod)" />
-                        <path d={borrowArea} fill="url(#gradient-borrow-hod)" />
-                        
-                        {/* Lines */}
-                        <path d={stockPath} fill="none" stroke="#22d3ee" strokeWidth={3} strokeLinecap="round" className="drop-shadow-[0_2px_8px_rgba(6,182,212,0.4)]" />
-                        <path d={borrowPath} fill="none" stroke="#f472b6" strokeWidth={3} strokeLinecap="round" className="drop-shadow-[0_2px_8px_rgba(217,70,239,0.5)]" />
-                      </>
-                    )}
-
-                    {/* Interactive Guideline */}
-                    {hoveredIdx !== null && (
-                      <line 
-                        x1={50 + hoveredIdx * 104} 
-                        y1="40" 
-                        x2={50 + hoveredIdx * 104} 
-                        y2="220" 
-                        stroke="rgba(255, 255, 255, 0.25)" 
-                        strokeDasharray="2,2" 
+                {/* Recharts Visual Graph */}
+                <div className="w-full h-[260px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorBorrow" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#d946ef" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#d946ef" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="colorStock" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="label" stroke="#52525b" fontSize={10} tickLine={false} axisLine={false} />
+                      <YAxis stroke="#52525b" fontSize={10} tickLine={false} axisLine={false} />
+                      <RechartsTooltip 
+                        contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '12px' }}
+                        itemStyle={{ color: '#e4e4e7', fontSize: '12px' }}
+                        labelStyle={{ color: '#a1a1aa', fontWeight: 'bold', marginBottom: '4px' }}
                       />
-                    )}
-
-                    {/* Highlighting circles on hover */}
-                    {chartData.map((d, idx) => {
-                      const x = 50 + idx * 104;
-                      const yBorrow = 220 - (d.borrowed / yMax) * 180;
-                      const yStock = 220 - (d.stockAdded / yMax) * 180;
-                      const isHovered = hoveredIdx === idx;
-
-                      return (
-                        <g key={idx}>
-                          {/* Borrowed circles */}
-                          <circle 
-                            cx={x} 
-                            cy={yBorrow} 
-                            r={isHovered ? 7 : 4} 
-                            fill="#f472b6" 
-                            stroke="#18181b" 
-                            strokeWidth={isHovered ? 2.5 : 1.5}
-                            className="transition-all duration-200" 
-                          />
-                          {/* Stock circles */}
-                          <circle 
-                            cx={x} 
-                            cy={yStock} 
-                            r={isHovered ? 7 : 4} 
-                            fill="#22d3ee" 
-                            stroke="#18181b" 
-                            strokeWidth={isHovered ? 2.5 : 1.5}
-                            className="transition-all duration-200" 
-                          />
-                        </g>
-                      );
-                    })}
-
-                    {/* Interactive columns for hover tracking */}
-                    {chartData.map((_, idx) => {
-                      const x = 50 + idx * 104 - 52;
-                      return (
-                        <rect
-                          key={idx}
-                          x={x}
-                          y="20"
-                          width="104"
-                          height="210"
-                          fill="transparent"
-                          className="cursor-pointer"
-                          onMouseEnter={() => setHoveredIdx(idx)}
-                          onMouseLeave={() => setHoveredIdx(null)}
-                        />
-                      );
-                    })}
-                  </svg>
-
-                  {/* HTML Tooltip overlaid inside the absolute chart viewport */}
-                  {hoveredIdx !== null && chartData[hoveredIdx] && (
-                    <div 
-                      className="absolute bg-zinc-950/95 border border-zinc-800 rounded-xl p-3 shadow-xl backdrop-blur-md pointer-events-none transition-all duration-150 z-20 text-xs text-left flex flex-col gap-1.5"
-                      style={{ 
-                        left: `${Math.min(Math.max(50 + hoveredIdx * 104 - 60, 10), 450) / 600 * 100}%`,
-                        top: '15px'
-                      }}
-                    >
-                      <div className="font-bold text-zinc-300 uppercase tracking-wider border-b border-zinc-850 pb-1 flex justify-between gap-4">
-                        <span>{chartData[hoveredIdx].label} {chartData[hoveredIdx].year}</span>
-                        <span className="text-emerald-400">Updates</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-6">
-                        <span className="text-zinc-500 font-semibold">Borrowed Items:</span>
-                        <span className="font-mono font-black text-fuchsia-400">{chartData[hoveredIdx].borrowed} Res.</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-6">
-                        <span className="text-zinc-500 font-semibold">Stock Added:</span>
-                        <span className="font-mono font-black text-cyan-400">+{chartData[hoveredIdx].stockAdded} Units</span>
-                      </div>
-                    </div>
-                  )}
+                      <Area type="monotone" dataKey="stockAdded" stroke="#06b6d4" strokeWidth={3} fillOpacity={1} fill="url(#colorStock)" name="Stock Added" />
+                      <Area type="monotone" dataKey="borrowed" stroke="#d946ef" strokeWidth={3} fillOpacity={1} fill="url(#colorBorrow)" name="Borrowed Items" />
+                    </AreaChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
 

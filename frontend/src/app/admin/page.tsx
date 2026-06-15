@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import ImageCropper from './ImageCropper';
+import { Scanner } from '@yudiel/react-qr-scanner';
 
 
 type RequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'Pending HOD' | 'Ready for Collection' | 'Active' | 'Returned';
@@ -118,6 +119,10 @@ export default function AdminDashboard() {
   const [adminDept, setAdminDept] = useState<string | null>(null);
   const [sectionFilter, setSectionFilter] = useState<string>('A');
   const [studentDeptFilter, setStudentDeptFilter] = useState<string>('CSE');
+
+  // Scanner State
+  const [showScannerModal, setShowScannerModal] = useState(false);
+  const [scannedUsnFilter, setScannedUsnFilter] = useState<string | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -560,7 +565,26 @@ export default function AdminDashboard() {
       {/* Dashboard View */}
       {adminDept && activeTab === 'requests' && (
         <div className="space-y-6 max-w-6xl mx-auto">
-          <h2 className="text-2xl font-bold mb-4">{adminDept} Pending & Active Requests</h2>
+          <div className="flex justify-between items-center mb-4">
+            <div className="flex items-center gap-4">
+              <h2 className="text-2xl font-bold">{adminDept} Pending & Active Requests</h2>
+              {scannedUsnFilter && (
+                <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+                  Filter: {scannedUsnFilter}
+                  <button onClick={() => setScannedUsnFilter(null)} className="hover:text-emerald-300 ml-1">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              )}
+            </div>
+            <button 
+              onClick={() => setShowScannerModal(true)}
+              className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black px-4 py-2 rounded-xl font-bold text-sm transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)]"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
+              Scan Student Pass
+            </button>
+          </div>
 
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
             <table className="w-full text-left text-sm">
@@ -574,12 +598,12 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800">
-                {requests.filter(r => r.department === adminDept).length === 0 && (
+                {requests.filter(r => r.department === adminDept && (!scannedUsnFilter || r.usn === scannedUsnFilter)).length === 0 && (
                   <tr>
                     <td colSpan={5} className="px-6 py-8 text-center text-zinc-500">No active requests found.</td>
                   </tr>
                 )}
-                {requests.filter(req => req.department === adminDept).map(req => (
+                {requests.filter(r => r.department === adminDept && (!scannedUsnFilter || r.usn === scannedUsnFilter)).map(req => (
                   <tr key={req.id} className="hover:bg-zinc-800/30 transition-colors">
                     <td className="px-6 py-4 font-mono text-zinc-300">{req.id}</td>
                     <td className="px-6 py-4">
@@ -1113,7 +1137,7 @@ export default function AdminDashboard() {
 
       {/* Add Device Modal Redesign */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95 duration-200">
           <div className="bg-zinc-950 border border-zinc-800 p-6 md:p-8 rounded-2xl w-full max-w-2xl shadow-2xl relative max-h-[90vh] overflow-y-auto">
 
             {/* Corner decors */}
@@ -1343,6 +1367,54 @@ export default function AdminDashboard() {
             setImageToCrop(null);
           }}
         />
+      )}
+
+      {/* QR Scanner Modal */}
+      {showScannerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4" onClick={() => setShowScannerModal(false)}>
+          <div 
+            className="bg-zinc-950 border border-zinc-800 p-6 rounded-3xl max-w-md w-full shadow-[0_0_50px_rgba(16,185,129,0.15)] flex flex-col items-center text-center relative overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button 
+              onClick={() => setShowScannerModal(false)}
+              className="absolute top-4 right-4 text-zinc-500 hover:text-white transition-colors z-10 bg-black/50 p-1 rounded-full backdrop-blur-sm"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+
+            <div className="mb-6 w-full">
+              <h3 className="text-xl font-bold text-white uppercase tracking-wider mb-1 flex items-center justify-center gap-2">
+                <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                Scan Digital Pass
+              </h3>
+              <p className="text-zinc-400 text-xs font-mono">Position the student's QR code in the frame</p>
+            </div>
+
+            <div className="w-full aspect-square rounded-2xl overflow-hidden bg-black border-2 border-emerald-500/30 relative">
+              <Scanner 
+                onScan={(result) => {
+                  if (result && result.length > 0) {
+                    const usn = result[0].rawValue;
+                    setScannedUsnFilter(usn);
+                    setShowScannerModal(false);
+                  }
+                }}
+                styles={{
+                  container: { width: '100%', height: '100%' },
+                  video: { objectFit: 'cover' }
+                }}
+              />
+              {/* Scanner overlay effect */}
+              <div className="absolute inset-0 border-[3px] border-emerald-500/50 m-8 rounded-xl pointer-events-none">
+                <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-emerald-400 -mt-1 -ml-1"></div>
+                <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-emerald-400 -mt-1 -mr-1"></div>
+                <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-emerald-400 -mb-1 -ml-1"></div>
+                <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-emerald-400 -mb-1 -mr-1"></div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

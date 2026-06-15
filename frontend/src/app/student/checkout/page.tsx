@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 
 interface InventoryItem {
   id: string | number;
@@ -32,7 +33,7 @@ export default function StudentCheckout() {
   
   // Selection state
   const [selectedDept, setSelectedDept] = useState<string | null>(null);
-  const [selectedComponentItem, setSelectedComponentItem] = useState<InventoryItem | null>(null);
+  const [cart, setCart] = useState<InventoryItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   
   // Form State
@@ -43,10 +44,11 @@ export default function StudentCheckout() {
   const [date, setDate] = useState('');
   const [time, setTime] = useState('09:00 AM');
   const [duration, setDuration] = useState(7);
+  const [projectTitle, setProjectTitle] = useState('');
+  const [trustScore, setTrustScore] = useState(100);
   
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
     // Fetch user details from Supabase
@@ -55,13 +57,14 @@ export default function StudentCheckout() {
       if (user && user.email) {
         const { data: userData } = await supabase
           .from('users')
-          .select('name, usn')
+          .select('name, usn, trust_score')
           .eq('email', user.email)
           .maybeSingle();
           
         if (userData) {
           setUsn(userData.usn);
           setStudentName(userData.name);
+          if (userData.trust_score !== undefined && userData.trust_score !== null) setTrustScore(userData.trust_score);
         }
       }
     };
@@ -81,20 +84,34 @@ export default function StudentCheckout() {
     setStep('components');
   };
 
-  const handleComponentSelect = (item: InventoryItem) => {
+  const toggleCartItem = (item: InventoryItem) => {
     if (item.available <= 0) return;
-    setSelectedComponentItem(item);
-    setStep('form');
+    setCart(prev => {
+      const exists = prev.find(i => i.id === item.id);
+      if (exists) {
+        return prev.filter(i => i.id !== item.id);
+      }
+      return [...prev, item];
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setMessage(null);
 
-    if (!selectedComponentItem) return;
+    if (cart.length === 0) {
+      toast.error('Your cart is empty');
+      setIsLoading(false);
+      return;
+    }
 
     try {
+      const itemsPayload = cart.map(item => ({
+        name: item.name,
+        department: item.department,
+        location: item.location || 'Main Lab'
+      }));
+
       const res = await fetch('/api/requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -106,27 +123,46 @@ export default function StudentCheckout() {
           date,
           time,
           duration,
-          items: [{ 
-            name: selectedComponentItem.name, 
-            department: selectedComponentItem.department,
-            location: 'Main Lab'
-          }]
+          projectTitle,
+          items: itemsPayload
         })
       });
 
       if (!res.ok) throw new Error('Failed to submit checkout request');
       
-      setMessage({ text: 'Checkout request submitted successfully!', type: 'success' });
+      toast.success('Checkout request submitted successfully!');
+      setCart([]);
       setTimeout(() => router.push('/student/dashboard'), 2000);
     } catch (error: any) {
-      setMessage({ text: error.message || 'An error occurred', type: 'error' });
+      toast.error(error.message || 'An error occurred');
     } finally {
       setIsLoading(false);
     }
   };
 
+  const joinWaitlist = async (item: InventoryItem) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error('Not authenticated');
+        return;
+      }
+      const { data: userData } = await supabase.from('users').select('user_id').eq('email', user.email).single();
+      
+      const { error } = await supabase.from('waitlists').insert([{
+        user_id: userData?.user_id,
+        component_id: item.id
+      }]);
+      
+      if (error) throw error;
+      toast.success(`Joined waitlist for ${item.name}`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to join waitlist');
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-[#030303] text-zinc-100 flex flex-col p-4 md:p-8 font-sans selection:bg-cyan-500/30">
+    <div className="min-h-screen bg-[#030303] text-zinc-100 flex flex-col p-4 md:p-8 font-sans selection:bg-cyan-500/30 pb-24">
       <div className="absolute inset-0 cyber-grid opacity-20 pointer-events-none z-0"></div>
       
       {/* Top Header */}
@@ -212,51 +248,64 @@ export default function StudentCheckout() {
                     <p className="text-zinc-400 font-mono uppercase tracking-widest text-sm">No components match your search</p>
                   </div>
                 ) : (
-                  filteredInventory.map(item => (
-                <div 
-                  key={item.id}
-                  onClick={() => handleComponentSelect(item)}
-                  className={`relative bg-zinc-950/80 backdrop-blur-xl border rounded-2xl overflow-hidden transition-all duration-300 flex flex-col group ${
-                    item.available > 0 
-                      ? 'border-zinc-800 hover:border-cyan-500/50 cursor-pointer hover:-translate-y-1 hover:shadow-[0_10px_30px_rgba(6,182,212,0.15)]' 
-                      : 'border-zinc-900 opacity-60 cursor-not-allowed grayscale'
-                  }`}
-                >
-                  <div className="h-40 bg-zinc-900 border-b border-zinc-800 relative overflow-hidden">
-                    {item.photo_url ? (
-                      <img src={item.photo_url} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-zinc-700">No Image</div>
-                    )}
-                    
-                    <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
-                      {item.available > 0 ? (
-                        <span className="px-2 py-1 bg-emerald-500/90 backdrop-blur-sm text-white text-[10px] font-bold rounded shadow uppercase tracking-wider">
-                          {item.available} in stock
-                        </span>
-                      ) : (
-                        <span className="px-2 py-1 bg-rose-500/90 backdrop-blur-sm text-white text-[10px] font-bold rounded shadow uppercase tracking-wider">
-                          Out of stock
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="p-4 flex flex-col flex-grow">
-                    <h3 className="font-bold text-white text-lg leading-tight mb-1">{item.name}</h3>
-                    <p className="text-zinc-500 text-xs line-clamp-2 mt-2">{item.desc || 'No description provided'}</p>
-                    
-                    <div className="mt-auto pt-4 flex items-center justify-between">
-                      <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-wider">{item.location}</span>
-                      {item.available > 0 && (
-                        <div className="text-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
+                  filteredInventory.map(item => {
+                    const inCart = cart.some(i => i.id === item.id);
+                    return (
+                      <div 
+                        key={item.id}
+                        onClick={() => toggleCartItem(item)}
+                        className={`relative bg-zinc-950/80 backdrop-blur-xl border rounded-2xl overflow-hidden transition-all duration-300 flex flex-col group ${
+                          item.available > 0 
+                            ? (inCart ? 'border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : 'border-zinc-800 hover:border-cyan-500/50 hover:-translate-y-1 hover:shadow-[0_10px_30px_rgba(6,182,212,0.15)] cursor-pointer') 
+                            : 'border-zinc-900 opacity-60 cursor-not-allowed grayscale'
+                        }`}
+                      >
+                        <div className="h-40 bg-zinc-900 border-b border-zinc-800 relative overflow-hidden">
+                          {item.photo_url ? (
+                            <img src={item.photo_url} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-zinc-700">No Image</div>
+                          )}
+                          
+                          <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+                            {item.available > 0 ? (
+                              <span className="px-2 py-1 bg-emerald-500/90 backdrop-blur-sm text-white text-[10px] font-bold rounded shadow uppercase tracking-wider">
+                                {item.available} in stock
+                              </span>
+                            ) : (
+                              <div className="flex flex-col gap-1 items-end">
+                                <span className="px-2 py-1 bg-rose-500/90 backdrop-blur-sm text-white text-[10px] font-bold rounded shadow uppercase tracking-wider">
+                                  Out of stock
+                                </span>
+                                <button onClick={(e) => { e.stopPropagation(); joinWaitlist(item); }} className="px-2 py-1 bg-zinc-800/90 hover:bg-zinc-700 backdrop-blur-sm text-cyan-400 border border-cyan-500/30 text-[10px] font-bold rounded shadow uppercase tracking-wider transition">
+                                  Join Waitlist
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                  ))
+                        
+                        <div className="p-4 flex flex-col flex-grow relative">
+                          {inCart && (
+                            <div className="absolute top-4 right-4 bg-emerald-500 text-white rounded-full p-1 shadow-lg shadow-emerald-500/50">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                            </div>
+                          )}
+                          <h3 className="font-bold text-white text-lg leading-tight mb-1 pr-6">{item.name}</h3>
+                          <p className="text-zinc-500 text-xs line-clamp-2 mt-2">{item.desc || 'No description provided'}</p>
+                          
+                          <div className="mt-auto pt-4 flex items-center justify-between">
+                            <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-wider">{item.location}</span>
+                            {item.available > 0 && (
+                              <div className={`text-xs font-bold uppercase ${inCart ? 'text-emerald-400' : 'text-cyan-400 opacity-0 group-hover:opacity-100'} transition-opacity`}>
+                                {inCart ? 'Remove' : 'Add to Cart'}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -264,28 +313,33 @@ export default function StudentCheckout() {
         })()}
 
         {/* STEP 3: Checkout Form */}
-        {step === 'form' && selectedComponentItem && (
+        {step === 'form' && cart.length > 0 && (
           <div className="w-full max-w-3xl mx-auto bg-zinc-950/80 backdrop-blur-xl border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-            <div className="bg-gradient-to-r from-cyan-950/50 to-indigo-950/50 p-6 border-b border-zinc-800 flex items-center gap-4">
-              <div className="w-16 h-16 rounded-xl overflow-hidden bg-zinc-900 shrink-0">
-                {selectedComponentItem.photo_url ? (
-                  <img src={selectedComponentItem.photo_url} alt="Item" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">📷</div>
-                )}
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-white">{selectedComponentItem.name}</h2>
-                <p className="text-cyan-400 font-mono text-xs uppercase tracking-widest mt-1">Ready for Checkout</p>
+            <div className="bg-gradient-to-r from-cyan-950/50 to-indigo-950/50 p-6 border-b border-zinc-800 flex flex-col gap-4">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <svg className="w-6 h-6 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                {cart.length} Item{cart.length > 1 ? 's' : ''} in Cart
+              </h2>
+              <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                {cart.map(item => (
+                  <div key={item.id} className="flex-shrink-0 bg-black/40 border border-zinc-800 rounded-lg p-2 flex items-center gap-3 pr-4">
+                    <div className="w-10 h-10 rounded-md overflow-hidden bg-zinc-900">
+                      {item.photo_url ? (
+                        <img src={item.photo_url} alt="Item" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-xs">📷</div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-zinc-200 line-clamp-1 max-w-[120px]">{item.name}</p>
+                      <p className="text-[10px] text-zinc-500 font-mono uppercase">{item.department}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 md:p-8 space-y-6">
-              {message && (
-                <div className={`p-4 rounded-lg text-sm font-medium border ${message.type === 'error' ? 'bg-rose-500/10 border-rose-500/30 text-rose-400' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'}`}>
-                  {message.text}
-                </div>
-              )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Student Info */}
@@ -294,7 +348,7 @@ export default function StudentCheckout() {
                   
                   <div>
                     <label className="block text-xs font-medium text-zinc-400 mb-1">Full Name</label>
-                    <input required readOnly type="text" value={studentName} onChange={e => setStudentName(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all opacity-70 cursor-not-allowed" placeholder="John Doe" />
+                    <input required type="text" value={studentName} onChange={e => setStudentName(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all text-white" placeholder="John Doe" />
                   </div>
                   
                   <div>
@@ -338,6 +392,11 @@ export default function StudentCheckout() {
                 <div className="space-y-4">
                   <h3 className="text-xs font-mono text-cyan-500 tracking-widest uppercase border-b border-zinc-800 pb-2 mb-4">Requisition Details</h3>
 
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1">Project Title</label>
+                    <input required type="text" value={projectTitle} onChange={e => setProjectTitle(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all" placeholder="e.g. IoT Weather Station" />
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-medium text-zinc-400 mb-1">Date of Collection</label>
@@ -345,7 +404,25 @@ export default function StudentCheckout() {
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-zinc-400 mb-1">Time of Collection</label>
-                      <input required type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 [color-scheme:dark]" />
+                      <select required value={time} onChange={e => setTime(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 appearance-none text-white">
+                        <option value="09:00">09:00 AM</option>
+                        <option value="09:30">09:30 AM</option>
+                        <option value="10:00">10:00 AM</option>
+                        <option value="10:30">10:30 AM</option>
+                        <option value="11:00">11:00 AM</option>
+                        <option value="11:30">11:30 AM</option>
+                        <option value="12:00">12:00 PM</option>
+                        <option value="12:30">12:30 PM</option>
+                        <option value="13:00">01:00 PM</option>
+                        <option value="13:30">01:30 PM</option>
+                        <option value="14:00">02:00 PM</option>
+                        <option value="14:30">02:30 PM</option>
+                        <option value="15:00">03:00 PM</option>
+                        <option value="15:30">03:30 PM</option>
+                        <option value="16:00">04:00 PM</option>
+                        <option value="16:30">04:30 PM</option>
+                        <option value="17:00">05:00 PM</option>
+                      </select>
                     </div>
                   </div>
 
@@ -357,12 +434,24 @@ export default function StudentCheckout() {
               </div>
 
               <div className="pt-4 border-t border-zinc-800">
+                {trustScore < 50 && (
+                  <div className="mb-4 p-3 bg-red-950/50 border border-red-500/30 rounded-lg text-red-400 text-sm font-bold flex items-center gap-2">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                    Checkout blocked. Your trust score ({trustScore}) is below 50. Please contact your HOD.
+                  </div>
+                )}
+                {trustScore >= 150 && (
+                  <div className="mb-4 p-3 bg-emerald-950/50 border border-emerald-500/30 rounded-lg text-emerald-400 text-sm font-bold flex items-center gap-2">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    Trust Score ({trustScore}): High-value items will be auto-approved!
+                  </div>
+                )}
                 <button 
                   type="submit" 
-                  disabled={isLoading}
+                  disabled={isLoading || trustScore < 50}
                   className="w-full py-4 bg-gradient-to-r from-cyan-500 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 text-white font-bold rounded-xl transition duration-300 shadow-[0_0_20px_rgba(6,182,212,0.3)] active:scale-[0.98] disabled:opacity-50 flex justify-center items-center gap-2"
                 >
-                  {isLoading ? 'Processing Request...' : 'Confirm Reservation'}
+                  {isLoading ? 'Processing Request...' : `Confirm Reservation (${cart.length} Items)`}
                 </button>
               </div>
             </form>
@@ -370,6 +459,29 @@ export default function StudentCheckout() {
         )}
 
       </div>
+
+      {/* Floating Cart Widget */}
+      {step === 'components' && cart.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-md z-50 animate-in slide-in-from-bottom-10 fade-in duration-300 px-4">
+          <div className="bg-zinc-900/90 backdrop-blur-xl border border-cyan-500/50 shadow-[0_10px_40px_rgba(6,182,212,0.3)] rounded-2xl p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-cyan-500/20 text-cyan-400 rounded-xl flex items-center justify-center font-bold text-lg border border-cyan-500/30">
+                {cart.length}
+              </div>
+              <div>
+                <p className="text-white font-bold text-sm">Items Selected</p>
+                <p className="text-zinc-400 text-xs font-mono uppercase">Ready to checkout</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => setStep('form')}
+              className="bg-cyan-500 hover:bg-cyan-400 text-black px-6 py-2.5 rounded-xl font-bold text-sm transition-colors shadow-lg shadow-cyan-500/20"
+            >
+              Proceed →
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
