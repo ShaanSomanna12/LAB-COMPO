@@ -118,6 +118,20 @@ export default function MyReservations() {
     }
   };
 
+  const handleDeleteReservation = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this reservation?')) return;
+    try {
+      const res = await fetch(`/api/requests?id=${id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to delete reservation');
+      toast.success('Reservation deleted successfully');
+      fetchReservations();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedResId) return;
@@ -226,6 +240,12 @@ export default function MyReservations() {
             <p className="text-zinc-500 font-mono text-sm uppercase tracking-widest mt-1">
               Track requests and collect items
             </p>
+            <p className="text-emerald-400 font-mono text-xs mt-2 font-bold">
+              * Show your Digital Pass at the admin desk to physically collect your items.
+            </p>
+            <p className="text-rose-400 font-mono text-xs mt-1 font-bold">
+              * CARRY YOUR PHYSICAL COLLEGE ID CARD.
+            </p>
           </div>
 
           <div className="flex items-center gap-4">
@@ -285,7 +305,22 @@ export default function MyReservations() {
                     <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest border ${getStatusColor(res.status)}`}>
                       {res.status}
                     </span>
-                    <span className="text-xs text-zinc-500 font-mono">#{res.reservation_id}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-zinc-500 font-mono">#{res.reservation_id}</span>
+                      <div className="relative group/menu">
+                        <button className="p-1 text-zinc-500 hover:text-white transition-colors rounded-lg hover:bg-zinc-800">
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" /></svg>
+                        </button>
+                        <div className="absolute right-0 top-full mt-1 w-28 bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl opacity-0 invisible group-hover/menu:opacity-100 group-hover/menu:visible transition-all z-20 overflow-hidden">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleDeleteReservation(res.reservation_id); }}
+                            className="w-full px-4 py-2 text-left text-sm text-rose-400 hover:bg-zinc-800 font-bold transition-colors"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Component Info */}

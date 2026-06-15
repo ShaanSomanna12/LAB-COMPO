@@ -18,7 +18,7 @@ interface InventoryItem {
 }
 
 const DEPARTMENTS = [
-  { id: 'EDL', title: 'Engineering Dev. Lab', color: 'from-blue-600 to-indigo-600', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
+  { id: 'EDL', title: 'Engineering Dev. Lab', color: 'from-blue-600 to-indigo-600', icon: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z' },
   { id: 'ECE', title: 'Electronics & Comm.', color: 'from-purple-600 to-pink-600', icon: 'M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z' },
   { id: 'EEE', title: 'Electrical Engineering', color: 'from-amber-500 to-orange-600', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
   { id: 'CIVIL', title: 'Civil Engineering', color: 'from-emerald-600 to-teal-600', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4' },
@@ -44,8 +44,8 @@ export default function StudentCheckout() {
   const [date, setDate] = useState('');
   const [time, setTime] = useState('09:00 AM');
   const [duration, setDuration] = useState(7);
-  const [projectTitle, setProjectTitle] = useState('');
   const [trustScore, setTrustScore] = useState(100);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -123,7 +123,6 @@ export default function StudentCheckout() {
           date,
           time,
           duration,
-          projectTitle,
           items: itemsPayload
         })
       });
@@ -262,7 +261,7 @@ export default function StudentCheckout() {
                       >
                         <div className="h-40 bg-zinc-900 border-b border-zinc-800 relative overflow-hidden">
                           {item.photo_url ? (
-                            <img src={item.photo_url} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                            <img src={item.photo_url} alt={item.name} className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-700" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-zinc-700">No Image</div>
                           )}
@@ -348,12 +347,12 @@ export default function StudentCheckout() {
                   
                   <div>
                     <label className="block text-xs font-medium text-zinc-400 mb-1">Full Name</label>
-                    <input required type="text" value={studentName} onChange={e => setStudentName(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all text-white" placeholder="John Doe" />
+                    <input required type="text" value={studentName} onChange={e => setStudentName(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all text-white" placeholder="Please enter your name" />
                   </div>
                   
                   <div>
                     <label className="block text-xs font-medium text-zinc-400 mb-1">USN</label>
-                    <input required readOnly type="text" value={usn} onChange={e => setUsn(e.target.value.toUpperCase())} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm font-mono uppercase focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all opacity-70 cursor-not-allowed" placeholder="4VV25CS001" />
+                    <input required readOnly type="text" value={usn} onChange={e => setUsn(e.target.value.toUpperCase())} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm font-mono uppercase focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all opacity-70 cursor-not-allowed" placeholder="e.g. 4VV25CS001" />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -391,11 +390,6 @@ export default function StudentCheckout() {
                 {/* Request Info */}
                 <div className="space-y-4">
                   <h3 className="text-xs font-mono text-cyan-500 tracking-widest uppercase border-b border-zinc-800 pb-2 mb-4">Requisition Details</h3>
-
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-400 mb-1">Project Title</label>
-                    <input required type="text" value={projectTitle} onChange={e => setProjectTitle(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all" placeholder="e.g. IoT Weather Station" />
-                  </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -446,9 +440,26 @@ export default function StudentCheckout() {
                     Trust Score ({trustScore}): High-value items will be auto-approved!
                   </div>
                 )}
+                
+                {/* Liability Checkbox */}
+                <div className="mb-6 flex items-start gap-3 bg-zinc-950/50 border border-zinc-800/80 p-4 rounded-xl">
+                  <div className="flex items-center h-5 mt-0.5">
+                    <input
+                      id="liability-checkbox"
+                      type="checkbox"
+                      checked={agreedToTerms}
+                      onChange={(e) => setAgreedToTerms(e.target.checked)}
+                      className="w-4 h-4 rounded bg-zinc-900 border-zinc-700 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-zinc-900"
+                    />
+                  </div>
+                  <label htmlFor="liability-checkbox" className="text-sm text-zinc-400 leading-relaxed cursor-pointer select-none">
+                    I agree to the <span className="text-cyan-400 font-bold">Lab Terms & Conditions</span> and accept full financial responsibility for any damages or loss of the requested equipment during my borrowing period.
+                  </label>
+                </div>
+
                 <button 
                   type="submit" 
-                  disabled={isLoading || trustScore < 50}
+                  disabled={isLoading || trustScore < 50 || !agreedToTerms}
                   className="w-full py-4 bg-gradient-to-r from-cyan-500 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 text-white font-bold rounded-xl transition duration-300 shadow-[0_0_20px_rgba(6,182,212,0.3)] active:scale-[0.98] disabled:opacity-50 flex justify-center items-center gap-2"
                 >
                   {isLoading ? 'Processing Request...' : `Confirm Reservation (${cart.length} Items)`}

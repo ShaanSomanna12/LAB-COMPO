@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 import ImageCropper from './ImageCropper';
 import { Scanner } from '@yudiel/react-qr-scanner';
 
@@ -114,7 +115,8 @@ export default function AdminDashboard() {
     total: 1,
     desc: '',
     location: 'Main Lab',
-    photoUrl: ''
+    photoUrl: '',
+    valueTier: 'MEDIUM'
   });
   const [adminDept, setAdminDept] = useState<string | null>(null);
   const [sectionFilter, setSectionFilter] = useState<string>('A');
@@ -123,6 +125,8 @@ export default function AdminDashboard() {
   // Scanner State
   const [showScannerModal, setShowScannerModal] = useState(false);
   const [scannedUsnFilter, setScannedUsnFilter] = useState<string | null>(null);
+  const [isLocked, setIsLocked] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -158,6 +162,12 @@ export default function AdminDashboard() {
   useEffect(() => {
     const storedCollege = localStorage.getItem('collegeName');
     if (storedCollege) setCollegeName(storedCollege.toUpperCase());
+
+    const storedAdminDept = localStorage.getItem('admin_dept');
+    if (storedAdminDept) {
+      setAdminDept(storedAdminDept);
+      setIsLocked(true);
+    }
 
     // Fetch unified data from API
     fetch('/api/inventory').then(res => res.json()).then(data => setInventory(data));
@@ -437,11 +447,41 @@ export default function AdminDashboard() {
     if (!newDevice.name.trim()) return;
 
     try {
+      setIsUploading(true);
+      let finalPhotoUrl = newDevice.photoUrl;
+
+      // Upload base64 image to Supabase Storage if present
+      if (finalPhotoUrl && finalPhotoUrl.startsWith('data:image')) {
+        const base64Data = finalPhotoUrl.split(',')[1];
+        const byteString = atob(base64Data);
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+          ia[i] = byteString.charCodeAt(i);
+        }
+        const fileExt = finalPhotoUrl.substring("data:image/".length, finalPhotoUrl.indexOf(";base64"));
+        const fileName = `component-${Date.now()}.${fileExt}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('inventory-images')
+          .upload(fileName, ab, {
+            contentType: `image/${fileExt}`,
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (uploadError) throw new Error("Failed to upload image: " + uploadError.message);
+
+        const { data: { publicUrl } } = supabase.storage.from('inventory-images').getPublicUrl(fileName);
+        finalPhotoUrl = publicUrl;
+      }
+
       const res = await fetch('/api/inventory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...newDevice,
+          photoUrl: finalPhotoUrl,
           department: adminDept || 'EDL'
         })
       });
@@ -456,11 +496,16 @@ export default function AdminDashboard() {
           total: 1,
           desc: '',
           location: 'Main Lab',
-          photoUrl: ''
+          photoUrl: '',
+          valueTier: 'MEDIUM'
         });
+      } else {
+        alert(data.error || 'Error adding component');
       }
-    } catch (err) {
-      alert('Error adding component');
+    } catch (err: any) {
+      alert(err.message || 'Error adding component');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -479,58 +524,66 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white p-8 font-sans">
-      <header className="flex justify-between items-center mb-8 border-b border-zinc-800 pb-6">
+      <header className="flex justify-between items-center mb-8 border-b border-zinc-800 pb-6 relative">
         <div>
           <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-red-400 to-orange-400 bg-clip-text text-transparent">LAB ADMIN PORTAL</h1>
           <p className="text-zinc-400 mt-1">
             {adminDept ? `Managing ${adminDept} Department.` : collegeName}
           </p>
         </div>
-        <div className="flex gap-4">
-          {adminDept && (
-            <button onClick={() => setAdminDept(null)} className="px-5 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-sm transition-colors font-medium">
+        
+        {/* Desktop & Mobile Top Actions */}
+        <div className="flex items-center gap-4">
+          {adminDept && !isLocked && (
+            <button onClick={() => setAdminDept(null)} className="hidden md:block px-5 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-sm transition-colors font-medium">
               ← Back to Departments
             </button>
           )}
-          {adminDept && (
-            <>
-              <button
-                onClick={() => setActiveTab('requests')}
-                className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'requests' ? 'bg-zinc-800 text-white border border-zinc-700' : 'text-zinc-400 hover:text-white'}`}
-              >
-                Requests Workflow
-              </button>
-              <button
-                onClick={() => setActiveTab('lab-access')}
-                className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'lab-access' ? 'bg-zinc-800 text-white border border-zinc-700' : 'text-zinc-400 hover:text-white'}`}
-              >
-                Lab Workspace Access
-              </button>
-              <button
-                onClick={() => setActiveTab('inventory')}
-                className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'inventory' ? 'bg-zinc-800 text-white border border-zinc-700' : 'text-zinc-400 hover:text-white'}`}
-              >
-                Inventory Management
-              </button>
-              <button
-                onClick={() => setActiveTab('analytics')}
-                className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'analytics' ? 'bg-zinc-800 text-white border border-zinc-700' : 'text-zinc-400 hover:text-white'}`}
-              >
-                Monthly Updates
-              </button>
-              <button
-                onClick={() => setActiveTab('section-tracking')}
-                className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'section-tracking' ? 'bg-zinc-800 text-white border border-zinc-700' : 'text-zinc-400 hover:text-white'}`}
-              >
-                Section Tracking
-              </button>
-            </>
-          )}
-          <button onClick={() => router.push('/')} className="px-5 py-2 bg-red-600/10 text-red-500 border border-red-500/20 hover:bg-red-600/20 rounded-lg text-sm transition-colors font-medium ml-4">
+          <button onClick={() => {
+            localStorage.removeItem('admin_dept');
+            localStorage.removeItem('hod_dept');
+            router.push('/');
+          }} className="px-5 py-2 bg-red-600/10 text-red-500 border border-red-500/20 hover:bg-red-600/20 rounded-lg text-sm transition-colors font-medium">
             Logout
           </button>
         </div>
       </header>
+
+      {/* Main Navigation Tabs */}
+      {adminDept && (
+        <div className="flex overflow-x-auto gap-2 pb-4 mb-6 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
+          <button
+            onClick={() => setActiveTab('requests')}
+            className={`whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'requests' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.15)]' : 'bg-zinc-800/60 text-zinc-300 border border-zinc-700/50 hover:bg-zinc-700 hover:text-white shadow-sm'}`}
+          >
+            Requests Workflow
+          </button>
+          <button
+            onClick={() => setActiveTab('lab-access')}
+            className={`whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'lab-access' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.15)]' : 'bg-zinc-800/60 text-zinc-300 border border-zinc-700/50 hover:bg-zinc-700 hover:text-white shadow-sm'}`}
+          >
+            Lab Workspace Access
+          </button>
+          <button
+            onClick={() => setActiveTab('inventory')}
+            className={`whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'inventory' ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.15)]' : 'bg-zinc-800/60 text-zinc-300 border border-zinc-700/50 hover:bg-zinc-700 hover:text-white shadow-sm'}`}
+          >
+            Inventory Management
+          </button>
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'analytics' ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30 shadow-[0_0_15px_rgba(168,85,247,0.15)]' : 'bg-zinc-800/60 text-zinc-300 border border-zinc-700/50 hover:bg-zinc-700 hover:text-white shadow-sm'}`}
+          >
+            Monthly Updates
+          </button>
+          <button
+            onClick={() => setActiveTab('section-tracking')}
+            className={`whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'section-tracking' ? 'bg-pink-500/15 text-pink-400 border border-pink-500/30 shadow-[0_0_15px_rgba(236,72,153,0.15)]' : 'bg-zinc-800/60 text-zinc-300 border border-zinc-700/50 hover:bg-zinc-700 hover:text-white shadow-sm'}`}
+          >
+            Section Tracking
+          </button>
+        </div>
+      )}
 
       {/* Landing State */}
       {!adminDept && (
@@ -818,7 +871,8 @@ export default function AdminDashboard() {
                   total: 1,
                   desc: '',
                   location: 'Main Lab',
-                  photoUrl: ''
+                  photoUrl: '',
+                  valueTier: 'MEDIUM'
                 });
                 setShowAddModal(true);
               }}
@@ -1198,16 +1252,30 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-[10px] font-mono text-zinc-400 mb-1.5 uppercase tracking-wider">Lab Location</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. IoT Lab room 304"
-                    value={newDevice.location}
-                    onChange={e => setNewDevice({ ...newDevice, location: e.target.value })}
-                    className="w-full bg-zinc-950 border border-zinc-800 focus:border-cyan-500/80 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-cyan-500/30 transition-all font-mono"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-mono text-zinc-400 mb-1.5 uppercase tracking-wider">Lab Location</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. IoT Lab room 304"
+                      value={newDevice.location}
+                      onChange={e => setNewDevice({ ...newDevice, location: e.target.value })}
+                      className="w-full bg-zinc-950 border border-zinc-800 focus:border-cyan-500/80 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-cyan-500/30 transition-all font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono text-zinc-400 mb-1.5 uppercase tracking-wider text-emerald-400">Value Tier (Approval)</label>
+                    <select
+                      value={newDevice.valueTier}
+                      onChange={e => setNewDevice({ ...newDevice, valueTier: e.target.value })}
+                      className="w-full bg-zinc-950 border border-emerald-500/30 focus:border-emerald-500 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50 transition-all font-mono appearance-none"
+                    >
+                      <option value="LOW">LOW (Direct / Auto-Approve)</option>
+                      <option value="MEDIUM">MEDIUM (Standard HOD)</option>
+                      <option value="HIGH">HIGH (Strict Verification)</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div>
@@ -1263,9 +1331,10 @@ export default function AdminDashboard() {
 
                 <button
                   type="submit"
-                  className="w-full py-3.5 px-4 bg-zinc-50 hover:bg-white text-zinc-950 font-bold rounded-xl text-xs font-mono tracking-widest uppercase transition-all duration-300 hover:shadow-[0_0_20px_rgba(255,255,255,0.4)] active:scale-[0.98] cursor-pointer mt-2"
+                  disabled={isUploading}
+                  className={`w-full py-3.5 px-4 bg-zinc-50 hover:bg-white text-zinc-950 font-bold rounded-xl text-xs font-mono tracking-widest uppercase transition-all duration-300 ${isUploading ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-[0_0_20px_rgba(255,255,255,0.4)] active:scale-[0.98] cursor-pointer'} mt-2`}
                 >
-                  REGISTRATION REQUEST
+                  {isUploading ? 'Uploading Image...' : '[+] Register Component'}
                 </button>
               </div>
             </form>

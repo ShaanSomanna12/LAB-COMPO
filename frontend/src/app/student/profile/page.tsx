@@ -16,7 +16,7 @@ export default function MyProfile() {
   const [name, setName] = useState('');
   const [usn, setUsn] = useState('');
   const [department, setDepartment] = useState('CSE');
-  const [branch, setBranch] = useState('');
+  const [year, setYear] = useState('1st Year');
   const [section, setSection] = useState('A');
   const [trustScore, setTrustScore] = useState(100);
 
@@ -43,7 +43,7 @@ export default function MyProfile() {
           setName(userData.name || '');
           setUsn(userData.usn || '');
           if (userData.department) setDepartment(userData.department);
-          if (userData.branch) setBranch(userData.branch);
+          if (userData.branch) setYear(userData.branch); // Using branch column for year
           if (userData.section) setSection(userData.section);
           if (userData.trust_score !== undefined && userData.trust_score !== null) setTrustScore(userData.trust_score);
         }
@@ -68,7 +68,7 @@ export default function MyProfile() {
           name,
           usn,
           department,
-          branch,
+          branch: year, // saving year to branch column
           section
         })
         .eq('user_id', userId);
@@ -150,7 +150,7 @@ export default function MyProfile() {
                     value={name} 
                     onChange={e => setName(e.target.value)} 
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 transition-all text-white" 
-                    placeholder="Enter your full name" 
+                    placeholder="Please enter your name" 
                   />
                 </div>
                 
@@ -169,15 +169,18 @@ export default function MyProfile() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Branch (Degree Program)</label>
-                  <input 
-                    required 
-                    type="text" 
-                    value={branch} 
-                    onChange={e => setBranch(e.target.value)} 
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 transition-all text-white" 
-                    placeholder="e.g. B.E, B.Tech, M.Tech" 
-                  />
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Year</label>
+                  <select 
+                    required
+                    value={year} 
+                    onChange={e => setYear(e.target.value)} 
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 appearance-none text-white"
+                  >
+                    <option value="1st Year">1st Year</option>
+                    <option value="2nd Year">2nd Year</option>
+                    <option value="3rd Year">3rd Year</option>
+                    <option value="4th Year">4th Year</option>
+                  </select>
                 </div>
 
                 <div>

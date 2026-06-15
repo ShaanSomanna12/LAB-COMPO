@@ -25,7 +25,8 @@ export async function GET() {
       status: item.available_quantity > 0 ? 'Available' : 'Under Repair', // Infer status or map
       desc: item.base_condition,
       location: item.lab_location,
-      photo_url: item.photo_url
+      photo_url: item.photo_url,
+      value_tier: item.value_tier
     })));
   } catch (error: any) {
     console.error("Error fetching data:", error.message);
@@ -37,7 +38,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, department, total, desc, location, photoUrl } = body;
+    const { name, department, total, desc, location, photoUrl, valueTier } = body;
 
     const { data, error } = await supabase
       .from('components')
@@ -49,7 +50,8 @@ export async function POST(request: Request) {
           available_quantity: Number(total), // Usually starts equal to total
           base_condition: desc || 'New catalog item',
           lab_location: location || 'Main Lab',
-          photo_url: photoUrl // Saves the image link
+          photo_url: photoUrl, // Saves the image link
+          value_tier: valueTier || 'MEDIUM'
         }
       ])
       .select();

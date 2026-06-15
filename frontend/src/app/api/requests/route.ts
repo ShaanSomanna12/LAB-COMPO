@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { sendNotificationEmail } from '@/lib/email';
 
 export async function GET() {
   try {
@@ -26,7 +27,8 @@ export async function GET() {
       section: res.section,
       studentDepartment: res.student_department,
       requestDate: res.created_at.split('T')[0],
-      duration: 7 // default as we don't store duration in reservations schema yet
+      duration: 7, // default as we don't store duration in reservations schema yet
+      isDamaged: res.is_damaged === true
     }));
 
     return NextResponse.json(formattedData);
@@ -64,7 +66,7 @@ export async function PATCH(request: Request) {
       .from('reservations')
       .update(updates)
       .eq('reservation_id', id)
-      .select('*, users(user_id, trust_score)')
+      .select('*, users(user_id, email, usn, trust_score), components(name)')
       .single();
 
     if (error) throw error;
@@ -102,6 +104,23 @@ export async function PATCH(request: Request) {
          }
        }
     }
+
+    // Trigger Email Notification for Status Changes
+    if ((status === 'APPROVED' || status === 'PENDING_ADMIN' || status === 'REJECTED' || status === 'Ready for Collection' || status === 'RETURNED DAMAGED') && data.users) {
+       const userObj = Array.isArray(data.users) ? data.users[0] : data.users;
+       const compObj = Array.isArray(data.components) ? data.components[0] : data.components;
+       if (userObj && userObj.email) {
+         // Fire and forget (don't await to block the API response)
+         sendNotificationEmail(
+           userObj.email,
+           `Hardware Request Update: ${status}`,
+           status,
+           compObj?.name || 'Requested Hardware',
+           userObj.usn || 'Student'
+         ).catch(err => console.error("Email error:", err));
+       }
+    }
+
     return NextResponse.json({ success: true, item: data });
   } catch (error: any) {
     console.error('Error updating reservation:', error.message);
@@ -188,6 +207,39 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, items: newReservations });
   } catch (error: any) {
     console.error('Error creating reservation:', error.message);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'Reservation ID is required' }, { status: 400 });
+    }
+
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error("Missing service role key");
+    }
+
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+
+    const { error } = await supabaseAdmin
+      .from('reservations')
+      .delete()
+      .eq('reservation_id', id);
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error('Error deleting reservation:', error.message);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

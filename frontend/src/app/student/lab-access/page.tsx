@@ -25,13 +25,15 @@ export default function LabAccessCheckout() {
       if (session?.user) {
         const { data } = await supabase
           .from('users')
-          .select('name, usn')
+          .select('name, usn, department, section')
           .eq('email', session.user.email)
           .single();
         
         if (data) {
           setStudentName(data.name || '');
           setUsn(data.usn || '');
+          if (data.department) setDepartment(data.department);
+          if (data.section) setSection(data.section);
         }
       }
     };

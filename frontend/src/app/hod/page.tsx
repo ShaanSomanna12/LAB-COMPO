@@ -20,6 +20,7 @@ interface RequestItem {
   returnImages?: string[];
   renewalReason?: string;
   renewalDays?: number;
+  isDamaged?: boolean;
 }
 
 export default function HodDashboard() {
@@ -38,6 +39,8 @@ export default function HodDashboard() {
   
   // Interactive view switcher and graphing states
   const [viewMode, setViewMode] = useState<'requests' | 'lab-access' | 'analytics'>('lab-access');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
 
   const DEPT_INFO = [
     { id: 'EDL', title: 'Engineering Dev. Lab', color: 'from-blue-600 to-indigo-600' },
@@ -51,7 +54,10 @@ export default function HodDashboard() {
     if (storedCollege) setCollegeName(storedCollege.toUpperCase());
 
     const hodDept = localStorage.getItem('hod_dept');
-    if (hodDept) setActiveDept(hodDept);
+    if (hodDept) {
+      setActiveDept(hodDept);
+      setIsLocked(true);
+    }
 
     fetchRequests();
     fetchInventory();
@@ -217,46 +223,81 @@ export default function HodDashboard() {
   const activeDeptLabRejected = activeDeptLabRequests.filter(r => r.status === 'REJECTED_HOD' || r.status === 'REJECTED_ADMIN').length;
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white p-8 font-sans">
-      <header className="flex justify-between items-center mb-8 border-b border-zinc-800 pb-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
+    <div className="min-h-screen bg-zinc-950 text-white p-8 font-sans print:bg-white print:text-black">
+      <header className="flex justify-between items-start md:items-center mb-8 border-b border-zinc-800 pb-6 relative print:hidden">
+        <div className="pr-12">
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
             HOD APPROVAL WORKSPACE
           </h1>
-          <p className="text-zinc-400 mt-1">
+          <p className="text-zinc-400 mt-1 text-sm md:text-base">
             {collegeName} • Head of Department Panel
           </p>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <span className="absolute -top-1 -right-1 bg-amber-500 text-black text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
-              {displayTotalPending}
-            </span>
-            <div className="text-xs bg-zinc-900 border border-zinc-800 px-3 py-2 rounded-lg text-zinc-400">
-              Total Inbox: <span className="text-white font-bold">{displayTotalPending} Pending</span>
-            </div>
-          </div>
+
+        {/* Desktop Nav */}
+        <div className="hidden md:flex items-center gap-4">
           <button 
-            onClick={() => router.push('/')} 
+            onClick={() => {
+              localStorage.removeItem('admin_dept');
+              localStorage.removeItem('hod_dept');
+              router.push('/');
+            }} 
             className="px-5 py-2 bg-red-600/10 text-red-500 border border-red-500/20 hover:bg-red-600/20 rounded-lg text-sm transition-colors font-medium"
           >
             Logout
           </button>
         </div>
+
+        {/* Mobile Navigation Toggle */}
+        <div className="md:hidden absolute top-0 right-0 flex items-center z-50">
+          <button
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="p-2 text-zinc-400 hover:text-white transition-colors"
+          >
+            {isMobileMenuOpen ? (
+              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            )}
+          </button>
+        </div>
+
+        {/* Mobile Dropdown Menu */}
+        {isMobileMenuOpen && (
+          <div className="absolute top-16 right-0 w-56 bg-zinc-900/95 backdrop-blur-xl border border-zinc-800 rounded-2xl shadow-2xl p-4 flex flex-col gap-3 z-50 md:hidden animate-in fade-in slide-in-from-top-4">
+            <button 
+              onClick={() => {
+                localStorage.removeItem('admin_dept');
+                localStorage.removeItem('hod_dept');
+                router.push('/');
+              }} 
+              className="w-full text-center px-4 py-3 bg-red-600/10 text-red-500 hover:bg-red-600/20 rounded-lg text-sm transition-colors font-medium"
+            >
+              Logout
+            </button>
+          </div>
+        )}
       </header>
 
+
       {/* Dept Selector Ribbon */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8 print:hidden">
         {DEPT_INFO.map(dept => {
           const isSelected = activeDept === dept.id;
+          const isDeptDisabled = isLocked && !isSelected;
           const pendingCount = viewMode === 'lab-access'
             ? labRequests.filter(r => r.department === dept.id && r.status === 'PENDING_HOD').length
             : requests.filter(r => r.department === dept.id && (r.status === 'Pending HOD' || r.status === 'Pending Renewal HOD')).length;
           return (
             <button
               key={dept.id}
-              onClick={() => { setActiveDept(dept.id); setSelectedReq(null); setSelectedLabReq(null); }}
-              className={`p-[1px] rounded-xl transition-all duration-300 ${isSelected ? 'bg-gradient-to-r ' + dept.color : 'bg-zinc-900 border border-zinc-800 hover:border-zinc-700'}`}
+              onClick={() => { if (!isDeptDisabled) { setActiveDept(dept.id); setSelectedReq(null); setSelectedLabReq(null); } }}
+              disabled={isDeptDisabled}
+              className={`p-[1px] rounded-xl transition-all duration-300 ${isSelected ? 'bg-gradient-to-r ' + dept.color : 'bg-zinc-900 border border-zinc-800'} ${isDeptDisabled ? 'opacity-30 cursor-not-allowed' : 'hover:border-zinc-700'}`}
             >
               <div className={`rounded-xl p-4 bg-zinc-950 text-left h-full flex flex-col justify-between transition-all duration-300 hover:bg-zinc-900/50 ${isSelected ? 'brightness-110' : ''}`}>
                 <div>
@@ -276,20 +317,31 @@ export default function HodDashboard() {
         })}
       </div>
 
-      {/* View Switcher Tabs */}
-      <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800 flex-row gap-1 max-w-md mb-8">
-        <button 
-          onClick={() => setViewMode('lab-access')} 
-          className={`flex-1 text-center py-1.5 rounded text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${viewMode === 'lab-access' ? 'bg-zinc-800 text-white border border-zinc-700' : 'text-zinc-400 hover:text-white border border-transparent'}`}
-        >
-          Workspace Access
-        </button>
-        <button 
-          onClick={() => setViewMode('analytics')} 
-          className={`flex-1 text-center py-1.5 rounded text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${viewMode === 'analytics' ? 'bg-zinc-800 text-white border border-zinc-700' : 'text-zinc-400 hover:text-white border border-transparent'}`}
-        >
-          Monthly Updates
-        </button>
+      {/* View Switcher Tabs & Inbox Stats */}
+      <div className="flex flex-col md:flex-row justify-start items-start md:items-center gap-4 mb-8 print:hidden">
+        <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800 flex-row gap-1 w-full max-w-md">
+          <button 
+            onClick={() => setViewMode('lab-access')} 
+            className={`flex-1 text-center py-1.5 rounded text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${viewMode === 'lab-access' ? 'bg-zinc-800 text-white border border-zinc-700 shadow-sm' : 'text-zinc-400 hover:text-white border border-transparent hover:bg-zinc-800/50'}`}
+          >
+            Workspace Access
+          </button>
+          <button 
+            onClick={() => setViewMode('analytics')} 
+            className={`flex-1 text-center py-1.5 rounded text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${viewMode === 'analytics' ? 'bg-zinc-800 text-white border border-zinc-700 shadow-sm' : 'text-zinc-400 hover:text-white border border-transparent hover:bg-zinc-800/50'}`}
+          >
+            Monthly Updates
+          </button>
+        </div>
+
+        <div className="relative flex-shrink-0 self-end md:self-auto">
+          <span className="absolute -top-1.5 -right-1.5 bg-amber-500 text-black text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center animate-pulse shadow-[0_0_10px_rgba(245,158,11,0.5)] z-10">
+            {displayTotalPending}
+          </span>
+          <div className="text-sm bg-zinc-800/80 border border-zinc-700/80 px-5 py-2.5 rounded-xl text-zinc-300 font-medium shadow-md">
+            Total Inbox: <span className="text-white font-bold ml-1">{displayTotalPending} Pending</span>
+          </div>
+        </div>
       </div>
 
       {viewMode === 'requests' && (
@@ -789,6 +841,27 @@ export default function HodDashboard() {
         const availableQuantity = deptInv.reduce((sum, item) => sum + item.available, 0);
         const underRepairCount = deptInv.filter(item => item.status === 'Under Repair').length;
         
+        // New Analytics Data
+        const damageCount = deptReqs.filter(r => r.isDamaged).length;
+        const damagePercentage = totalReqs > 0 ? ((damageCount / totalReqs) * 100).toFixed(1) : '0.0';
+
+        const compCounts: Record<string, number> = {};
+        deptReqs.forEach(r => {
+          if (r.component) {
+            compCounts[r.component] = (compCounts[r.component] || 0) + 1;
+          }
+        });
+        const popularComponents = Object.entries(compCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(entry => ({ name: entry[0], count: entry[1] }));
+
+        const handleExportPDF = () => {
+          // Native browser printing natively parses Tailwind CSS v4 variables (oklch/lab)
+          // and renders sharp vector SVGs rather than blurry canvases.
+          window.print();
+        };
+
         // Dynamic graph aggregates
         const chartData = getAnalyticsData();
         const maxVal = Math.max(...chartData.map(d => Math.max(d.borrowed, d.stockAdded)), 8);
@@ -821,15 +894,24 @@ export default function HodDashboard() {
         stockArea += ' L 570 220 Z';
 
         return (
-          <div className="space-y-8 max-w-6xl mx-auto">
+          <div className="space-y-8 max-w-6xl mx-auto" id="analytics-dashboard-export-target">
             {/* Analytics Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div>
                 <h2 className="text-2xl font-bold tracking-tight">{activeDept} Department Analytics</h2>
                 <p className="text-zinc-400 text-sm mt-1">Rolling monthly summary of borrowings, stocks, and device distributions.</p>
               </div>
-              <div className="text-xs bg-zinc-900 border border-zinc-800/80 px-4 py-2 rounded-xl text-zinc-400 font-medium">
-                Active Department: <span className="text-emerald-400 font-bold font-mono">{activeDept}</span>
+              <div className="flex items-center gap-3">
+                <button 
+                  id="export-pdf-btn"
+                  onClick={handleExportPDF}
+                  className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2.5 rounded-xl shadow-[0_0_15px_rgba(79,70,229,0.3)] transition-all flex items-center gap-2 print:hidden"
+                >
+                  Download Monthly Report (PDF)
+                </button>
+                <div className="text-xs bg-zinc-900 border border-zinc-800/80 px-4 py-2.5 rounded-xl text-zinc-400 font-medium">
+                  Active Department: <span className="text-emerald-400 font-bold font-mono">{activeDept}</span>
+                </div>
               </div>
             </div>
 
@@ -910,6 +992,63 @@ export default function HodDashboard() {
                 <div className="mt-4">
                   <div className={`text-3xl font-black ${underRepairCount > 0 ? 'text-red-400' : 'text-zinc-300'}`}>{underRepairCount}</div>
                   <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-wider font-semibold">Devices Broken or offline</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Extended Analytics Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Most Popular Components */}
+              <div className="bg-zinc-900 border border-zinc-800/80 p-5 rounded-2xl hover:border-zinc-700 transition">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-zinc-500 text-xs font-semibold uppercase tracking-wider">Most Requested Components</span>
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                    <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                    </svg>
+                  </div>
+                </div>
+                {popularComponents.length === 0 ? (
+                  <p className="text-sm text-zinc-600 mt-2">No components requested yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {popularComponents.map((comp, idx) => (
+                      <div key={idx} className="flex justify-between items-center bg-zinc-900/50 px-3 py-2 rounded-lg border border-zinc-800/50">
+                        <div className="flex items-center gap-3">
+                          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${idx === 0 ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30' : idx === 1 ? 'bg-zinc-300/20 text-zinc-300 border border-zinc-300/30' : 'bg-amber-700/20 text-amber-700 border border-amber-700/30'}`}>
+                            {idx + 1}
+                          </span>
+                          <span className="text-zinc-300 text-sm font-medium">{comp.name}</span>
+                        </div>
+                        <span className="text-emerald-400 font-bold text-sm bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">{comp.count} reqs</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Damage Statistics */}
+              <div className="bg-zinc-900 border border-zinc-800/80 p-5 rounded-2xl hover:border-zinc-700 transition">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-zinc-500 text-xs font-semibold uppercase tracking-wider">Historical Damage Reports</span>
+                  <div className="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
+                    <svg className="w-4 h-4 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                </div>
+                <div className="flex items-end gap-4 mt-2">
+                  <div className="text-4xl font-black text-rose-400">{damagePercentage}%</div>
+                  <div className="pb-1">
+                    <p className="text-sm font-bold text-white">{damageCount} damaged items</p>
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Out of {totalReqs} total loans</p>
+                  </div>
+                </div>
+                <div className="w-full bg-zinc-950 h-2 rounded-full mt-5 overflow-hidden border border-zinc-800">
+                  <div 
+                    className="bg-gradient-to-r from-rose-500 to-rose-600 h-full" 
+                    style={{ width: `${Math.min(100, Number(damagePercentage))}%` }}
+                  />
                 </div>
               </div>
             </div>
