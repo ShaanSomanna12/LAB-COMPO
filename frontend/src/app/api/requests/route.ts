@@ -220,26 +220,33 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Reservation ID is required' }, { status: 400 });
     }
 
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error("Missing service role key");
+    // Try service role first to bypass RLS, otherwise fallback to regular client
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseAdmin = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      );
+
+      const { error } = await supabaseAdmin
+        .from('reservations')
+        .delete()
+        .eq('reservation_id', parseInt(id, 10));
+
+      if (error) throw error;
+    } else {
+      console.warn("Missing service role key, falling back to standard client (requires RLS policy for delete)");
+      const { error } = await supabase
+        .from('reservations')
+        .delete()
+        .eq('reservation_id', parseInt(id, 10));
+
+      if (error) throw error;
     }
-
-    const { createClient } = await import('@supabase/supabase-js');
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
-
-    const { error } = await supabaseAdmin
-      .from('reservations')
-      .delete()
-      .eq('reservation_id', id);
-
-    if (error) throw error;
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('Error deleting reservation:', error.message);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal Server Error', details: error.message }, { status: 500 });
   }
 }

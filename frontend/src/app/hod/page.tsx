@@ -43,7 +43,7 @@ export default function HodDashboard() {
   const [isLocked, setIsLocked] = useState(false);
 
   const DEPT_INFO = [
-    { id: 'EDL', title: 'Engineering Dev. Lab', color: 'from-blue-600 to-indigo-600' },
+    { id: 'EDL', title: 'Engineering Development LAB', color: 'from-blue-600 to-indigo-600' },
     { id: 'ECE', title: 'Electronics & Comm.', color: 'from-purple-600 to-pink-600' },
     { id: 'EEE', title: 'Electrical Engineering', color: 'from-amber-500 to-orange-600' },
     { id: 'MECH', title: 'Mechanical Engineering', color: 'from-emerald-600 to-teal-600' }

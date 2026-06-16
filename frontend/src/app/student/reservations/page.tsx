@@ -19,6 +19,7 @@ interface Reservation {
     name: string;
     department: string;
     lab_location: string;
+    value_tier?: string;
   };
 }
 
@@ -72,7 +73,7 @@ export default function MyReservations() {
             due_date,
             project_title,
             geotag_image_url,
-            components!inner(name, department, lab_location)
+            components!inner(name, department, lab_location, value_tier)
           `)
           .eq('user_id', userData.user_id)
           .order('created_at', { ascending: false });
@@ -246,6 +247,9 @@ export default function MyReservations() {
             <p className="text-rose-400 font-mono text-xs mt-1 font-bold">
               * CARRY YOUR PHYSICAL COLLEGE ID CARD.
             </p>
+            <p className="text-cyan-400 font-mono text-xs mt-1 font-bold">
+              * Please upload an image of the component while collecting it for proof.
+            </p>
           </div>
 
           <div className="flex items-center gap-4">
@@ -349,13 +353,39 @@ export default function MyReservations() {
                   {/* Action Button */}
                   <div className="mt-auto pt-6">
                     {res.status === 'APPROVED' ? (
-                      <button
-                        onClick={() => handleCollectClick(res.reservation_id)}
-                        className="w-full py-3 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:border-emerald-500 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
-                      >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                        Collect & Upload Proof
-                      </button>
+                      res.components?.value_tier === 'LOW' ? (
+                        <button
+                          onClick={async () => {
+                            try {
+                              const resFetch = await fetch('/api/requests', {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  id: res.reservation_id,
+                                  status: 'BORROWED'
+                                })
+                              });
+                              if (!resFetch.ok) throw new Error("Failed to update reservation status.");
+                              toast.success("Component successfully collected!");
+                              fetchReservations();
+                            } catch (err: any) {
+                              toast.error(`Error: ${err.message}`);
+                            }
+                          }}
+                          className="w-full py-3 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:border-emerald-500 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
+                        >
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                          Direct Approval - Proceed to Collect
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleCollectClick(res.reservation_id)}
+                          className="w-full py-3 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:border-emerald-500 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
+                        >
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                          Collect & Upload Proof
+                        </button>
+                      )
                     ) : res.status === 'BORROWED' ? (
                       <div className="flex flex-col gap-2">
                         {res.geotag_image_url && (

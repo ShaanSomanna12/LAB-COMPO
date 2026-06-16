@@ -18,11 +18,11 @@ interface InventoryItem {
 }
 
 const DEPARTMENTS = [
-  { id: 'EDL', title: 'Engineering Dev. Lab', color: 'from-blue-600 to-indigo-600', icon: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z' },
-  { id: 'ECE', title: 'Electronics & Comm.', color: 'from-purple-600 to-pink-600', icon: 'M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z' },
-  { id: 'EEE', title: 'Electrical Engineering', color: 'from-amber-500 to-orange-600', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
-  { id: 'CIVIL', title: 'Civil Engineering', color: 'from-emerald-600 to-teal-600', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4' },
-  { id: 'MECH', title: 'Mechanical Engineering', color: 'from-red-600 to-rose-600', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' }
+  { id: 'EDL', title: 'Engineering Development LAB', desc: 'Core components, microcontrollers, and embedded systems.', color: 'from-blue-600 to-indigo-600', icon: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z' },
+  { id: 'ECE', title: 'Electronics & Comm.', desc: 'Communication modules, signal processing tools, and RF.', color: 'from-purple-600 to-pink-600', icon: 'M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z' },
+  { id: 'EEE', title: 'Electrical Engineering', desc: 'High-voltage testing tools, multimeters, and analyzers.', color: 'from-amber-500 to-orange-600', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
+  { id: 'CIVIL', title: 'Civil Engineering', desc: 'Surveying tools, structural testing, and building models.', color: 'from-emerald-600 to-teal-600', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4' },
+  { id: 'MECH', title: 'Mechanical Engineering', desc: 'Motors, actuators, robotics chassis, and physical tools.', color: 'from-red-600 to-rose-600', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' }
 ];
 
 export default function StudentCheckout() {
@@ -43,7 +43,7 @@ export default function StudentCheckout() {
   const [section, setSection] = useState('A');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('09:00 AM');
-  const [duration, setDuration] = useState(7);
+  const [duration, setDuration] = useState<number | ''>('');
   const [trustScore, setTrustScore] = useState(100);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   
@@ -101,6 +101,12 @@ export default function StudentCheckout() {
 
     if (cart.length === 0) {
       toast.error('Your cart is empty');
+      setIsLoading(false);
+      return;
+    }
+    
+    if (!duration || duration < 1) {
+      toast.error('Please specify a valid borrowing duration');
       setIsLoading(false);
       return;
     }
@@ -208,7 +214,8 @@ export default function StudentCheckout() {
                     </svg>
                   </div>
                   <h3 className="text-xl font-bold text-white tracking-tight">{dept.title}</h3>
-                  <p className="text-zinc-500 font-mono text-xs mt-2 uppercase tracking-wider">{dept.id} Department Inventory</p>
+                  <p className="text-zinc-400 text-sm mt-1">{dept.desc}</p>
+                  <p className="text-zinc-600 font-mono text-[10px] mt-4 uppercase tracking-wider">{dept.id} Inventory</p>
                 </div>
               </div>
             ))}
@@ -422,7 +429,7 @@ export default function StudentCheckout() {
 
                   <div>
                     <label className="block text-xs font-medium text-zinc-400 mb-1">Duration (Days)</label>
-                    <input required type="number" min="1" max="30" value={duration} onChange={e => setDuration(parseInt(e.target.value) || 1)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500" />
+                    <input required type="number" min="1" max="30" placeholder="e.g. 5" value={duration === '' ? '' : duration} onChange={e => setDuration(e.target.value === '' ? '' : parseInt(e.target.value))} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500" />
                   </div>
                 </div>
               </div>
@@ -438,6 +445,23 @@ export default function StudentCheckout() {
                   <div className="mb-4 p-3 bg-emerald-950/50 border border-emerald-500/30 rounded-lg text-emerald-400 text-sm font-bold flex items-center gap-2">
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                     Trust Score ({trustScore}): High-value items will be auto-approved!
+                  </div>
+                )}
+
+                {(!usn || !studentName) && (
+                  <div className="mb-4 p-4 bg-orange-950/50 border border-orange-500/30 rounded-xl flex flex-col gap-3">
+                    <div className="flex items-start gap-2 text-orange-400 text-sm font-bold">
+                      <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                      Incomplete Profile Detected!
+                    </div>
+                    <p className="text-zinc-300 text-sm">You must complete your profile with a valid USN and Name before checking out items.</p>
+                    <button 
+                      type="button"
+                      onClick={() => router.push('/student/profile')}
+                      className="w-full py-2 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 border border-orange-500/50 rounded-lg text-sm font-bold transition"
+                    >
+                      Update Profile Now
+                    </button>
                   </div>
                 )}
                 
@@ -459,7 +483,7 @@ export default function StudentCheckout() {
 
                 <button 
                   type="submit" 
-                  disabled={isLoading || trustScore < 50 || !agreedToTerms}
+                  disabled={isLoading || trustScore < 50 || !agreedToTerms || !usn || !studentName}
                   className="w-full py-4 bg-gradient-to-r from-cyan-500 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 text-white font-bold rounded-xl transition duration-300 shadow-[0_0_20px_rgba(6,182,212,0.3)] active:scale-[0.98] disabled:opacity-50 flex justify-center items-center gap-2"
                 >
                   {isLoading ? 'Processing Request...' : `Confirm Reservation (${cart.length} Items)`}

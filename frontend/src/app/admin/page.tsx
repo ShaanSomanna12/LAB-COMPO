@@ -32,6 +32,7 @@ interface InventoryItem {
   desc: string;
   location: string;
   photo_url?: string;
+  value_tier?: string;
 }
 
 const defaultInventory: InventoryItem[] = [
@@ -143,7 +144,7 @@ export default function AdminDashboard() {
   };
 
   const DEPT_INFO = [
-    { id: 'EDL', title: 'Engineering Dev. Lab', desc: 'Manage EDL requests & stock.', color: 'from-blue-600 to-indigo-600' },
+    { id: 'EDL', title: 'Engineering Development LAB', desc: 'Manage EDL requests & stock.', color: 'from-blue-600 to-indigo-600' },
     { id: 'ECE', title: 'Electronics & Comm.', desc: 'Manage ECE requests & stock.', color: 'from-purple-600 to-pink-600' },
     { id: 'EEE', title: 'Electrical Engineering', desc: 'Manage EEE requests & stock.', color: 'from-amber-500 to-orange-600' },
     { id: 'MECH', title: 'Mechanical Engineering', desc: 'Manage MECH requests & stock.', color: 'from-emerald-600 to-teal-600' }
@@ -392,7 +393,7 @@ export default function AdminDashboard() {
 
     try {
       const res = await fetch('/api/inventory', {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...item,
@@ -424,7 +425,7 @@ export default function AdminDashboard() {
 
     try {
       const res = await fetch('/api/inventory', {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...item,
@@ -436,6 +437,38 @@ export default function AdminDashboard() {
 
       if (res.ok) {
         setInventory(prev => prev.map(i => i.id === id ? { ...i, total: newTotal, available: newTotal } : i));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleUpdateTier = async (id: string | number) => {
+    const item = inventory.find(i => i.id === id);
+    if (!item) return;
+    const currentTier = item.value_tier || 'MEDIUM';
+    const newTierStr = window.prompt(`Update Tier for ${item.name} (LOW, MEDIUM, HIGH):`, currentTier);
+    if (newTierStr === null) return;
+    
+    const newTier = newTierStr.toUpperCase().trim();
+    if (!['LOW', 'MEDIUM', 'HIGH'].includes(newTier)) {
+      alert("Invalid tier. Please enter LOW, MEDIUM, or HIGH.");
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/inventory', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...item,
+          valueTier: newTier,
+          photoUrl: item.photo_url || ''
+        })
+      });
+
+      if (res.ok) {
+        setInventory(prev => prev.map(i => i.id === id ? { ...i, value_tier: newTier } : i));
       }
     } catch (err) {
       console.error(err);
@@ -643,66 +676,105 @@ export default function AdminDashboard() {
             <table className="w-full text-left text-sm">
               <thead className="bg-zinc-800/50 text-zinc-400 uppercase text-xs font-semibold">
                 <tr>
-                  <th className="px-6 py-4">Request ID</th>
-                  <th className="px-6 py-4">Student Info</th>
-                  <th className="px-6 py-4">Component</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
+                  <th className="px-6 py-4 w-1/4">Student Info</th>
+                  <th className="px-6 py-4">Requested Components</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800">
-                {requests.filter(r => r.department === adminDept && (!scannedUsnFilter || r.usn === scannedUsnFilter)).length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-zinc-500">No active requests found.</td>
-                  </tr>
-                )}
-                {requests.filter(r => r.department === adminDept && (!scannedUsnFilter || r.usn === scannedUsnFilter)).map(req => (
-                  <tr key={req.id} className="hover:bg-zinc-800/30 transition-colors">
-                    <td className="px-6 py-4 font-mono text-zinc-300">{req.id}</td>
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-white">{req.studentName}</div>
-                      <div className="text-zinc-500 text-xs">{req.usn}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-blue-400">{req.component}</div>
-                      <div className="text-zinc-500 text-xs">Duration: {req.duration} Days</div>
-                      {(() => {
-                        const penaltyInfo = calculatePenalty(req.requestDate, req.duration, req.component);
-                        if (req.status === 'Active' && penaltyInfo.isDelayed) {
-                          return (
-                            <div className="text-red-400 text-[10px] font-semibold mt-1.5 flex items-center gap-1 bg-red-950/20 border border-red-900/30 px-2 py-0.5 rounded w-fit">
-                              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse animate-duration-1000"></span>
-                              <span>Late by {penaltyInfo.delayDays} days • Penalty: ₹{penaltyInfo.penalty} ({penaltyInfo.weeksDelayed}w @ 5%)</span>
+                {(() => {
+                  const groupedRequests = requests
+                    .filter(r => r.department === adminDept && (!scannedUsnFilter || r.usn === scannedUsnFilter))
+                    .reduce((acc, req) => {
+                      const key = `${req.usn}_${req.requestDate}`;
+                      if (!acc[key]) {
+                        acc[key] = {
+                          groupId: key,
+                          studentName: req.studentName,
+                          usn: req.usn,
+                          requestDate: req.requestDate,
+                          items: []
+                        };
+                      }
+                      acc[key].items.push(req);
+                      return acc;
+                    }, {} as Record<string, { groupId: string, studentName: string, usn: string, requestDate: string, items: RequestItem[] }>);
+
+                  const groupedRequestsArray = Object.values(groupedRequests);
+
+                  if (groupedRequestsArray.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={2} className="px-6 py-8 text-center text-zinc-500">No active requests found.</td>
+                      </tr>
+                    );
+                  }
+
+                  return groupedRequestsArray.map(group => (
+                    <tr key={group.groupId} className="hover:bg-zinc-800/30 transition-colors">
+                      <td className="px-6 py-4 align-top border-r border-zinc-800/50">
+                        <div className="font-medium text-white text-base">{group.studentName}</div>
+                        <div className="text-zinc-500 font-mono text-xs mt-1">{group.usn}</div>
+                        <div className="text-zinc-500 text-xs mt-3 flex items-center gap-1.5">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                          Requested: {group.requestDate}
+                        </div>
+                        <div className="text-cyan-400 text-xs mt-2 font-bold uppercase tracking-widest">
+                          {group.items.length} Item{group.items.length > 1 ? 's' : ''}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="space-y-3">
+                          {group.items.map(req => (
+                            <div key={req.id} className="flex justify-between items-center bg-zinc-950/50 p-3.5 rounded-xl border border-zinc-800/80 hover:border-zinc-700 transition-colors">
+                              <div className="flex-1">
+                                <div className="font-bold text-blue-400 text-sm flex items-center gap-2">
+                                  {req.component}
+                                  <span className="text-zinc-600 font-mono text-[10px] bg-zinc-900 px-1.5 py-0.5 rounded">#{req.id}</span>
+                                </div>
+                                <div className="text-zinc-500 text-xs mt-1">Duration: <span className="text-zinc-300 font-mono">{req.duration} Days</span></div>
+                                {(() => {
+                                  const penaltyInfo = calculatePenalty(req.requestDate, req.duration, req.component);
+                                  if (req.status === 'Active' && penaltyInfo.isDelayed) {
+                                    return (
+                                      <div className="text-red-400 text-[10px] font-bold mt-2 flex items-center gap-1.5 bg-red-950/30 border border-red-900/50 px-2.5 py-1 rounded-md w-fit">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
+                                        <span>Late by {penaltyInfo.delayDays} days • Penalty: ₹{penaltyInfo.penalty}</span>
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                              </div>
+                              <div className="flex items-center gap-5">
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest border ${req.status === 'PENDING' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
+                                  req.status === 'APPROVED' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' :
+                                    req.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                                      'bg-green-500/10 text-green-400 border-green-500/20'
+                                  }`}>
+                                  {req.status}
+                                </span>
+                                <div className="text-right space-x-2 flex-shrink-0 min-w-[140px] flex justify-end">
+                                  {req.status === 'PENDING' && (
+                                    <>
+                                      <button onClick={() => handleApprove(req.id)} className="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg text-xs font-bold transition">Approve</button>
+                                      <button onClick={() => handleReject(req.id)} className="px-3 py-1.5 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-500/30 rounded-lg text-xs font-bold transition">Reject</button>
+                                    </>
+                                  )}
+                                  {req.status === 'APPROVED' && (
+                                    <button onClick={() => handleCheckout(req.id)} className="px-4 py-1.5 bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-lg text-xs font-bold transition">Mark Check Out</button>
+                                  )}
+                                  {req.status === 'Active' && (
+                                    <button onClick={() => handleReturn(req.id)} className="px-4 py-1.5 bg-zinc-800 text-white hover:bg-zinc-700 border border-zinc-700 rounded-lg text-xs font-bold transition">Mark Returned</button>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          );
-                        }
-                        return null;
-                      })()}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${req.status === 'PENDING' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
-                        req.status === 'APPROVED' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' :
-                          'bg-green-500/10 text-green-400 border-green-500/20'
-                        }`}>
-                        {req.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right space-x-2">
-                      {req.status === 'PENDING' && (
-                        <>
-                          <button onClick={() => handleApprove(req.id)} className="px-3 py-1.5 bg-green-600/20 text-green-500 hover:bg-green-600/30 border border-green-500/30 rounded text-xs font-semibold transition">Approve</button>
-                          <button onClick={() => handleReject(req.id)} className="px-3 py-1.5 bg-red-600/20 text-red-500 hover:bg-red-600/30 border border-red-500/30 rounded text-xs font-semibold transition">Reject</button>
-                        </>
-                      )}
-                      {req.status === 'APPROVED' && (
-                        <button onClick={() => handleCheckout(req.id)} className="px-4 py-1.5 bg-cyan-600 text-white hover:bg-cyan-500 rounded text-xs font-bold transition shadow-lg shadow-cyan-500/20">Check Out</button>
-                      )}
-                      {req.status === 'Active' && (
-                        <button onClick={() => handleReturn(req.id)} className="px-4 py-1.5 bg-zinc-700 text-white hover:bg-zinc-600 rounded text-xs font-bold transition">Mark Returned</button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ));
+                })()}
               </tbody>
             </table>
           </div>
@@ -925,7 +997,12 @@ export default function AdminDashboard() {
                           </svg>
                         </button>
                       </div>
-                      <div className="text-[10px] text-zinc-500 font-mono mt-0.5">Location: {item.location}</div>
+                      <div className="flex justify-between items-center mt-1">
+                        <div className="text-[10px] text-zinc-500 font-mono">Location: {item.location}</div>
+                        <div className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${item.value_tier === 'LOW' ? 'text-green-400 bg-green-500/10' : item.value_tier === 'HIGH' ? 'text-rose-400 bg-rose-500/10' : 'text-amber-400 bg-amber-500/10'}`}>
+                          {item.value_tier || 'MEDIUM'} TIER
+                        </div>
+                      </div>
                       <p className="text-xs text-zinc-400 mt-2.5 line-clamp-2 leading-relaxed">{item.desc || 'No item specifications provided.'}</p>
                     </div>
 
@@ -943,7 +1020,13 @@ export default function AdminDashboard() {
                           onClick={() => handleUpdateStock(item.id)}
                           className="px-2.5 py-1 bg-zinc-950 hover:bg-zinc-850 border border-zinc-850 rounded text-[9px] font-mono font-bold tracking-wide uppercase text-zinc-300 transition-all cursor-pointer"
                         >
-                          Adjust Qty
+                          Adj. Qty
+                        </button>
+                        <button
+                          onClick={() => handleUpdateTier(item.id)}
+                          className="px-2.5 py-1 bg-zinc-950 hover:bg-zinc-850 border border-zinc-850 rounded text-[9px] font-mono font-bold tracking-wide uppercase text-zinc-300 transition-all cursor-pointer"
+                        >
+                          Tier
                         </button>
                         <button
                           onClick={() => toggleRepairStatus(item.id)}

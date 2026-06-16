@@ -80,6 +80,7 @@ export async function PATCH(request: Request) {
     // If we map status to base condition or another column, do it here
     if (status !== undefined) updates.base_condition = status; 
     if (photoUrl !== undefined) updates.photo_url = photoUrl;
+    if (body.valueTier !== undefined) updates.value_tier = body.valueTier;
 
     const { data, error } = await supabase
       .from('components')
