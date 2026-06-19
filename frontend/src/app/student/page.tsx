@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { siteConfig } from '@/config/site';
 
 export default function StudentAuth() {
   // Navigation & Step Tracking States
@@ -195,12 +196,13 @@ export default function StudentAuth() {
       <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-fuchsia-600/10 rounded-full mix-blend-screen filter blur-[128px] opacity-50 pointer-events-none" />
 
       {/* Header Block */}
-      <div className="relative sm:mx-auto sm:w-full sm:max-w-md text-center z-10">
+      <div className="relative sm:mx-auto sm:w-full sm:max-w-md text-center z-10 flex flex-col items-center">
+        <img src={siteConfig.logoUrl} alt={`${siteConfig.collegeName} Logo`} className="w-20 h-20 mb-4 object-contain" />
         <h2 className="text-5xl font-black tracking-tighter text-white">
-          Lab<span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-fuchsia-500">Nexus</span>
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-fuchsia-500">{siteConfig.appName}</span>
         </h2>
-        <p className="mt-3 text-sm text-zinc-400 font-medium">
-          Ditch the paperwork. Flex your components. 🛠️
+        <p className="mt-2 text-sm text-zinc-400 font-medium">
+          {siteConfig.collegeName}
         </p>
 
         <div className="mt-5 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-bold text-zinc-300 backdrop-blur-md">

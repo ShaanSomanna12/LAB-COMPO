@@ -11,7 +11,7 @@ export default function LabAccessCheckout() {
   const [department, setDepartment] = useState('CSE');
   const [section, setSection] = useState('A');
   const [date, setDate] = useState('');
-  const [timeSlot, setTimeSlot] = useState('09:00 AM - 11:00 AM');
+  const [timeSlot, setTimeSlot] = useState('12:30 PM - 01:30 PM');
   const [labName, setLabName] = useState('EDL Main Workspace');
   const [purpose, setPurpose] = useState('');
   
@@ -154,6 +154,7 @@ export default function LabAccessCheckout() {
                 <label className="block text-xs font-medium text-zinc-400 mb-1">Select Laboratory</label>
                 <select required value={labName} onChange={e => setLabName(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 appearance-none">
                   <option value="EDL Main Workspace">EDL Main Workspace</option>
+                  <option value="Computer Lab">Computer Lab</option>
                   <option value="IoT & Sensors Lab">IoT & Sensors Lab</option>
                   <option value="AI / ML Server Lab">AI / ML Server Lab</option>
                   <option value="Mechatronics Suite">Mechatronics Suite</option>
@@ -169,10 +170,8 @@ export default function LabAccessCheckout() {
                 <div>
                   <label className="block text-xs font-medium text-zinc-400 mb-1">Time Slot</label>
                   <select required value={timeSlot} onChange={e => setTimeSlot(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 appearance-none">
-                    <option value="09:00 AM - 11:00 AM">09:00 AM - 11:00 AM</option>
-                    <option value="11:15 AM - 01:15 PM">11:15 AM - 01:15 PM</option>
-                    <option value="02:00 PM - 04:00 PM">02:00 PM - 04:00 PM</option>
-                    <option value="04:15 PM - 06:15 PM">04:15 PM - 06:15 PM</option>
+                    <option value="12:30 PM - 01:30 PM">12:30 PM - 01:30 PM</option>
+                    <option value="04:30 PM - 06:00 PM">04:30 PM - 06:00 PM</option>
                   </select>
                 </div>
               </div>

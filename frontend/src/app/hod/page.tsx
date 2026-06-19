@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { siteConfig } from '@/config/site';
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 
 interface RequestItem {
@@ -29,7 +30,7 @@ export default function HodDashboard() {
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [inventory, setInventory] = useState<any[]>([]);
   const [selectedReq, setSelectedReq] = useState<RequestItem | null>(null);
-  const [collegeName, setCollegeName] = useState('PHOENIX INSTITUTE OF TECHNOLOGY');
+  const [collegeName, setCollegeName] = useState(siteConfig.collegeName);
   const [loading, setLoading] = useState(true);
   
   // Workspace Access States
@@ -224,7 +225,7 @@ export default function HodDashboard() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white p-8 font-sans print:bg-white print:text-black">
-      <header className="flex justify-between items-start md:items-center mb-8 border-b border-zinc-800 pb-6 relative print:hidden">
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 border-b border-zinc-800 pb-6 relative print:hidden">
         <div className="pr-12">
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
             HOD APPROVAL WORKSPACE
@@ -347,7 +348,7 @@ export default function HodDashboard() {
       {viewMode === 'requests' && (
         <>
           {/* Stats Cards */}
-          <div className="grid grid-cols-3 gap-6 mb-8 max-w-4xl">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 max-w-4xl">
             <div className="bg-zinc-900/40 border border-zinc-800/80 p-6 rounded-2xl flex flex-col justify-between">
               <div className="text-zinc-500 text-xs font-semibold uppercase tracking-wider">Awaiting Decisions</div>
               <div className="text-4xl font-extrabold text-amber-400 mt-2">{activeDeptPending}</div>
@@ -500,7 +501,8 @@ export default function HodDashboard() {
                       </p>
                     </div>
 
-                    <table className="w-full text-left border-collapse border border-zinc-400 mb-4 text-sm">
+                    <div className="overflow-x-auto w-full mb-4">
+                      <table className="w-full text-left border-collapse border border-zinc-400 text-sm min-w-[500px]">
                       <tbody>
                         <tr className="border border-zinc-400">
                           <th className="p-2 border border-zinc-400 bg-zinc-100 w-1/3">Component Requested</th>
@@ -526,6 +528,7 @@ export default function HodDashboard() {
                         )}
                       </tbody>
                     </table>
+                    </div>
 
                     {selectedReq.status === 'Pending Renewal HOD' && (selectedReq as any).renewalReason && (
                       <div className="mb-4 text-xs leading-relaxed p-3 bg-purple-50/50 border border-purple-200/50 rounded-lg text-left text-zinc-800">
@@ -599,7 +602,7 @@ export default function HodDashboard() {
       {viewMode === 'lab-access' && (
         <>
           {/* Stats Cards */}
-          <div className="grid grid-cols-3 gap-6 mb-8 max-w-4xl animate-in fade-in duration-300">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 max-w-4xl animate-in fade-in duration-300">
             <div className="bg-zinc-900/40 border border-zinc-800/80 p-6 rounded-2xl flex flex-col justify-between">
               <div className="text-zinc-500 text-xs font-semibold uppercase tracking-wider">Awaiting HOD Sign-off</div>
               <div className="text-4xl font-extrabold text-amber-400 mt-2">{activeDeptLabPending}</div>
@@ -727,7 +730,8 @@ export default function HodDashboard() {
                       </p>
                     </div>
 
-                    <table className="w-full text-left border-collapse border border-zinc-400 mb-6 text-sm font-sans">
+                    <div className="overflow-x-auto w-full mb-6">
+                      <table className="w-full text-left border-collapse border border-zinc-400 text-sm font-sans min-w-[500px]">
                       <tbody>
                         <tr className="border border-zinc-400">
                           <th className="p-2.5 border border-zinc-400 bg-zinc-100 w-1/3">Target Laboratory</th>
@@ -747,6 +751,7 @@ export default function HodDashboard() {
                         </tr>
                       </tbody>
                     </table>
+                    </div>
 
                     {/* Signature Block */}
                     <div className="mt-auto flex justify-between items-end text-xs mb-4 pt-6 border-t border-dashed border-zinc-300">

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Space_Grotesk } from 'next/font/google';
 import ParticleNetwork from '@/components/ui/ParticleNetwork';
+import { siteConfig } from '@/config/site';
 
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] });
 
@@ -268,12 +269,13 @@ export default function StudentAuth() {
       <ParticleNetwork />
 
       {/* Header Block */}
-      <div className="relative sm:mx-auto sm:w-full sm:max-w-md text-center z-10">
-        <h2 className={`${spaceGrotesk.className} text-6xl font-black tracking-tighter text-white drop-shadow-2xl`}>
-          LAB<span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-500">NEXUS</span>
+      <div className="relative sm:mx-auto sm:w-full sm:max-w-md text-center z-10 flex flex-col items-center">
+        <img src={siteConfig.logoUrl} alt={`${siteConfig.collegeName} Logo`} className="w-20 h-20 mb-4 object-contain" />
+        <h2 className={`${spaceGrotesk.className} text-5xl font-black tracking-tighter text-white drop-shadow-2xl`}>
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-500">{siteConfig.appName}</span>
         </h2>
-        <p className="mt-3 text-sm text-zinc-400 font-bold uppercase tracking-widest">
-          Equip. Reserve. Build.
+        <p className="mt-2 text-sm text-zinc-400 font-bold uppercase tracking-widest">
+          {siteConfig.collegeName}
         </p>
 
         <div className="mt-5 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-bold text-cyan-100 backdrop-blur-md">

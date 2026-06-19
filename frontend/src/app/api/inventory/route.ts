@@ -71,16 +71,15 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();
-    const { id, total, available, status, photoUrl } = body;
+    const { id, total, available, desc, photoUrl, valueTier } = body;
 
     // Build the updates object based on what was provided
     const updates: any = {};
     if (total !== undefined) updates.total_quantity = Number(total);
     if (available !== undefined) updates.available_quantity = Number(available);
-    // If we map status to base condition or another column, do it here
-    if (status !== undefined) updates.base_condition = status; 
+    if (desc !== undefined) updates.base_condition = desc; 
     if (photoUrl !== undefined) updates.photo_url = photoUrl;
-    if (body.valueTier !== undefined) updates.value_tier = body.valueTier;
+    if (valueTier !== undefined) updates.value_tier = valueTier;
 
     const { data, error } = await supabase
       .from('components')

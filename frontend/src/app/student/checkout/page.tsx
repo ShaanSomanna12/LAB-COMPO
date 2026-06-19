@@ -15,6 +15,11 @@ interface InventoryItem {
   photo_url?: string;
   desc?: string;
   location?: string;
+  value_tier?: string;
+}
+
+interface CartItem extends InventoryItem {
+  requestedQty: number;
 }
 
 const DEPARTMENTS = [
@@ -33,14 +38,14 @@ export default function StudentCheckout() {
   
   // Selection state
   const [selectedDept, setSelectedDept] = useState<string | null>(null);
-  const [cart, setCart] = useState<InventoryItem[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   
   // Form State
   const [studentName, setStudentName] = useState('');
   const [usn, setUsn] = useState('');
   const [department, setDepartment] = useState('CSE');
-  const [section, setSection] = useState('A');
+  const [section, setSection] = useState('');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('09:00 AM');
   const [duration, setDuration] = useState<number | ''>('');
@@ -49,6 +54,7 @@ export default function StudentCheckout() {
   
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [notices, setNotices] = useState<any[]>([]);
 
   useEffect(() => {
     // Fetch user details from Supabase
@@ -57,7 +63,7 @@ export default function StudentCheckout() {
       if (user && user.email) {
         const { data: userData } = await supabase
           .from('users')
-          .select('name, usn, trust_score')
+          .select('name, usn, trust_score, department')
           .eq('email', user.email)
           .maybeSingle();
           
@@ -65,10 +71,16 @@ export default function StudentCheckout() {
           setUsn(userData.usn);
           setStudentName(userData.name);
           if (userData.trust_score !== undefined && userData.trust_score !== null) setTrustScore(userData.trust_score);
+          if (userData.department) {
+             const res = await fetch(`/api/notices?department=${userData.department}`);
+             const noticesData = await res.json();
+             if (Array.isArray(noticesData)) setNotices(noticesData);
+          }
         }
       }
     };
     fetchUserDetails();
+
 
     // Fetch inventory
     fetch('/api/inventory')
@@ -91,8 +103,18 @@ export default function StudentCheckout() {
       if (exists) {
         return prev.filter(i => i.id !== item.id);
       }
-      return [...prev, item];
+      return [...prev, { ...item, requestedQty: 1 }];
     });
+  };
+
+  const updateCartItemQty = (id: string | number, newQty: number, item: CartItem) => {
+    const isLowTier = item.value_tier === 'LOW';
+    const maxQty = isLowTier ? Math.min(3, item.available) : item.available;
+    
+    if (newQty < 1) newQty = 1;
+    if (newQty > maxQty) newQty = maxQty;
+
+    setCart(prev => prev.map(i => i.id === id ? { ...i, requestedQty: newQty } : i));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -115,7 +137,8 @@ export default function StudentCheckout() {
       const itemsPayload = cart.map(item => ({
         name: item.name,
         department: item.department,
-        location: item.location || 'Main Lab'
+        location: item.location || 'Main Lab',
+        quantity: item.requestedQty
       }));
 
       const res = await fetch('/api/requests', {
@@ -197,6 +220,26 @@ export default function StudentCheckout() {
 
       <div className="w-full max-w-6xl mx-auto relative z-10 flex-grow">
         
+        {/* Active Notices Banner */}
+        {notices.length > 0 && (
+          <div className="mb-6 space-y-3 z-20 relative animate-in fade-in slide-in-from-top-8 duration-700">
+            {notices.map(notice => (
+              <div key={notice.id} className={`p-4 rounded-2xl border flex items-start gap-4 shadow-2xl backdrop-blur-md ${notice.type === 'alert' ? 'bg-red-500/10 border-red-500/30 text-red-100' : notice.type === 'warning' ? 'bg-amber-500/10 border-amber-500/30 text-amber-100' : 'bg-cyan-500/10 border-cyan-500/30 text-cyan-100'}`}>
+                <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${notice.type === 'alert' ? 'bg-red-500/20 text-red-400' : notice.type === 'warning' ? 'bg-amber-500/20 text-amber-400' : 'bg-cyan-500/20 text-cyan-400'}`}>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm tracking-wide uppercase mb-1 flex items-center gap-2">
+                    {notice.type === 'alert' ? 'Critical Alert' : notice.type === 'warning' ? 'Lab Warning' : 'Lab Announcement'}
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-black/30">{notice.admin_dept} Admin</span>
+                  </h4>
+                  <p className="text-sm font-medium opacity-90 leading-relaxed">{notice.message}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* STEP 1: Department Selection */}
         {step === 'department' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in zoom-in duration-300">
@@ -320,30 +363,16 @@ export default function StudentCheckout() {
 
         {/* STEP 3: Checkout Form */}
         {step === 'form' && cart.length > 0 && (
-          <div className="w-full max-w-3xl mx-auto bg-zinc-950/80 backdrop-blur-xl border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-            <div className="bg-gradient-to-r from-cyan-950/50 to-indigo-950/50 p-6 border-b border-zinc-800 flex flex-col gap-4">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <svg className="w-6 h-6 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
-                {cart.length} Item{cart.length > 1 ? 's' : ''} in Cart
-              </h2>
-              <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
-                {cart.map(item => (
-                  <div key={item.id} className="flex-shrink-0 bg-black/40 border border-zinc-800 rounded-lg p-2 flex items-center gap-3 pr-4">
-                    <div className="w-10 h-10 rounded-md overflow-hidden bg-zinc-900">
-                      {item.photo_url ? (
-                        <img src={item.photo_url} alt="Item" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-xs">📷</div>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-zinc-200 line-clamp-1 max-w-[120px]">{item.name}</p>
-                      <p className="text-[10px] text-zinc-500 font-mono uppercase">{item.department}</p>
-                    </div>
-                  </div>
-                ))}
+          <div className="w-full max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in zoom-in-95 duration-300">
+            
+            {/* Form Section (Left) */}
+            <div className="lg:col-span-2 bg-zinc-950/80 backdrop-blur-xl border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden">
+              <div className="bg-gradient-to-r from-cyan-950/50 to-indigo-950/50 p-6 border-b border-zinc-800">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <svg className="w-6 h-6 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                  Requisition Form
+                </h2>
               </div>
-            </div>
 
             <form onSubmit={handleSubmit} className="p-6 md:p-8 space-y-6">
 
@@ -375,7 +404,8 @@ export default function StudentCheckout() {
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-zinc-400 mb-1">Section</label>
-                      <select value={section} onChange={e => setSection(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 appearance-none">
+                      <select required value={section} onChange={e => setSection(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 appearance-none">
+                        <option value="" disabled>Select Section</option>
                         <option value="A">Section A</option>
                         <option value="B">Section B</option>
                         <option value="C">Section C</option>
@@ -490,6 +520,41 @@ export default function StudentCheckout() {
                 </button>
               </div>
             </form>
+            </div>
+
+            {/* Cart Section (Right) */}
+            <div className="lg:col-span-1 bg-zinc-950/80 backdrop-blur-xl border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden h-fit sticky top-24">
+              <div className="bg-gradient-to-r from-indigo-950/50 to-purple-950/50 p-6 border-b border-zinc-800">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <svg className="w-6 h-6 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                  Your Cart ({cart.length})
+                </h2>
+              </div>
+              <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                {cart.map(item => (
+                  <div key={item.id} className="bg-black/40 border border-zinc-800 rounded-lg p-3 flex flex-col gap-3">
+                    <div className="flex gap-3">
+                      <div className="w-12 h-12 rounded-md overflow-hidden bg-zinc-900 shrink-0">
+                        {item.photo_url ? (
+                          <img src={item.photo_url} alt="Item" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-xs">📷</div>
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-zinc-200 line-clamp-2">{item.name}</p>
+                        <p className="text-[10px] text-zinc-500 font-mono uppercase mt-1">{item.department}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between bg-zinc-900/50 rounded-md p-1 border border-zinc-800">
+                      <button type="button" onClick={() => updateCartItemQty(item.id, item.requestedQty - 1, item)} className="w-8 h-6 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition">-</button>
+                      <span className="text-xs font-mono text-cyan-400 font-bold px-2">{item.requestedQty}</span>
+                      <button type="button" onClick={() => updateCartItemQty(item.id, item.requestedQty + 1, item)} className="w-8 h-6 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition">+</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 

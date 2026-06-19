@@ -9,7 +9,7 @@ export async function GET() {
       .select(`
         *,
         users!inner(name, usn),
-        components!inner(name, department, lab_location)
+        components!inner(name, department, lab_location, value_tier)
       `)
       .order('created_at', { ascending: false });
 
@@ -27,8 +27,12 @@ export async function GET() {
       section: res.section,
       studentDepartment: res.student_department,
       requestDate: res.created_at.split('T')[0],
-      duration: 7, // default as we don't store duration in reservations schema yet
-      isDamaged: res.is_damaged === true
+      duration: res.due_date ? Math.max(1, Math.ceil((new Date(res.due_date).getTime() - new Date(res.created_at).getTime()) / (1000 * 60 * 60 * 24))) : 7,
+      isDamaged: res.is_damaged === true,
+      returnedAt: res.returned_at,
+      valueTier: res.components?.value_tier,
+      quantity: res.quantity || 1,
+      collectionTime: res.collection_time || null
     }));
 
     return NextResponse.json(formattedData);
@@ -41,9 +45,11 @@ export async function GET() {
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();
-    const { id, status, images, geotag, is_damaged, return_condition } = body;
+    const { id, status, images, geotag, is_damaged, return_condition, quantity, collectionTime } = body;
     
     const updates: any = { status };
+    if (quantity !== undefined) updates.quantity = quantity;
+    if (collectionTime !== undefined) updates.collection_time = collectionTime;
     if (images && images.length > 0) {
        // Optional logic if you eventually add images to reservations
        updates.after_img_url = images[0]; 
@@ -195,7 +201,9 @@ export async function POST(request: Request) {
           section: section || 'A',
           student_department: studentDepartment || 'CSE',
           project_title: body.projectTitle || null,
-          due_date: dueDate.toISOString()
+          due_date: dueDate.toISOString(),
+          quantity: item.quantity || 1,
+          collection_time: time || null
         }])
         .select()
         .single();
