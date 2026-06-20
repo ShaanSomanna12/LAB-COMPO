@@ -15,6 +15,8 @@ interface Reservation {
   due_date: string | null;
   project_title: string | null;
   geotag_image_url: string | null;
+  latitude?: number;
+  longitude?: number;
   components: {
     name: string;
     department: string;
@@ -40,6 +42,9 @@ export default function MyReservations() {
   const [returnModalOpen, setReturnModalOpen] = useState(false);
   const [returnResId, setReturnResId] = useState<number | null>(null);
   const [returnCondition, setReturnCondition] = useState('WORKING');
+  // Image preview modal state
+  const [previewImgUrl, setPreviewImgUrl] = useState<string | null>(null);
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
 
   // Ref for the hidden file input
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -76,6 +81,8 @@ export default function MyReservations() {
             due_date,
             project_title,
             geotag_image_url,
+            latitude,
+            longitude,
             components!inner(name, department, lab_location, value_tier)
           `)
           .eq('user_id', userData.user_id)
@@ -167,7 +174,7 @@ export default function MyReservations() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: selectedResId,
-          status: 'BORROWED',
+          status: 'PENDING_COLLECTION',
           geotag: {
             imageUrl,
             latitude,
@@ -178,7 +185,7 @@ export default function MyReservations() {
 
       if (!res.ok) throw new Error("Failed to update reservation status.");
 
-      toast.success("Component successfully collected!");
+      toast.success("Collection proof uploaded. Waiting for admin confirmation!");
 
       // Refresh list
       fetchReservations();
@@ -201,12 +208,13 @@ export default function MyReservations() {
       case 'BORROWED': return 'text-cyan-300 bg-cyan-400/10 border-cyan-400/30';
       case 'PENDING_RETURN': return 'text-amber-300 bg-amber-400/10 border-amber-400/30';
       case 'RETURNED': return 'text-zinc-300 bg-zinc-400/10 border-zinc-400/30';
+      case 'PENDING_COLLECTION': return 'text-purple-300 bg-purple-400/10 border-purple-400/30';
       default: return 'text-zinc-300 bg-zinc-400/10 border-zinc-400/30';
     }
   };
 
   // Group Reservations
-  const currentStatuses = ['PENDING', 'APPROVED', 'BORROWED', 'PENDING_ADMIN', 'Ready for Collection', 'PENDING_RETURN'];
+  const currentStatuses = ['PENDING', 'APPROVED', 'BORROWED', 'PENDING_ADMIN', 'Ready for Collection', 'PENDING_RETURN', 'PENDING_COLLECTION'];
   const currentReservations = reservations.filter(r => currentStatuses.includes(r.status));
   const completedReservations = reservations.filter(r => !currentStatuses.includes(r.status));
 
@@ -253,21 +261,26 @@ export default function MyReservations() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 justify-end">
             <button 
-              onClick={() => router.push('/student/dashboard')}
-              className="px-5 py-3 bg-zinc-900/50 border border-zinc-800 rounded-xl hover:bg-zinc-800 transition-colors text-zinc-300 font-mono text-xs font-bold shadow-sm"
+                onClick={() => router.push('/student/dashboard')}
+                disabled={!studentUsn}
+                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-black uppercase tracking-wider rounded-xl transition duration-300 shadow-[0_0_20px_rgba(16,185,129,0.25)] disabled:opacity-50 mr-3"
             >
-              ← Dashboard
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Back
             </button>
-
             <button 
-              onClick={() => setShowQRModal(true)}
-              disabled={!studentUsn}
-              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-black uppercase tracking-wider rounded-xl transition duration-300 shadow-[0_0_20px_rgba(16,185,129,0.25)] disabled:opacity-50"
+                onClick={() => setShowQRModal(true)}
+                disabled={!studentUsn}
+                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-black uppercase tracking-wider rounded-xl transition duration-300 shadow-[0_0_20px_rgba(16,185,129,0.25)] disabled:opacity-50"
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
-              Digital Pass
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                </svg>
+                QR
             </button>
           </div>
         </div>
@@ -433,21 +446,30 @@ export default function MyReservations() {
                             Collect & Upload Proof
                           </button>
                         )
-                      ) : res.status === 'BORROWED' ? (
+                      ) : (res.status === 'BORROWED') ? (
                         <div className="flex flex-col gap-2">
                           {res.geotag_image_url && (
-                            <a href={res.geotag_image_url} target="_blank" rel="noreferrer" className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 text-cyan-400 border border-zinc-800 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2">
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                            <button onClick={() => { setPreviewImgUrl(res.geotag_image_url); setPreviewModalOpen(true); }} className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 text-cyan-400 border border-zinc-800 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                              </svg>
                               View Collection Proof
-                            </a>
+                            </button>
                           )}
-                          <button
-                            onClick={() => { setReturnResId(res.reservation_id); setReturnModalOpen(true); }}
-                            className="w-full py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:border-amber-500 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
-                          >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 15v-1a4 4 0 00-4-4H8m0 0l3 3m-3-3l3-3m9 14V5a2 2 0 00-2-2H6a2 2 0 00-2 2v16l4-2 4 2 4-2 4 2z" /></svg>
-                            Return Component
-                          </button>
+                          {res.latitude && res.longitude && (
+                            <div className="text-xs text-cyan-400 mt-1">
+                              Location: {res.latitude.toFixed(5)}, {res.longitude.toFixed(5)}
+                            </div>
+                          )}
+                          {res.status === 'BORROWED' && (
+                            <button
+                              onClick={() => { setReturnResId(res.reservation_id); setReturnModalOpen(true); }}
+                              className="w-full py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:border-amber-500 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 15v-1a4 4 0 00-4-4H8m0 0l3 3m-3-3l3-3m9 14V5a2 2 0 00-2-2H6a2 2 0 00-2 2v16l4-2 4 2 4-2 4 2z" /></svg>
+                              Return Component
+                            </button>
+                          )}
                         </div>
                       ) : res.status === 'PENDING_RETURN' ? (
                         <div className="w-full py-3 bg-amber-500/5 text-amber-500/80 border border-amber-500/20 rounded-xl font-bold text-sm text-center flex items-center justify-center gap-2 cursor-wait">
@@ -516,6 +538,66 @@ export default function MyReservations() {
             </motion.div>
           )}
         </AnimatePresence>
+{/* Image Preview Modal */}
+<AnimatePresence>
+  {previewModalOpen && previewImgUrl && (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
+      onClick={() => setPreviewModalOpen(false)}
+    >
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0, y: 20 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.9, opacity: 0, y: 20 }}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-zinc-900 p-6 rounded-2xl max-w-xl w-full shadow-[0_0_30px_rgba(16,185,129,0.4)]"
+      >
+        <button
+          onClick={() => setPreviewModalOpen(false)}
+          className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+        <img src={previewImgUrl} alt="Collection Proof" className="w-full rounded" />
+      </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
+{/* Image Preview Modal */}
+<AnimatePresence>
+  {previewModalOpen && previewImgUrl && (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
+      onClick={() => setPreviewModalOpen(false)}
+    >
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0, y: 20 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.9, opacity: 0, y: 20 }}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-zinc-900 p-6 rounded-2xl max-w-xl w-full shadow-[0_0_30px_rgba(16,185,129,0.4)]"
+      >
+        <button
+          onClick={() => setPreviewModalOpen(false)}
+          className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+        <img src={previewImgUrl} alt="Collection Proof" className="w-full rounded" />
+      </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
 
         {/* QR Code Digital Pass Modal */}
         <AnimatePresence>
