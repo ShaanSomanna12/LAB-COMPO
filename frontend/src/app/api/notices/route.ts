@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
+export const dynamic = 'force-dynamic';
+
 // Fetch active notices, optionally filtered by department
 export async function GET(request: Request) {
   try {
