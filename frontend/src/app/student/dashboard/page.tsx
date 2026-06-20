@@ -54,9 +54,7 @@ export default function StudentDashboard() {
         {/* Top Navigation Bar */}
         <div className="flex justify-between items-center mb-16 md:mb-24 relative">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-indigo-600/20 border border-cyan-500/30 flex items-center justify-center p-1">
-              <img src={siteConfig.logoUrl} alt="Logo" className="w-full h-full object-contain" />
-            </div>
+            <img src={siteConfig.logoUrl} alt="Logo" className="w-14 h-14 object-contain" />
             <span className={`${spaceGrotesk.className} text-2xl font-bold tracking-widest text-white`}>{siteConfig.appName}</span>
           </div>
 
