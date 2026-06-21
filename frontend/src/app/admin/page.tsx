@@ -26,6 +26,7 @@ interface RequestItem {
   quantity?: number;
   collectionTime?: string;
   geotagImageUrl?: string | null;
+  afterImgUrl?: string | null;
   latitude?: number | null;
   longitude?: number | null;
 }
@@ -152,6 +153,53 @@ export default function AdminDashboard() {
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [previewLatitude, setPreviewLatitude] = useState<number | null>(null);
   const [previewLongitude, setPreviewLongitude] = useState<number | null>(null);
+  const [previewType, setPreviewType] = useState<'COLLECT' | 'RETURN' | null>(null);
+  const [previewAddress, setPreviewAddress] = useState<string | null>(null);
+
+  useEffect(() => {
+    const resolveAddress = async () => {
+      if (!previewLatitude || !previewLongitude) {
+        setPreviewAddress(null);
+        return;
+      }
+      setPreviewAddress('Resolving location...');
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${previewLatitude}&lon=${previewLongitude}`,
+          {
+            headers: {
+              'User-Agent': 'Phoenix-Lab-Portal/1.0'
+            }
+          }
+        );
+        if (response.ok) {
+          const data = await response.json();
+          const addr = data.address;
+          let shortAddr = '';
+          if (addr) {
+            const parts = [];
+            if (addr.amenity || addr.college || addr.building || addr.office) {
+              parts.push(addr.amenity || addr.college || addr.building || addr.office);
+            }
+            if (addr.road) parts.push(addr.road);
+            if (addr.suburb || addr.neighbourhood) parts.push(addr.suburb || addr.neighbourhood);
+            if (addr.city || addr.town || addr.village) parts.push(addr.city || addr.town || addr.village);
+
+            shortAddr = parts.length > 0 ? parts.join(', ') : (data.display_name || `${previewLatitude.toFixed(5)}, ${previewLongitude.toFixed(5)}`);
+          } else {
+            shortAddr = data.display_name || `${previewLatitude.toFixed(5)}, ${previewLongitude.toFixed(5)}`;
+          }
+          setPreviewAddress(shortAddr);
+        } else {
+          setPreviewAddress(`Location (${previewLatitude.toFixed(5)}, ${previewLongitude.toFixed(5)})`);
+        }
+      } catch (err) {
+        console.error("Geocoding error:", err);
+        setPreviewAddress(`Location (${previewLatitude.toFixed(5)}, ${previewLongitude.toFixed(5)})`);
+      }
+    };
+    resolveAddress();
+  }, [previewLatitude, previewLongitude]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -885,6 +933,7 @@ export default function AdminDashboard() {
                                             setPreviewImgUrl(req.geotagImageUrl || null);
                                             setPreviewLatitude(req.latitude || null);
                                             setPreviewLongitude(req.longitude || null);
+                                            setPreviewType('COLLECT');
                                             setPreviewModalOpen(true);
                                           }}
                                           className="px-3 py-1.5 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/30 rounded-lg text-xs font-bold transition flex items-center gap-1"
@@ -908,7 +957,27 @@ export default function AdminDashboard() {
                                     <button onClick={() => handleReturn(req.id)} className="px-4 py-1.5 bg-zinc-800 text-white hover:bg-zinc-700 border border-zinc-700 rounded-lg text-xs font-bold transition">Mark Returned</button>
                                   )}
                                   {req.status === 'PENDING_RETURN' && (
-                                    <button onClick={() => handleReturn(req.id)} className="px-4 py-1.5 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg text-xs font-bold transition">Accept Return</button>
+                                    <div className="flex gap-2 items-center justify-end">
+                                      {req.afterImgUrl && (
+                                        <button 
+                                          onClick={() => {
+                                            setPreviewImgUrl(req.afterImgUrl || null);
+                                            setPreviewLatitude(req.latitude || null);
+                                            setPreviewLongitude(req.longitude || null);
+                                            setPreviewType('RETURN');
+                                            setPreviewModalOpen(true);
+                                          }}
+                                          className="px-3 py-1.5 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg text-xs font-bold transition flex items-center gap-1"
+                                        >
+                                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                          </svg>
+                                          View Proof
+                                        </button>
+                                      )}
+                                      <button onClick={() => handleReturn(req.id)} className="px-4 py-1.5 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg text-xs font-bold transition">Accept Return</button>
+                                    </div>
                                   )}
                                 </div>
                               </div>
@@ -1950,18 +2019,32 @@ export default function AdminDashboard() {
             </button>
             
             <div className="mb-4 text-left w-full border-b border-zinc-800 pb-3">
-              <h3 className="text-lg font-bold text-white uppercase tracking-wider">Geotagged Collection Proof</h3>
+              <h3 className="text-lg font-bold text-white uppercase tracking-wider">
+                {previewType === 'RETURN' ? 'Geotagged Return Proof' : 'Geotagged Collection Proof'}
+              </h3>
               <p className="text-zinc-500 text-xs font-mono mt-0.5">VERIFIED VIA STUDENT GPS PORTAL</p>
             </div>
 
             <div className="w-full rounded-2xl overflow-hidden border border-zinc-800 bg-black aspect-video flex items-center justify-center relative">
-              <img src={previewImgUrl} alt="Collection Proof" className="max-w-full max-h-full object-contain" />
+              <img src={previewImgUrl} alt={previewType === 'RETURN' ? 'Return Proof' : 'Collection Proof'} className="max-w-full max-h-full object-contain" />
             </div>
 
-            {previewLatitude && previewLongitude && (
-              <div className="mt-4 bg-zinc-900 border border-zinc-850 rounded-xl px-4 py-2 text-xs font-mono text-zinc-400 w-full text-center">
-                LATITUDE: {previewLatitude.toFixed(6)} • LONGITUDE: {previewLongitude.toFixed(6)}
+            {previewAddress ? (
+              <div className="mt-4 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-xs font-mono text-zinc-400 w-full text-center flex flex-col gap-1.5">
+                <div className="text-cyan-400 font-bold uppercase tracking-wider text-[10px]">Resolved Address</div>
+                <div className="text-zinc-200 text-sm leading-normal">{previewAddress}</div>
+                {previewLatitude && previewLongitude && (
+                  <div className="text-[10px] text-zinc-500">
+                    LATITUDE: {previewLatitude.toFixed(6)} • LONGITUDE: {previewLongitude.toFixed(6)}
+                  </div>
+                )}
               </div>
+            ) : (
+              previewLatitude && previewLongitude && (
+                <div className="mt-4 bg-zinc-900 border border-zinc-850 rounded-xl px-4 py-2 text-xs font-mono text-zinc-400 w-full text-center">
+                  LATITUDE: {previewLatitude.toFixed(6)} • LONGITUDE: {previewLongitude.toFixed(6)}
+                </div>
+              )
             )}
           </div>
         </div>

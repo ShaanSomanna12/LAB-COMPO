@@ -15,6 +15,7 @@ interface Reservation {
   due_date: string | null;
   project_title: string | null;
   geotag_image_url: string | null;
+  after_img_url?: string | null;
   latitude?: number;
   longitude?: number;
   borrowed_at?: string | null;
@@ -47,6 +48,8 @@ export default function MyReservations() {
   // Image preview modal state
   const [previewImgUrl, setPreviewImgUrl] = useState<string | null>(null);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [uploadType, setUploadType] = useState<'COLLECT' | 'RETURN' | null>(null);
+  const [uploadedReturnProof, setUploadedReturnProof] = useState<{ imageUrl: string; latitude: number; longitude: number } | null>(null);
 
   // Ref for the hidden file input
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -83,6 +86,7 @@ export default function MyReservations() {
             due_date,
             project_title,
             geotag_image_url,
+            after_img_url,
             latitude,
             longitude,
             borrowed_at,
@@ -169,13 +173,26 @@ export default function MyReservations() {
 
   const handleCollectClick = (resId: number) => {
     setSelectedResId(resId);
+    setUploadType('COLLECT');
     if (fileInputRef.current) {
       fileInputRef.current.click();
     }
   };
 
+  const handleReturnClick = (resId: number) => {
+    setReturnResId(resId);
+    setUploadedReturnProof(null);
+    setUploadType(null);
+    setReturnCondition('WORKING');
+    setReturnModalOpen(true);
+  };
+
   const submitReturn = async () => {
     if (!returnResId) return;
+    if (!uploadedReturnProof) {
+      toast.error("Please capture and upload return proof geotag image first.");
+      return;
+    }
     setUploading(true);
     try {
       const res = await fetch('/api/requests', {
@@ -184,23 +201,27 @@ export default function MyReservations() {
         body: JSON.stringify({
           id: returnResId,
           status: 'PENDING_RETURN',
-          returnCondition
+          returnCondition,
+          geotag: uploadedReturnProof
         })
       });
       if (!res.ok) throw new Error("Failed to process return.");
-      toast.success("Return request submitted. Waiting for admin confirmation!");
+      toast.success("Return request submitted with geotag proof. Waiting for admin confirmation!");
       fetchReservations();
     } catch (err: any) {
       toast.error(err.message);
     } finally {
       setUploading(false);
       setReturnModalOpen(false);
+      setUploadedReturnProof(null);
+      setReturnResId(null);
     }
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !selectedResId) return;
+    const targetId = uploadType === 'RETURN' ? returnResId : selectedResId;
+    if (!file || !targetId) return;
 
     setUploading(true);
 
@@ -222,7 +243,7 @@ export default function MyReservations() {
 
       // 2. Upload Image to Supabase Storage
       const fileExt = file.name.split('.').pop();
-      const fileName = `${selectedResId}_${Date.now()}.${fileExt}`;
+      const fileName = `${targetId}_${uploadType === 'RETURN' ? 'return' : 'collect'}_${Date.now()}.${fileExt}`;
       const filePath = `${fileName}`;
 
       const { error: uploadError } = await supabase.storage
@@ -237,34 +258,39 @@ export default function MyReservations() {
 
       const imageUrl = publicUrlData.publicUrl;
 
-      // 3. Update Reservation via API
-      const res = await fetch('/api/requests', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: selectedResId,
-          status: 'PENDING_COLLECTION',
-          geotag: {
-            imageUrl,
-            latitude,
-            longitude
-          }
-        })
-      });
+      if (uploadType === 'RETURN') {
+        setUploadedReturnProof({ imageUrl, latitude, longitude });
+        toast.success("Return proof image captured successfully!");
+      } else {
+        // 3. Update Reservation via API
+        const res = await fetch('/api/requests', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: targetId,
+            status: 'PENDING_COLLECTION',
+            geotag: {
+              imageUrl,
+              latitude,
+              longitude
+            }
+          })
+        });
 
-      if (!res.ok) throw new Error("Failed to update reservation status.");
+        if (!res.ok) throw new Error("Failed to update reservation status.");
 
-      toast.success("Collection proof uploaded. Waiting for admin confirmation!");
-
-      // Refresh list
-      fetchReservations();
+        toast.success("Collection proof uploaded. Waiting for admin confirmation!");
+        fetchReservations();
+      }
 
     } catch (err: any) {
       console.error(err);
       toast.error(`Error: ${err.message}`);
     } finally {
       setUploading(false);
-      setSelectedResId(null);
+      if (uploadType !== 'RETURN') {
+        setSelectedResId(null);
+      }
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -474,6 +500,41 @@ export default function MyReservations() {
                           <span className="text-cyan-400 font-medium truncate max-w-[150px]" title={res.project_title}>{res.project_title}</span>
                         </div>
                       )}
+                      {res.latitude && res.longitude && (
+                        <div className="flex flex-col gap-1.5 pt-2.5 border-t border-zinc-800/50 mt-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-cyan-400/80 flex items-center gap-2 font-semibold">
+                              <svg className="w-3.5 h-3.5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                              </svg>
+                              {res.status === 'PENDING_RETURN' || res.status === 'RETURNED' ? 'Return Proof' : 'Collection Proof'}
+                            </span>
+                            {(res.status === 'PENDING_RETURN' || res.status === 'RETURNED') ? (
+                              res.after_img_url && (
+                                <button 
+                                  onClick={() => { setPreviewImgUrl(res.after_img_url || null); setPreviewModalOpen(true); }}
+                                  className="text-cyan-400 hover:text-cyan-300 font-bold text-xs underline cursor-pointer"
+                                >
+                                  View Image
+                                </button>
+                              )
+                            ) : (
+                              res.geotag_image_url && (
+                                <button 
+                                  onClick={() => { setPreviewImgUrl(res.geotag_image_url); setPreviewModalOpen(true); }}
+                                  className="text-cyan-400 hover:text-cyan-300 font-bold text-xs underline cursor-pointer"
+                                >
+                                  View Image
+                                </button>
+                              )
+                            )}
+                          </div>
+                          <p className="text-[10px] text-zinc-400 leading-normal text-left pl-5">
+                            {getAddress(res.latitude, res.longitude)}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -482,29 +543,16 @@ export default function MyReservations() {
                     <div className="bg-zinc-950/50 p-4 border-t border-zinc-800/50">
                       {res.status === 'APPROVED' ? (
                         res.components?.value_tier === 'LOW' ? (
-                          <button
-                            onClick={async () => {
-                              try {
-                                const resFetch = await fetch('/api/requests', {
-                                  method: 'PATCH',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({
-                                    id: res.reservation_id,
-                                    status: 'BORROWED'
-                                  })
-                                });
-                                if (!resFetch.ok) throw new Error("Failed to update reservation status.");
-                                toast.success("Component successfully collected!");
-                                fetchReservations();
-                              } catch (err: any) {
-                                toast.error(`Error: ${err.message}`);
-                              }
-                            }}
-                            className="w-full py-3 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:border-emerald-500 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
-                          >
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                            Direct Approval - Collect
-                          </button>
+                          <div className="w-full p-4 bg-emerald-500/5 text-emerald-400/90 border border-emerald-500/20 rounded-xl text-xs font-medium text-left leading-relaxed flex flex-col gap-2 shadow-inner">
+                            <div className="flex items-center gap-2 font-bold uppercase tracking-wider text-[11px] text-emerald-300">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"></span>
+                              Directly Approved
+                            </div>
+                            <p>
+                              Please show your <strong>Digital Pass</strong> to the admin at the desk to complete checkout. 
+                              You can take the component out of the lab once the admin has processed the checkout.
+                            </p>
+                          </div>
                         ) : (
                           <button
                             onClick={() => handleCollectClick(res.reservation_id)}
@@ -547,7 +595,7 @@ export default function MyReservations() {
                           )}
                           {(res.status === 'BORROWED' || res.status === 'Active') && (
                             <button
-                              onClick={() => { setReturnResId(res.reservation_id); setReturnModalOpen(true); }}
+                              onClick={() => handleReturnClick(res.reservation_id)}
                               className="w-full py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:border-amber-500 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
                             >
                               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 15v-1a4 4 0 00-4-4H8m0 0l3 3m-3-3l3-3m9 14V5a2 2 0 00-2-2H6a2 2 0 00-2 2v16l4-2 4 2 4-2 4 2z" /></svg>
@@ -631,10 +679,10 @@ export default function MyReservations() {
                 exit={{ scale: 0.95, opacity: 0 }}
                 className="bg-zinc-950 border border-zinc-800 p-8 rounded-3xl max-w-sm w-full shadow-2xl"
               >
-                <h3 className="text-2xl font-black text-white mb-2">Return Condition</h3>
-                <p className="text-sm text-zinc-400 mb-6">Please honestly report the current condition of the component.</p>
+                <h3 className="text-2xl font-black text-white mb-2">Return Component</h3>
+                <p className="text-sm text-zinc-400 mb-6">Please honestly report the current condition and capture a geotagged proof photo.</p>
 
-                <div className="space-y-3 mb-8">
+                <div className="space-y-3 mb-6">
                   <label className={`flex items-center gap-4 p-4 border rounded-xl cursor-pointer transition-all ${returnCondition === 'WORKING' ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-800 hover:bg-zinc-900'}`}>
                     <input type="radio" name="condition" value="WORKING" checked={returnCondition === 'WORKING'} onChange={() => setReturnCondition('WORKING')} className="text-emerald-500 focus:ring-emerald-500 w-4 h-4" />
                     <span className="text-emerald-400 font-bold text-sm">Working Perfectly</span>
@@ -649,11 +697,57 @@ export default function MyReservations() {
                   </label>
                 </div>
 
+                {/* Return Proof Photo Capture */}
+                <div className="mb-8">
+                  {uploadedReturnProof ? (
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-4 py-3 rounded-xl text-xs font-bold">
+                        <span className="flex items-center gap-1.5">
+                          ✓ Return Proof Photo Captured
+                        </span>
+                        <button 
+                          onClick={() => { setPreviewImgUrl(uploadedReturnProof.imageUrl); setPreviewModalOpen(true); }}
+                          className="underline hover:text-emerald-300 font-black cursor-pointer"
+                        >
+                          View Photo
+                        </button>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          setUploadType('RETURN');
+                          if (fileInputRef.current) fileInputRef.current.click();
+                        }}
+                        className="text-[10px] text-zinc-500 hover:text-zinc-400 font-mono text-center underline"
+                      >
+                        Retake Photo
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setUploadType('RETURN');
+                        if (fileInputRef.current) fileInputRef.current.click();
+                      }}
+                      className="w-full py-3 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:border-cyan-500 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      Capture Return Geotag Photo
+                    </button>
+                  )}
+                </div>
+
                 <div className="flex gap-3">
                   <button onClick={() => setReturnModalOpen(false)} className="flex-1 py-3 rounded-xl text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 transition-colors font-bold text-sm">
                     Cancel
                   </button>
-                  <button onClick={submitReturn} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-black transition-colors text-sm shadow-[0_0_15px_rgba(245,158,11,0.3)]">
+                  <button 
+                    onClick={submitReturn} 
+                    disabled={!uploadedReturnProof}
+                    className="flex-1 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-black transition-colors text-sm shadow-[0_0_15px_rgba(245,158,11,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
                     Submit Return
                   </button>
                 </div>
@@ -691,36 +785,7 @@ export default function MyReservations() {
             </motion.div>
           )}
         </AnimatePresence>
-        {/* Image Preview Modal */}
-        <AnimatePresence>
-          {previewModalOpen && previewImgUrl && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
-              onClick={() => setPreviewModalOpen(false)}
-            >
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0, y: 20 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                onClick={(e) => e.stopPropagation()}
-                className="bg-zinc-900 p-6 rounded-2xl max-w-xl w-full shadow-[0_0_30px_rgba(16,185,129,0.4)]"
-              >
-                <button
-                  onClick={() => setPreviewModalOpen(false)}
-                  className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-                <img src={previewImgUrl} alt="Collection Proof" className="w-full rounded" />
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+
 
         {/* QR Code Digital Pass Modal */}
         <AnimatePresence>

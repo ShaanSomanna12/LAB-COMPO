@@ -36,6 +36,7 @@ export async function GET() {
       quantity: res.quantity || 1,
       collectionTime: res.collection_time || null,
       geotagImageUrl: res.geotag_image_url || null,
+      afterImgUrl: res.after_img_url || null,
       latitude: res.latitude || null,
       longitude: res.longitude || null
     }));
@@ -67,10 +68,14 @@ export async function PATCH(request: Request) {
     }
     
     if (geotag) {
-      updates.geotag_image_url = geotag.imageUrl;
+      if (status === 'PENDING_RETURN') {
+        updates.after_img_url = geotag.imageUrl;
+      } else {
+        updates.geotag_image_url = geotag.imageUrl;
+        updates.borrowed_at = new Date().toISOString();
+      }
       updates.latitude = geotag.latitude;
       updates.longitude = geotag.longitude;
-      updates.borrowed_at = new Date().toISOString();
     }
     
     const { data, error } = await supabase
@@ -91,7 +96,7 @@ export async function PATCH(request: Request) {
          const dueDate = new Date(data.due_date);
          
          const isLate = returnedAt > dueDate;
-         const isDamaged = updates.is_damaged === true || (updates.return_condition && updates.return_condition !== 'WORKING');
+         const isDamaged = updates.is_damaged === true || data.is_damaged === true || (updates.return_condition && updates.return_condition !== 'WORKING') || (data.return_condition && data.return_condition !== 'WORKING');
          
          if (isDamaged) {
            scoreChange -= 20;
