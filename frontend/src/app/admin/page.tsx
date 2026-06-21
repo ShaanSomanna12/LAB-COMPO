@@ -238,13 +238,13 @@ export default function AdminDashboard() {
     const targetMonth = parseInt(monthStr.split('-')[1], 10) - 1;
 
     const monthReqs = requests.filter(r => {
-      if (!r.requestDate || r.department !== adminDept) return false;
+      if (!r.requestDate || r.department !== adminDept || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return false;
       const d = new Date(r.requestDate);
       return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
     });
 
     const monthLabReqs = labRequests.filter(r => {
-      if (!r.accessDate || r.department !== adminDept) return false;
+      if (!r.accessDate || r.department !== adminDept || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return false;
       const d = new Date(r.accessDate);
       return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
     });
@@ -254,13 +254,13 @@ export default function AdminDashboard() {
     const prevMonth = prevDate.getMonth();
 
     const prevMonthReqs = requests.filter(r => {
-      if (!r.requestDate || r.department !== adminDept) return false;
+      if (!r.requestDate || r.department !== adminDept || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return false;
       const d = new Date(r.requestDate);
       return d.getFullYear() === prevYear && d.getMonth() === prevMonth;
     });
 
     const prevMonthLabReqs = labRequests.filter(r => {
-      if (!r.accessDate || r.department !== adminDept) return false;
+      if (!r.accessDate || r.department !== adminDept || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return false;
       const d = new Date(r.accessDate);
       return d.getFullYear() === prevYear && d.getMonth() === prevMonth;
     });
@@ -289,8 +289,8 @@ export default function AdminDashboard() {
     for (let day = 1; day <= daysInMonth; day++) {
       const datePrefix = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
-      const reqsCount = requests.filter(r => r.requestDate === datePrefix && r.department === adminDept).length;
-      const labsCount = labRequests.filter(r => r.accessDate === datePrefix && r.department === adminDept).length;
+      const reqsCount = requests.filter(r => r.requestDate === datePrefix && r.department === adminDept && (!scannedUsnFilter || r.usn === scannedUsnFilter)).length;
+      const labsCount = labRequests.filter(r => r.accessDate === datePrefix && r.department === adminDept && (!scannedUsnFilter || r.usn === scannedUsnFilter)).length;
 
       dailyData.push({
         day,
@@ -310,7 +310,7 @@ export default function AdminDashboard() {
     const activities: any[] = [];
 
     requests.forEach(r => {
-      if (!r.requestDate || r.department !== adminDept) return;
+      if (!r.requestDate || r.department !== adminDept || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return;
       const d = new Date(r.requestDate);
       if (d.getFullYear() === targetYear && d.getMonth() === targetMonth) {
         activities.push({
@@ -326,7 +326,7 @@ export default function AdminDashboard() {
     });
 
     labRequests.forEach(l => {
-      if (!l.accessDate || l.department !== adminDept) return;
+      if (!l.accessDate || l.department !== adminDept || (scannedUsnFilter && l.usn !== scannedUsnFilter)) return;
       const d = new Date(l.accessDate);
       if (d.getFullYear() === targetYear && d.getMonth() === targetMonth) {
         activities.push({
@@ -744,10 +744,16 @@ export default function AdminDashboard() {
             <div className="flex items-center gap-4">
               <h2 className="text-2xl font-bold">{adminDept} Pending & Active Requests</h2>
               {scannedUsnFilter && (
-                <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+                <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider animate-in fade-in duration-200">
                   Filter: {scannedUsnFilter}
-                  <button onClick={() => setScannedUsnFilter(null)} className="hover:text-emerald-300 ml-1">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  <button 
+                    onClick={() => setScannedUsnFilter(null)} 
+                    className="text-red-500 hover:text-red-400 bg-red-500/10 hover:bg-red-500/20 p-0.5 rounded-full transition-colors ml-1 inline-flex items-center justify-center font-bold"
+                    title="Clear filter and show all"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
                   </button>
                 </div>
               )}
@@ -922,7 +928,23 @@ export default function AdminDashboard() {
       {adminDept && activeTab === 'lab-access' && (
         <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-300">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold">{adminDept} Lab Workspace Access Requests</h2>
+            <div className="flex items-center gap-4">
+              <h2 className="text-2xl font-bold">{adminDept} Lab Workspace Access Requests</h2>
+              {scannedUsnFilter && (
+                <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider animate-in fade-in duration-200">
+                  Filter: {scannedUsnFilter}
+                  <button 
+                    onClick={() => setScannedUsnFilter(null)} 
+                    className="text-red-500 hover:text-red-400 bg-red-500/10 hover:bg-red-500/20 p-0.5 rounded-full transition-colors ml-1 inline-flex items-center justify-center font-bold"
+                    title="Clear filter and show all"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+            </div>
             <button
               onClick={fetchLabRequests}
               className="px-4 py-2 bg-zinc-900 border border-zinc-800 text-xs font-semibold rounded-lg hover:bg-zinc-800 text-zinc-300 flex items-center gap-1.5 transition"
@@ -947,12 +969,12 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800">
-                {labRequests.filter(r => r.department === adminDept).length === 0 && (
+                {labRequests.filter(r => r.department === adminDept && (!scannedUsnFilter || r.usn === scannedUsnFilter)).length === 0 && (
                   <tr>
                     <td colSpan={6} className="px-6 py-8 text-center text-zinc-500">No lab access requests found.</td>
                   </tr>
                 )}
-                {labRequests.filter(req => req.department === adminDept).map(req => {
+                {labRequests.filter(req => req.department === adminDept && (!scannedUsnFilter || req.usn === scannedUsnFilter)).map(req => {
                   return (
                     <tr key={req.id} className="hover:bg-zinc-800/30 transition-colors">
                       <td className="px-6 py-4 font-mono text-zinc-300">{req.id}</td>
@@ -1249,9 +1271,25 @@ export default function AdminDashboard() {
 
           {/* Controls */}
           <div className="flex justify-between items-center bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
-            <div>
-              <h3 className="font-bold text-lg text-white">Monthly Updates Analytics</h3>
-              <p className="text-xs text-zinc-400 mt-0.5">Historical activity performance and transaction summaries.</p>
+            <div className="flex items-center gap-4">
+              <div>
+                <h3 className="font-bold text-lg text-white">Monthly Updates Analytics</h3>
+                <p className="text-xs text-zinc-400 mt-0.5">Historical activity performance and transaction summaries.</p>
+              </div>
+              {scannedUsnFilter && (
+                <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider animate-in fade-in duration-200 h-fit">
+                  Filter: {scannedUsnFilter}
+                  <button 
+                    onClick={() => setScannedUsnFilter(null)} 
+                    className="text-red-500 hover:text-red-400 bg-red-500/10 hover:bg-red-500/20 p-0.5 rounded-full transition-colors ml-1 inline-flex items-center justify-center font-bold"
+                    title="Clear filter and show all"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              )}
             </div>
             <div className="flex gap-3">
               <select
@@ -1626,7 +1664,23 @@ export default function AdminDashboard() {
       {adminDept && activeTab === 'section-tracking' && (
         <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-300">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold">{adminDept} Section Tracking</h2>
+            <div className="flex items-center gap-4">
+              <h2 className="text-2xl font-bold">{adminDept} Section Tracking</h2>
+              {scannedUsnFilter && (
+                <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider animate-in fade-in duration-200">
+                  Filter: {scannedUsnFilter}
+                  <button 
+                    onClick={() => setScannedUsnFilter(null)} 
+                    className="text-red-500 hover:text-red-400 bg-red-500/10 hover:bg-red-500/20 p-0.5 rounded-full transition-colors ml-1 inline-flex items-center justify-center font-bold"
+                    title="Clear filter and show all"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="flex gap-3">
               <input
                 type="text"
@@ -1713,7 +1767,7 @@ export default function AdminDashboard() {
                 {(() => {
                   const currentStatuses = ['PENDING', 'APPROVED', 'Pending HOD', 'Ready for Collection', 'Active', 'BORROWED', 'PENDING_RETURN', 'PENDING_COLLECTION'];
                   const groupedRequests = requests
-                    .filter(req => req.department === adminDept && req.studentDepartment === studentDeptFilter && req.section === sectionFilter)
+                    .filter(req => req.department === adminDept && req.studentDepartment === studentDeptFilter && req.section === sectionFilter && (!scannedUsnFilter || req.usn === scannedUsnFilter))
                     .filter(req => sectionTrackingTab === 'CURRENT' ? currentStatuses.includes(req.status) : !currentStatuses.includes(req.status))
                     .filter(req => {
                       if (!sectionStartDate && !sectionEndDate) return true;

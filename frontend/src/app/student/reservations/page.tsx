@@ -17,6 +17,7 @@ interface Reservation {
   geotag_image_url: string | null;
   latitude?: number;
   longitude?: number;
+  borrowed_at?: string | null;
   components: {
     name: string;
     department: string;
@@ -31,6 +32,7 @@ export default function MyReservations() {
   const [isLoading, setIsLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [studentUsn, setStudentUsn] = useState<string | null>(null);
+  const [addresses, setAddresses] = useState<Record<string, string>>({});
 
   // Tab State
   const [activeTab, setActiveTab] = useState<'CURRENT' | 'COMPLETED'>('CURRENT');
@@ -83,6 +85,7 @@ export default function MyReservations() {
             geotag_image_url,
             latitude,
             longitude,
+            borrowed_at,
             components!inner(name, department, lab_location, value_tier)
           `)
           .eq('user_id', userData.user_id)
@@ -96,6 +99,72 @@ export default function MyReservations() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
+    const resolveAddresses = async () => {
+      const newAddresses = { ...addresses };
+      let changed = false;
+
+      for (const res of reservations) {
+        if (res.latitude && res.longitude) {
+          const cacheKey = `${res.latitude},${res.longitude}`;
+          if (!newAddresses[cacheKey]) {
+            try {
+              const response = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${res.latitude}&lon=${res.longitude}`,
+                {
+                  headers: {
+                    'User-Agent': 'Phoenix-Lab-Portal/1.0'
+                  }
+                }
+              );
+              if (response.ok) {
+                const data = await response.json();
+                const addr = data.address;
+                let shortAddr = '';
+                if (addr) {
+                  const parts = [];
+                  if (addr.amenity || addr.college || addr.building || addr.office) {
+                    parts.push(addr.amenity || addr.college || addr.building || addr.office);
+                  }
+                  if (addr.road) parts.push(addr.road);
+                  if (addr.suburb || addr.neighbourhood) parts.push(addr.suburb || addr.neighbourhood);
+                  if (addr.city || addr.town || addr.village) parts.push(addr.city || addr.town || addr.village);
+
+                  shortAddr = parts.length > 0 ? parts.join(', ') : (data.display_name || `${res.latitude.toFixed(5)}, ${res.longitude.toFixed(5)}`);
+                } else {
+                  shortAddr = data.display_name || `${res.latitude.toFixed(5)}, ${res.longitude.toFixed(5)}`;
+                }
+                newAddresses[cacheKey] = shortAddr;
+                changed = true;
+              } else {
+                newAddresses[cacheKey] = `Location (${res.latitude.toFixed(5)}, ${res.longitude.toFixed(5)})`;
+                changed = true;
+              }
+            } catch (err) {
+              console.error("Geocoding error:", err);
+              newAddresses[cacheKey] = `Location (${res.latitude.toFixed(5)}, ${res.longitude.toFixed(5)})`;
+              changed = true;
+            }
+          }
+        }
+      }
+
+      if (changed) {
+        setAddresses(newAddresses);
+      }
+    };
+
+    if (reservations.length > 0) {
+      resolveAddresses();
+    }
+  }, [reservations]);
+
+  const getAddress = (lat?: number, lon?: number) => {
+    if (!lat || !lon) return '';
+    const key = `${lat},${lon}`;
+    return addresses[key] || `Resolving location... (${lat.toFixed(5)}, ${lon.toFixed(5)})`;
   };
 
   const handleCollectClick = (resId: number) => {
@@ -205,6 +274,7 @@ export default function MyReservations() {
       case 'PENDING': return 'text-orange-300 bg-orange-400/10 border-orange-400/30';
       case 'APPROVED': return 'text-emerald-300 bg-emerald-400/10 border-emerald-400/30';
       case 'REJECTED': return 'text-rose-300 bg-rose-400/10 border-rose-400/30';
+      case 'Active':
       case 'BORROWED': return 'text-cyan-300 bg-cyan-400/10 border-cyan-400/30';
       case 'PENDING_RETURN': return 'text-amber-300 bg-amber-400/10 border-amber-400/30';
       case 'RETURNED': return 'text-zinc-300 bg-zinc-400/10 border-zinc-400/30';
@@ -214,7 +284,7 @@ export default function MyReservations() {
   };
 
   // Group Reservations
-  const currentStatuses = ['PENDING', 'APPROVED', 'BORROWED', 'PENDING_ADMIN', 'Ready for Collection', 'PENDING_RETURN', 'PENDING_COLLECTION'];
+  const currentStatuses = ['PENDING', 'APPROVED', 'BORROWED', 'Active', 'PENDING_ADMIN', 'Ready for Collection', 'PENDING_RETURN', 'PENDING_COLLECTION'];
   const currentReservations = reservations.filter(r => currentStatuses.includes(r.status));
   const completedReservations = reservations.filter(r => !currentStatuses.includes(r.status));
 
@@ -262,25 +332,25 @@ export default function MyReservations() {
           </div>
 
           <div className="flex items-center gap-4 justify-end">
-            <button 
-                onClick={() => router.push('/student/dashboard')}
-                disabled={!studentUsn}
-                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-black uppercase tracking-wider rounded-xl transition duration-300 shadow-[0_0_20px_rgba(16,185,129,0.25)] disabled:opacity-50 mr-3"
+            <button
+              onClick={() => setShowQRModal(true)}
+              disabled={!studentUsn}
+              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-black uppercase tracking-wider rounded-xl transition duration-300 shadow-[0_0_20px_rgba(16,185,129,0.25)] disabled:opacity-50"
             >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                Back
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+              </svg>
+              DIGITAL PASS
             </button>
-            <button 
-                onClick={() => setShowQRModal(true)}
-                disabled={!studentUsn}
-                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-black uppercase tracking-wider rounded-xl transition duration-300 shadow-[0_0_20px_rgba(16,185,129,0.25)] disabled:opacity-50"
+            <button
+              onClick={() => router.push('/student/dashboard')}
+              disabled={!studentUsn}
+              className="flex items-center justify-center w-12 h-12 border border-rose-500/20 hover:border-rose-500/50 bg-rose-500/5 hover:bg-rose-500/10 text-rose-500 rounded-xl transition-all duration-300 shadow-[0_0_15px_rgba(244,63,94,0.05)] hover:shadow-[0_0_20px_rgba(244,63,94,0.15)] disabled:opacity-50"
+              aria-label="Back to Dashboard"
             >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                </svg>
-                QR
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           </div>
         </div>
@@ -289,21 +359,19 @@ export default function MyReservations() {
         <div className="flex gap-2 mb-8 bg-zinc-900/40 p-1.5 rounded-2xl w-fit border border-zinc-800/50 backdrop-blur-md">
           <button
             onClick={() => setActiveTab('CURRENT')}
-            className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
-              activeTab === 'CURRENT' 
-                ? 'bg-zinc-800 text-white shadow-md' 
-                : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
-            }`}
+            className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'CURRENT'
+              ? 'bg-zinc-800 text-white shadow-md'
+              : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+              }`}
           >
             Current Requests ({currentReservations.length})
           </button>
           <button
             onClick={() => setActiveTab('COMPLETED')}
-            className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
-              activeTab === 'COMPLETED' 
-                ? 'bg-zinc-800 text-white shadow-md' 
-                : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
-            }`}
+            className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'COMPLETED'
+              ? 'bg-zinc-800 text-white shadow-md'
+              : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+              }`}
           >
             Completed ({completedReservations.length})
           </button>
@@ -312,7 +380,7 @@ export default function MyReservations() {
         {/* Uploading Overlay */}
         <AnimatePresence>
           {uploading && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
             >
@@ -332,7 +400,7 @@ export default function MyReservations() {
             ))}
           </div>
         ) : displayedReservations.length === 0 ? (
-          <motion.div 
+          <motion.div
             key="empty-state"
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
             className="py-24 flex flex-col items-center justify-center border border-dashed border-zinc-800 rounded-3xl bg-zinc-950/50"
@@ -346,7 +414,7 @@ export default function MyReservations() {
           </motion.div>
         ) : (
           <AnimatePresence mode="wait">
-            <motion.div 
+            <motion.div
               key={activeTab}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -355,11 +423,11 @@ export default function MyReservations() {
               className="grid grid-cols-1 md:grid-cols-2 gap-6"
             >
               {displayedReservations.map((res, index) => (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.4, delay: index * 0.05 }}
-                  key={res.reservation_id} 
+                  key={res.reservation_id}
                   className="bg-zinc-900/40 backdrop-blur-md border border-zinc-800/60 hover:border-emerald-500/30 rounded-2xl overflow-hidden transition-all duration-300 flex flex-col shadow-lg hover:shadow-[0_0_30px_rgba(16,185,129,0.05)] relative"
                 >
                   <div className="p-6 flex-1 flex flex-col">
@@ -386,7 +454,7 @@ export default function MyReservations() {
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                           Requested
                         </span>
-                        <span className="text-zinc-300 font-medium">{new Date(res.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric'})}</span>
+                        <span className="text-zinc-300 font-medium">{new Date(res.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                       </div>
                       {res.due_date && (
                         <div className="flex items-center justify-between text-sm">
@@ -394,7 +462,7 @@ export default function MyReservations() {
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                             Due Date
                           </span>
-                          <span className="text-rose-400 font-medium">{new Date(res.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric'})}</span>
+                          <span className="text-rose-400 font-medium">{new Date(res.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                         </div>
                       )}
                       {res.project_title && (
@@ -446,7 +514,7 @@ export default function MyReservations() {
                             Collect & Upload Proof
                           </button>
                         )
-                      ) : (res.status === 'BORROWED') ? (
+                      ) : (res.status === 'BORROWED' || res.status === 'Active') ? (
                         <div className="flex flex-col gap-2">
                           {res.geotag_image_url && (
                             <button onClick={() => { setPreviewImgUrl(res.geotag_image_url); setPreviewModalOpen(true); }} className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 text-cyan-400 border border-zinc-800 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2">
@@ -457,11 +525,27 @@ export default function MyReservations() {
                             </button>
                           )}
                           {res.latitude && res.longitude && (
-                            <div className="text-xs text-cyan-400 mt-1">
-                              Location: {res.latitude.toFixed(5)}, {res.longitude.toFixed(5)}
+                            <div className="text-xs text-cyan-400 mt-1.5 flex flex-col gap-1 bg-zinc-950/40 p-2.5 rounded-lg border border-zinc-800/40 text-left">
+                              <div className="flex items-start gap-2">
+                                <svg className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                <span className="leading-tight font-medium text-[11px] text-zinc-300">
+                                  {getAddress(res.latitude, res.longitude)}
+                                </span>
+                              </div>
+                              {res.borrowed_at && (
+                                <div className="flex items-center gap-2 mt-1 pt-1 border-t border-zinc-900/60 text-[10px] text-zinc-500 font-mono">
+                                  <svg className="w-3.5 h-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  Collected: {new Date(res.borrowed_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                                </div>
+                              )}
                             </div>
                           )}
-                          {res.status === 'BORROWED' && (
+                          {(res.status === 'BORROWED' || res.status === 'Active') && (
                             <button
                               onClick={() => { setReturnResId(res.reservation_id); setReturnModalOpen(true); }}
                               className="w-full py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:border-amber-500 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
@@ -478,8 +562,8 @@ export default function MyReservations() {
                             Awaiting Admin Confirmation
                           </div>
                           {res.geotag_image_url && (
-                            <button 
-                              onClick={() => { setPreviewImgUrl(res.geotag_image_url); setPreviewModalOpen(true); }} 
+                            <button
+                              onClick={() => { setPreviewImgUrl(res.geotag_image_url); setPreviewModalOpen(true); }}
                               className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 text-cyan-400 border border-zinc-800 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
                             >
                               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -489,8 +573,24 @@ export default function MyReservations() {
                             </button>
                           )}
                           {res.latitude && res.longitude && (
-                            <div className="text-[10px] text-zinc-500 font-mono text-center">
-                              Coordinates: {res.latitude.toFixed(5)}, {res.longitude.toFixed(5)}
+                            <div className="text-xs text-cyan-400 mt-1.5 flex flex-col gap-1 bg-zinc-950/40 p-2.5 rounded-lg border border-zinc-800/40 text-left">
+                              <div className="flex items-start gap-2">
+                                <svg className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                <span className="leading-tight font-medium text-[11px] text-zinc-300">
+                                  {getAddress(res.latitude, res.longitude)}
+                                </span>
+                              </div>
+                              {res.borrowed_at && (
+                                <div className="flex items-center gap-2 mt-1 pt-1 border-t border-zinc-900/60 text-[10px] text-zinc-500 font-mono">
+                                  <svg className="w-3.5 h-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  Collected: {new Date(res.borrowed_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
@@ -521,11 +621,11 @@ export default function MyReservations() {
         {/* Return Condition Modal */}
         <AnimatePresence>
           {returnModalOpen && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
             >
-              <motion.div 
+              <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
@@ -533,7 +633,7 @@ export default function MyReservations() {
               >
                 <h3 className="text-2xl font-black text-white mb-2">Return Condition</h3>
                 <p className="text-sm text-zinc-400 mb-6">Please honestly report the current condition of the component.</p>
-                
+
                 <div className="space-y-3 mb-8">
                   <label className={`flex items-center gap-4 p-4 border rounded-xl cursor-pointer transition-all ${returnCondition === 'WORKING' ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-800 hover:bg-zinc-900'}`}>
                     <input type="radio" name="condition" value="WORKING" checked={returnCondition === 'WORKING'} onChange={() => setReturnCondition('WORKING')} className="text-emerald-500 focus:ring-emerald-500 w-4 h-4" />
@@ -561,96 +661,96 @@ export default function MyReservations() {
             </motion.div>
           )}
         </AnimatePresence>
-{/* Image Preview Modal */}
-<AnimatePresence>
-  {previewModalOpen && previewImgUrl && (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
-      onClick={() => setPreviewModalOpen(false)}
-    >
-      <motion.div
-        initial={{ scale: 0.9, opacity: 0, y: 20 }}
-        animate={{ scale: 1, opacity: 1, y: 0 }}
-        exit={{ scale: 0.9, opacity: 0, y: 20 }}
-        onClick={(e) => e.stopPropagation()}
-        className="bg-zinc-900 p-6 rounded-2xl max-w-xl w-full shadow-[0_0_30px_rgba(16,185,129,0.4)]"
-      >
-        <button
-          onClick={() => setPreviewModalOpen(false)}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-        <img src={previewImgUrl} alt="Collection Proof" className="w-full rounded" />
-      </motion.div>
-    </motion.div>
-  )}
-</AnimatePresence>
-{/* Image Preview Modal */}
-<AnimatePresence>
-  {previewModalOpen && previewImgUrl && (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
-      onClick={() => setPreviewModalOpen(false)}
-    >
-      <motion.div
-        initial={{ scale: 0.9, opacity: 0, y: 20 }}
-        animate={{ scale: 1, opacity: 1, y: 0 }}
-        exit={{ scale: 0.9, opacity: 0, y: 20 }}
-        onClick={(e) => e.stopPropagation()}
-        className="bg-zinc-900 p-6 rounded-2xl max-w-xl w-full shadow-[0_0_30px_rgba(16,185,129,0.4)]"
-      >
-        <button
-          onClick={() => setPreviewModalOpen(false)}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-        <img src={previewImgUrl} alt="Collection Proof" className="w-full rounded" />
-      </motion.div>
-    </motion.div>
-  )}
-</AnimatePresence>
+        {/* Image Preview Modal */}
+        <AnimatePresence>
+          {previewModalOpen && previewImgUrl && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
+              onClick={() => setPreviewModalOpen(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-zinc-900 p-6 rounded-2xl max-w-xl w-full shadow-[0_0_30px_rgba(16,185,129,0.4)]"
+              >
+                <button
+                  onClick={() => setPreviewModalOpen(false)}
+                  className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+                <img src={previewImgUrl} alt="Collection Proof" className="w-full rounded" />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {/* Image Preview Modal */}
+        <AnimatePresence>
+          {previewModalOpen && previewImgUrl && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
+              onClick={() => setPreviewModalOpen(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-zinc-900 p-6 rounded-2xl max-w-xl w-full shadow-[0_0_30px_rgba(16,185,129,0.4)]"
+              >
+                <button
+                  onClick={() => setPreviewModalOpen(false)}
+                  className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+                <img src={previewImgUrl} alt="Collection Proof" className="w-full rounded" />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* QR Code Digital Pass Modal */}
         <AnimatePresence>
           {showQRModal && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4" 
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4"
               onClick={() => setShowQRModal(false)}
             >
-              <motion.div 
+              <motion.div
                 initial={{ scale: 0.9, opacity: 0, y: 20 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
                 exit={{ scale: 0.9, opacity: 0, y: 20 }}
                 onClick={(e) => e.stopPropagation()}
                 className="bg-white p-8 rounded-[2rem] max-w-sm w-full shadow-[0_0_50px_rgba(16,185,129,0.3)] flex flex-col items-center text-center relative"
               >
-                <button 
+                <button
                   onClick={() => setShowQRModal(false)}
                   className="absolute top-3 right-3 text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-2 rounded-full transition-colors"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
-                
+
                 <h3 className="text-3xl font-black text-black mb-1 tracking-tighter">DIGITAL PASS</h3>
                 <p className="text-zinc-500 font-mono text-[10px] uppercase tracking-widest mb-8">Show this QR to Admin</p>
-                
+
                 <div className="bg-white p-5 border-4 border-dashed border-emerald-500/30 rounded-3xl mb-8 flex justify-center items-center">
                   {studentUsn && (
-                    <QRCode 
-                      value={studentUsn} 
+                    <QRCode
+                      value={studentUsn}
                       size={200}
                       level="H"
                       fgColor="#000000"
@@ -658,7 +758,7 @@ export default function MyReservations() {
                     />
                   )}
                 </div>
-                
+
                 <div className="w-full bg-zinc-100 rounded-2xl p-5 border border-zinc-200 shadow-inner">
                   <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Student USN</p>
                   <p className="text-2xl font-mono font-black text-black tracking-tight">{studentUsn}</p>

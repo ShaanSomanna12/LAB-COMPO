@@ -117,10 +117,13 @@ export default function StudentCheckout() {
   };
 
   const updateCartItemQty = (id: string | number, newQty: number, item: CartItem) => {
+    if (newQty < 1) {
+      setCart(prev => prev.filter(i => i.id !== id));
+      return;
+    }
     const isLowTier = item.value_tier === 'LOW';
     const maxQty = isLowTier ? Math.min(3, item.available) : item.available;
     
-    if (newQty < 1) newQty = 1;
     if (newQty > maxQty) newQty = maxQty;
 
     setCart(prev => prev.map(i => i.id === id ? { ...i, requestedQty: newQty } : i));
@@ -682,7 +685,19 @@ export default function StudentCheckout() {
                         )}
                       </div>
                       <div className="flex-grow min-w-0">
-                        <p className="text-sm font-bold text-zinc-200 truncate">{item.name}</p>
+                        <div className="flex justify-between items-start gap-2">
+                          <p className="text-sm font-bold text-zinc-200 truncate">{item.name}</p>
+                          <button 
+                            type="button"
+                            onClick={() => setCart(prev => prev.filter(i => i.id !== item.id))}
+                            className="text-zinc-500 hover:text-rose-500 transition-colors p-1"
+                            title="Remove item"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
                         <div className="flex justify-between items-center mt-1.5 gap-2">
                           <span className="px-1.5 py-0.5 bg-indigo-950/30 text-indigo-400 border border-indigo-900/30 text-[8px] font-mono font-bold rounded uppercase">
                             {item.department}
