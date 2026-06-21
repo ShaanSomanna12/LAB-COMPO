@@ -148,14 +148,27 @@ export default function StudentAuth() {
           if (userData.otp_code !== otp) throw new Error("Nah, wrong code 💀 Try again.");
           if (new Date(userData.otp_expiry) < new Date()) throw new Error("Bruh, that code expired. ⏳");
 
-          const { error: authError } = await supabase.auth.signUp({
+          const { data: authData, error: authError } = await supabase.auth.signUp({
             email: email,
             password: password,
           });
 
           if (authError) throw authError;
 
-          await supabase.from('users').update({ otp_code: null, otp_expiry: null }).eq('usn', formattedUSN);
+          const signupRes = await fetch('/api/complete-signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              usn: formattedUSN,
+              email: email,
+              userId: authData.user?.id
+            })
+          });
+
+          if (!signupRes.ok) {
+            const errData = await signupRes.json().catch(() => ({}));
+            throw new Error(errData.error || 'Failed to complete registration database updates');
+          }
 
           setMessage("You're in! 🎉 Booting up the dashboard...");
           window.location.href = '/student/dashboard';
@@ -185,7 +198,7 @@ export default function StudentAuth() {
         window.location.href = '/student/dashboard';
       }
     } catch (error: any) {
-      setMessage(`L + Ratio: ${error.message}`);
+      setMessage(`Error: ${error.message}`);
     }
   };
 
@@ -217,7 +230,7 @@ export default function StudentAuth() {
           
           {/* Dynamic Message Box */}
           {message && (
-            <div className={`mb-6 p-4 rounded-2xl text-sm font-semibold backdrop-blur-md transition-all duration-300 border ${message.includes('L + Ratio') || message.includes('yikes')
+            <div className={`mb-6 p-4 rounded-2xl text-sm font-semibold backdrop-blur-md transition-all duration-300 border ${message.includes('Error') || message.includes('yikes')
               ? 'bg-red-500/10 border-red-500/30 text-red-400'
               : message.includes('W!') || message.includes('in!') || message.includes('successful!')
                 ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
@@ -310,7 +323,7 @@ export default function StudentAuth() {
                     Drop the 6-digit code here 👀
                   </label>
                   <p className="text-zinc-500 text-xs text-center mb-5">
-                    Sent to your registered email.
+                    Sent to your registered email. (Check your spam folder as well!)
                   </p>
                   <input
                     id="otp" name="otp" type="text" maxLength={6} required

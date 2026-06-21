@@ -34,7 +34,10 @@ export async function GET() {
       returnedAt: res.returned_at,
       valueTier: res.components?.value_tier,
       quantity: res.quantity || 1,
-      collectionTime: res.collection_time || null
+      collectionTime: res.collection_time || null,
+      geotagImageUrl: res.geotag_image_url || null,
+      latitude: res.latitude || null,
+      longitude: res.longitude || null
     }));
 
     return NextResponse.json(formattedData);

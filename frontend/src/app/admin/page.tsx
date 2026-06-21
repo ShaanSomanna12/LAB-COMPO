@@ -8,7 +8,7 @@ import { Scanner } from '@yudiel/react-qr-scanner';
 import { siteConfig } from '@/config/site';
 
 
-type RequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'Pending HOD' | 'Ready for Collection' | 'Active' | 'Returned' | 'RETURNED' | 'BORROWED' | 'PENDING_RETURN';
+type RequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'Pending HOD' | 'Ready for Collection' | 'Active' | 'Returned' | 'RETURNED' | 'BORROWED' | 'PENDING_RETURN' | 'PENDING_COLLECTION';
 
 interface RequestItem {
   id: string;
@@ -25,6 +25,9 @@ interface RequestItem {
   valueTier?: string;
   quantity?: number;
   collectionTime?: string;
+  geotagImageUrl?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 interface InventoryItem {
@@ -144,6 +147,11 @@ export default function AdminDashboard() {
   const [notices, setNotices] = useState<any[]>([]);
   const [newNoticeMsg, setNewNoticeMsg] = useState('');
   const [newNoticeType, setNewNoticeType] = useState('info');
+
+  const [previewImgUrl, setPreviewImgUrl] = useState<string | null>(null);
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [previewLatitude, setPreviewLatitude] = useState<number | null>(null);
+  const [previewLongitude, setPreviewLongitude] = useState<number | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -778,7 +786,7 @@ export default function AdminDashboard() {
               </thead>
               <tbody className="divide-y divide-zinc-800">
                 {(() => {
-                  const currentStatuses = ['PENDING', 'APPROVED', 'Pending HOD', 'Ready for Collection', 'Active', 'BORROWED', 'PENDING_RETURN'];
+                  const currentStatuses = ['PENDING', 'APPROVED', 'Pending HOD', 'Ready for Collection', 'Active', 'BORROWED', 'PENDING_RETURN', 'PENDING_COLLECTION'];
                   const groupedRequests = requests
                     .filter(r => r.department === adminDept && (!scannedUsnFilter || r.usn === scannedUsnFilter))
                     .filter(req => workflowTab === 'CURRENT' ? currentStatuses.includes(req.status) : !currentStatuses.includes(req.status))
@@ -846,11 +854,12 @@ export default function AdminDashboard() {
                               <div className="flex items-center gap-5">
                                 <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest border ${req.status === 'PENDING' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
                                   req.status === 'APPROVED' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' :
-                                    (req.status === 'Active' || req.status === 'BORROWED') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                                      req.status === 'PENDING_RETURN' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                                        'bg-green-500/10 text-green-400 border-green-500/20'
+                                    req.status === 'PENDING_COLLECTION' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                                      (req.status === 'Active' || req.status === 'BORROWED') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                                        req.status === 'PENDING_RETURN' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                                          'bg-green-500/10 text-green-400 border-green-500/20'
                                   }`}>
-                                  {req.status}
+                                  {req.status === 'PENDING_COLLECTION' ? 'PENDING CHECKOUT' : req.status}
                                 </span>
                                 <div className="text-right space-x-2 flex-shrink-0 min-w-[140px] flex justify-end">
                                   {req.status === 'PENDING' && (
@@ -861,6 +870,33 @@ export default function AdminDashboard() {
                                   )}
                                   {req.status === 'APPROVED' && (
                                     <button onClick={() => handleCheckout(req.id)} className="px-4 py-1.5 bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-lg text-xs font-bold transition">Mark Check Out</button>
+                                  )}
+                                  {req.status === 'PENDING_COLLECTION' && (
+                                    <div className="flex gap-2 items-center">
+                                      {req.geotagImageUrl && (
+                                        <button 
+                                          onClick={() => {
+                                            setPreviewImgUrl(req.geotagImageUrl || null);
+                                            setPreviewLatitude(req.latitude || null);
+                                            setPreviewLongitude(req.longitude || null);
+                                            setPreviewModalOpen(true);
+                                          }}
+                                          className="px-3 py-1.5 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/30 rounded-lg text-xs font-bold transition flex items-center gap-1"
+                                        >
+                                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                          </svg>
+                                          View Proof
+                                        </button>
+                                      )}
+                                      <button 
+                                        onClick={() => handleCheckout(req.id)} 
+                                        className="px-4 py-1.5 bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-lg text-xs font-bold transition"
+                                      >
+                                        Approve Checkout
+                                      </button>
+                                    </div>
                                   )}
                                   {(req.status === 'Active' || req.status === 'BORROWED') && (
                                     <button onClick={() => handleReturn(req.id)} className="px-4 py-1.5 bg-zinc-800 text-white hover:bg-zinc-700 border border-zinc-700 rounded-lg text-xs font-bold transition">Mark Returned</button>
@@ -1675,7 +1711,7 @@ export default function AdminDashboard() {
               </thead>
               <tbody className="divide-y divide-zinc-800">
                 {(() => {
-                  const currentStatuses = ['PENDING', 'APPROVED', 'Pending HOD', 'Ready for Collection', 'Active', 'BORROWED', 'PENDING_RETURN'];
+                  const currentStatuses = ['PENDING', 'APPROVED', 'Pending HOD', 'Ready for Collection', 'Active', 'BORROWED', 'PENDING_RETURN', 'PENDING_COLLECTION'];
                   const groupedRequests = requests
                     .filter(req => req.department === adminDept && req.studentDepartment === studentDeptFilter && req.section === sectionFilter)
                     .filter(req => sectionTrackingTab === 'CURRENT' ? currentStatuses.includes(req.status) : !currentStatuses.includes(req.status))
@@ -1754,7 +1790,7 @@ export default function AdminDashboard() {
                                     {isUnreturned ? (
                                       <span className="px-2 py-1 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded text-[10px] font-black uppercase tracking-widest flex items-center w-fit gap-1.5 shrink-0">
                                         <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
-                                        Unreturned ({req.status})
+                                        Unreturned ({req.status === 'PENDING_COLLECTION' ? 'PENDING CHECKOUT' : req.status})
                                       </span>
                                     ) : (
                                       <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded text-[10px] font-black uppercase tracking-widest shrink-0">
@@ -1801,7 +1837,7 @@ export default function AdminDashboard() {
           >
             <button
               onClick={() => setShowScannerModal(false)}
-              className="absolute top-4 right-4 text-zinc-500 hover:text-white transition-colors z-10 bg-black/50 p-1 rounded-full backdrop-blur-sm"
+              className="absolute top-3 right-3 text-red-500 hover:text-red-400 hover:bg-red-500/10 p-2 rounded-full transition-colors z-20"
             >
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
@@ -1836,6 +1872,43 @@ export default function AdminDashboard() {
                 <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-emerald-400 -mb-1 -mr-1"></div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Geotag Image Preview Modal */}
+      {previewModalOpen && previewImgUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in duration-200"
+          onClick={() => { setPreviewModalOpen(false); setPreviewImgUrl(null); }}
+        >
+          <div
+            className="bg-zinc-950 border border-zinc-800 p-6 rounded-3xl max-w-xl w-full shadow-[0_0_50px_rgba(6,182,212,0.15)] flex flex-col items-center text-center relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => { setPreviewModalOpen(false); setPreviewImgUrl(null); }}
+              className="absolute top-3 right-3 text-red-500 hover:text-red-400 hover:bg-red-500/10 p-2 rounded-full transition-colors z-20"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            
+            <div className="mb-4 text-left w-full border-b border-zinc-800 pb-3">
+              <h3 className="text-lg font-bold text-white uppercase tracking-wider">Geotagged Collection Proof</h3>
+              <p className="text-zinc-500 text-xs font-mono mt-0.5">VERIFIED VIA STUDENT GPS PORTAL</p>
+            </div>
+
+            <div className="w-full rounded-2xl overflow-hidden border border-zinc-800 bg-black aspect-video flex items-center justify-center relative">
+              <img src={previewImgUrl} alt="Collection Proof" className="max-w-full max-h-full object-contain" />
+            </div>
+
+            {previewLatitude && previewLongitude && (
+              <div className="mt-4 bg-zinc-900 border border-zinc-850 rounded-xl px-4 py-2 text-xs font-mono text-zinc-400 w-full text-center">
+                LATITUDE: {previewLatitude.toFixed(6)} • LONGITUDE: {previewLongitude.toFixed(6)}
+              </div>
+            )}
           </div>
         </div>
       )}

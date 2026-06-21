@@ -471,6 +471,29 @@ export default function MyReservations() {
                             </button>
                           )}
                         </div>
+                      ) : res.status === 'PENDING_COLLECTION' ? (
+                        <div className="flex flex-col gap-2">
+                          <div className="w-full py-3 bg-purple-500/5 text-purple-400 border border-purple-500/20 rounded-xl font-bold text-sm text-center flex items-center justify-center gap-2 cursor-wait">
+                            <svg className="w-4 h-4 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            Awaiting Admin Confirmation
+                          </div>
+                          {res.geotag_image_url && (
+                            <button 
+                              onClick={() => { setPreviewImgUrl(res.geotag_image_url); setPreviewModalOpen(true); }} 
+                              className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 text-cyan-400 border border-zinc-800 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                              </svg>
+                              View Geotag Image
+                            </button>
+                          )}
+                          {res.latitude && res.longitude && (
+                            <div className="text-[10px] text-zinc-500 font-mono text-center">
+                              Coordinates: {res.latitude.toFixed(5)}, {res.longitude.toFixed(5)}
+                            </div>
+                          )}
+                        </div>
                       ) : res.status === 'PENDING_RETURN' ? (
                         <div className="w-full py-3 bg-amber-500/5 text-amber-500/80 border border-amber-500/20 rounded-xl font-bold text-sm text-center flex items-center justify-center gap-2 cursor-wait">
                           <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
@@ -616,7 +639,7 @@ export default function MyReservations() {
               >
                 <button 
                   onClick={() => setShowQRModal(false)}
-                  className="absolute top-5 right-5 text-zinc-400 hover:text-black transition-colors bg-zinc-100 p-2 rounded-full"
+                  className="absolute top-3 right-3 text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-2 rounded-full transition-colors"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
@@ -624,7 +647,7 @@ export default function MyReservations() {
                 <h3 className="text-3xl font-black text-black mb-1 tracking-tighter">DIGITAL PASS</h3>
                 <p className="text-zinc-500 font-mono text-[10px] uppercase tracking-widest mb-8">Show this QR to Admin</p>
                 
-                <div className="bg-white p-5 border-4 border-dashed border-emerald-500/30 rounded-3xl mb-8">
+                <div className="bg-white p-5 border-4 border-dashed border-emerald-500/30 rounded-3xl mb-8 flex justify-center items-center">
                   {studentUsn && (
                     <QRCode 
                       value={studentUsn} 

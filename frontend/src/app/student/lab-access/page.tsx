@@ -14,6 +14,7 @@ export default function LabAccessCheckout() {
   const [timeSlot, setTimeSlot] = useState('12:30 PM - 01:30 PM');
   const [labName, setLabName] = useState('EDL Main Workspace');
   const [purpose, setPurpose] = useState('');
+  const [minDate, setMinDate] = useState('');
   
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -38,12 +39,20 @@ export default function LabAccessCheckout() {
       }
     };
     fetchUser();
+    setMinDate(new Date().toLocaleDateString('en-CA'));
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setMessage(null);
+
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    if (!date || date < todayStr) {
+      setMessage({ text: 'Please select a valid future date for lab access', type: 'error' });
+      setIsLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch('/api/lab-access', {
@@ -165,7 +174,7 @@ export default function LabAccessCheckout() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-zinc-400 mb-1">Access Date</label>
-                  <input required type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 [color-scheme:dark]" />
+                  <input required type="date" min={minDate} value={date} onChange={e => setDate(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 [color-scheme:dark]" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-zinc-400 mb-1">Time Slot</label>

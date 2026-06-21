@@ -17,7 +17,7 @@ export default function MyProfile() {
   const [usn, setUsn] = useState('');
   const [department, setDepartment] = useState('CSE');
   const [year, setYear] = useState('1st Year');
-  const [section, setSection] = useState('A');
+  const [section, setSection] = useState('');
   const [trustScore, setTrustScore] = useState(100);
 
   useEffect(() => {
@@ -62,18 +62,27 @@ export default function MyProfile() {
     
     setIsSaving(true);
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !user.email) throw new Error("No authenticated email found.");
+
+      const response = await fetch('/api/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: user.email,
           name,
           usn,
           department,
-          branch: year, // saving year to branch column
+          branch: year,
           section
         })
-        .eq('user_id', userId);
+      });
 
-      if (error) throw error;
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to update profile');
+      }
+
       toast.success('Profile updated successfully!');
       setTimeout(() => router.push('/student/dashboard'), 1500);
     } catch (error: any) {
@@ -211,6 +220,7 @@ export default function MyProfile() {
                   onChange={e => setSection(e.target.value)} 
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 appearance-none text-white"
                 >
+                  <option value="" disabled>Select Section</option>
                   <option value="A">Section A</option>
                   <option value="B">Section B</option>
                   <option value="C">Section C</option>

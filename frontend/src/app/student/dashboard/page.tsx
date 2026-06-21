@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { Space_Grotesk } from 'next/font/google';
 import ParticleNetwork from '@/components/ui/ParticleNetwork';
 import { siteConfig } from '@/config/site';
+import { toast } from 'sonner';
 
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] });
 
@@ -14,20 +15,51 @@ export default function StudentDashboard() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [notices, setNotices] = useState<any[]>([]);
 
+  // Profile States
+  const [profile, setProfile] = useState<{
+    name: string;
+    usn: string;
+    department: string;
+    section: string;
+  } | null>(null);
+
   useEffect(() => {
-    const fetchStudentDept = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data } = await supabase.from('users').select('department').eq('email', user.email).single();
-        if (data?.department) {
-           const res = await fetch(`/api/notices?department=${data.department}`);
-           const noticesData = await res.json();
-           if (Array.isArray(noticesData)) setNotices(noticesData);
+    const fetchProfile = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: userData } = await supabase
+            .from('users')
+            .select('name, usn, department, section')
+            .eq('email', user.email)
+            .maybeSingle();
+
+          if (userData) {
+            const currentProfile = {
+              name: userData.name || '',
+              usn: userData.usn || '',
+              department: userData.department || '',
+              section: userData.section || ''
+            };
+            setProfile(currentProfile);
+
+            if (userData.department) {
+               const res = await fetch(`/api/notices?department=${userData.department}`);
+               const noticesData = await res.json();
+               if (Array.isArray(noticesData)) setNotices(noticesData);
+            }
+          }
         }
+      } catch (err) {
+        console.error('Error fetching profile:', err);
       }
     };
-    fetchStudentDept();
+    fetchProfile();
   }, []);
+
+  const handleHardwareDashboardClick = () => {
+    router.push('/student/checkout');
+  };
 
   return (
     <div className="min-h-screen bg-[#020617] text-zinc-100 flex flex-col items-center justify-center p-4 pt-16 font-sans selection:bg-cyan-500/30 overflow-hidden relative">
@@ -138,6 +170,8 @@ export default function StudentDashboard() {
           )}
         </div>
 
+
+
           {/* Active Notices Banner */}
           {notices.length > 0 && (
             <div className="mb-12 space-y-3 z-20 relative animate-in fade-in slide-in-from-top-8 duration-700">
@@ -173,7 +207,7 @@ export default function StudentDashboard() {
 
           {/* Hardware Checkout Card */}
           <div
-            onClick={() => router.push('/student/checkout')}
+            onClick={handleHardwareDashboardClick}
             className="group relative bg-black/40 backdrop-blur-2xl border border-cyan-500/20 hover:border-cyan-500/50 rounded-3xl p-10 cursor-pointer transition-all duration-500 hover:-translate-y-2 shadow-[0_0_50px_rgba(6,182,212,0.15)] hover:shadow-[0_0_40px_-10px_rgba(6,182,212,0.4)] flex flex-col items-center text-center overflow-hidden"
           >
             <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-transparent opacity-0 group-hover:opacity-100 transition duration-700"></div>
@@ -226,6 +260,9 @@ export default function StudentDashboard() {
 
         </div>
       </div>
+
+
+
     </div>
   );
 }
