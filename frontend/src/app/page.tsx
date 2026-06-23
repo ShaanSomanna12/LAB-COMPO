@@ -189,10 +189,7 @@ export default function StudentAuth() {
           'ADMIN_ECE': 'Adminecevvce@00123',
           'ADMIN_EEE': 'Admineeevvce@00123',
           'ADMIN_CIVIL': 'Admincivilvvce@00123',
-          'ADMIN_MECH': 'Adminmechvvce@00123',
-          'ADMIN_CSE': 'Admincsevvce@00123',
-          'ADMIN_ISE': 'Adminisevvce@00123',
-          'ADMIN_AIML': 'Adminaimlvvce@00123'
+          'ADMIN_MECH': 'Adminmechvvce@00123'
         };
 
         const HOD_PASSWORDS: Record<string, string> = {
@@ -200,10 +197,7 @@ export default function StudentAuth() {
           'HODECE_VVCE': 'HODece@00055',
           'HODEEE_VVCE': 'HODeee@00055',
           'HODCIVIL_VVCE': 'HODcivil@00055',
-          'HODMECH_VVCE': 'HODmech@00055',
-          'HODCSE_VVCE': 'HODcse@00055',
-          'HODISE_VVCE': 'HODise@00055',
-          'HODAIML_VVCE': 'HODaiml@00055'
+          'HODMECH_VVCE': 'HODmech@00055'
         };
 
         if (ADMIN_PASSWORDS[formattedUSN]) {
@@ -211,8 +205,8 @@ export default function StudentAuth() {
             throw new Error("Incorrect password. Please try again.");
           }
 
-          let dept = formattedUSN.replace('ADMIN_', '');
-          if (dept === 'AIML') dept = 'AI_ML';
+          // Set department context for Admin dashboard
+          const dept = formattedUSN.replace('ADMIN_', '');
           localStorage.setItem('admin_dept', dept);
 
           document.cookie = "admin_access=true; path=/; max-age=86400";
@@ -230,8 +224,7 @@ export default function StudentAuth() {
           }
 
           // Set department context for HOD dashboard
-          let dept = formattedUSN.replace('HOD', '').replace('_VVCE', '');
-          if (dept === 'AIML') dept = 'AI_ML';
+          const dept = formattedUSN.replace('HOD', '').replace('_VVCE', '');
           localStorage.setItem('hod_dept', dept);
 
           document.cookie = "hod_access=true; path=/; max-age=86400";

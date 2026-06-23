@@ -49,10 +49,7 @@ export default function HodDashboard() {
     { id: 'ECE', title: 'Electronics & Comm.', color: 'from-purple-600 to-pink-600' },
     { id: 'EEE', title: 'Electrical Engineering', color: 'from-amber-500 to-orange-600' },
     { id: 'MECH', title: 'Mechanical Engineering', color: 'from-emerald-600 to-teal-600' },
-    { id: 'CIVIL', title: 'Civil Engineering', color: 'from-rose-500 to-red-600' },
-    { id: 'CSE', title: 'Computer Science & Eng.', color: 'from-red-600 to-orange-600' },
-    { id: 'ISE', title: 'Information Science & Eng.', color: 'from-cyan-600 to-blue-600' },
-    { id: 'AI_ML', title: 'Artificial Intelligence & ML', color: 'from-fuchsia-600 to-violet-600' }
+    { id: 'CIVIL', title: 'Civil Engineering', color: 'from-rose-500 to-red-600' }
   ];
 
   useEffect(() => {
@@ -299,7 +296,7 @@ export default function HodDashboard() {
 
 
       {/* Dept Selector Ribbon */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-8 print:hidden">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 mb-8 print:hidden">
         {DEPT_INFO.map(dept => {
           const isSelected = activeDept === dept.id;
           const isDeptDisabled = isLocked && !isSelected;

@@ -144,7 +144,7 @@ export default function AdminDashboard() {
   const [isLocked, setIsLocked] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [editingDeviceId, setEditingDeviceId] = useState<string | number | null>(null);
-  
+
   const [notices, setNotices] = useState<any[]>([]);
   const [newNoticeMsg, setNewNoticeMsg] = useState('');
   const [newNoticeType, setNewNoticeType] = useState('info');
@@ -174,7 +174,19 @@ export default function AdminDashboard() {
         );
         if (response.ok) {
           const data = await response.json();
-          const shortAddr = data.display_name || `${previewLatitude.toFixed(5)}, ${previewLongitude.toFixed(5)}`;
+          let shortAddr = '';
+          if (data.address) {
+            const a = data.address;
+            const area = a.suburb || a.neighbourhood || a.residential || a.road || a.city_district || '';
+            const city = a.city || a.town || a.village || a.county || '';
+            if (area && city && area.toLowerCase() !== city.toLowerCase()) {
+              shortAddr = `${area}, ${city}`;
+            } else {
+              shortAddr = city || data.display_name || `${previewLatitude.toFixed(5)}, ${previewLongitude.toFixed(5)}`;
+            }
+          } else {
+            shortAddr = data.display_name || `${previewLatitude.toFixed(5)}, ${previewLongitude.toFixed(5)}`;
+          }
           setPreviewAddress(shortAddr);
         } else {
           setPreviewAddress(`Location (${previewLatitude.toFixed(5)}, ${previewLongitude.toFixed(5)})`);
@@ -206,10 +218,7 @@ export default function AdminDashboard() {
     { id: 'ECE', title: 'Electronics & Comm.', desc: 'Manage ECE requests & stock.', color: 'from-purple-600 to-pink-600' },
     { id: 'EEE', title: 'Electrical Engineering', desc: 'Manage EEE requests & stock.', color: 'from-amber-500 to-orange-600' },
     { id: 'MECH', title: 'Mechanical Engineering', desc: 'Manage MECH requests & stock.', color: 'from-emerald-600 to-teal-600' },
-    { id: 'CIVIL', title: 'Civil Engineering', desc: 'Manage CIVIL requests & stock.', color: 'from-rose-500 to-red-600' },
-    { id: 'CSE', title: 'Computer Science & Eng.', desc: 'Manage CSE requests & stock.', color: 'from-red-600 to-orange-600' },
-    { id: 'ISE', title: 'Information Science & Eng.', desc: 'Manage ISE requests & stock.', color: 'from-cyan-600 to-blue-600' },
-    { id: 'AI_ML', title: 'Artificial Intelligence & ML', desc: 'Manage AI_ML requests & stock.', color: 'from-fuchsia-600 to-violet-600' }
+    { id: 'CIVIL', title: 'Civil Engineering', desc: 'Manage CIVIL requests & stock.', color: 'from-rose-500 to-red-600' }
   ];
 
   const fetchLabRequests = async () => {
@@ -242,7 +251,7 @@ export default function AdminDashboard() {
     try {
       const res = await fetch(`/api/notices?department=${dept}`);
       const data = await res.json();
-      if(Array.isArray(data)) setNotices(data);
+      if (Array.isArray(data)) setNotices(data);
     } catch (e) {
       console.error(e);
     }
@@ -266,9 +275,9 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteNotice = async (id: string) => {
-    if(!window.confirm("Delete this notice?")) return;
+    if (!window.confirm("Delete this notice?")) return;
     await fetch(`/api/notices?id=${id}`, { method: 'DELETE' });
-    if(adminDept) fetchNotices(adminDept);
+    if (adminDept) fetchNotices(adminDept);
   };
 
   const getMonthlyStats = (monthStr: string) => {
@@ -454,11 +463,11 @@ export default function AdminDashboard() {
   const handleApprove = async (id: string) => {
     const req = requests.find(r => r.id === id);
     if (!req) return;
-    
+
     let finalQuantity = req.quantity || 1;
     const inputQty = prompt(`Approve request for ${req.component}\nRequested quantity: ${req.quantity || 1}\nEnter quantity to approve:`, String(req.quantity || 1));
     if (inputQty === null) return; // Cancelled
-    
+
     const parsedQty = parseInt(inputQty, 10);
     if (!isNaN(parsedQty) && parsedQty > 0) {
       finalQuantity = parsedQty;
@@ -784,8 +793,8 @@ export default function AdminDashboard() {
               {scannedUsnFilter && (
                 <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider animate-in fade-in duration-200">
                   Filter: {scannedUsnFilter}
-                  <button 
-                    onClick={() => setScannedUsnFilter(null)} 
+                  <button
+                    onClick={() => setScannedUsnFilter(null)}
                     className="text-red-500 hover:text-red-400 bg-red-500/10 hover:bg-red-500/20 p-0.5 rounded-full transition-colors ml-1 inline-flex items-center justify-center font-bold"
                     title="Clear filter and show all"
                   >
@@ -918,7 +927,7 @@ export default function AdminDashboard() {
                                   {req.status === 'PENDING_COLLECTION' && (
                                     <div className="flex gap-2 items-center">
                                       {req.geotagImageUrl && (
-                                        <button 
+                                        <button
                                           onClick={() => {
                                             setPreviewImgUrl(req.geotagImageUrl || null);
                                             setPreviewLatitude(req.latitude || null);
@@ -935,8 +944,8 @@ export default function AdminDashboard() {
                                           View Proof
                                         </button>
                                       )}
-                                      <button 
-                                        onClick={() => handleCheckout(req.id)} 
+                                      <button
+                                        onClick={() => handleCheckout(req.id)}
                                         className="px-4 py-1.5 bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-lg text-xs font-bold transition"
                                       >
                                         Approve Checkout
@@ -949,7 +958,7 @@ export default function AdminDashboard() {
                                   {req.status === 'PENDING_RETURN' && (
                                     <div className="flex gap-2 items-center justify-end">
                                       {req.afterImgUrl && (
-                                        <button 
+                                        <button
                                           onClick={() => {
                                             setPreviewImgUrl(req.afterImgUrl || null);
                                             setPreviewLatitude(req.latitude || null);
@@ -992,8 +1001,8 @@ export default function AdminDashboard() {
               {scannedUsnFilter && (
                 <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider animate-in fade-in duration-200">
                   Filter: {scannedUsnFilter}
-                  <button 
-                    onClick={() => setScannedUsnFilter(null)} 
+                  <button
+                    onClick={() => setScannedUsnFilter(null)}
                     className="text-red-500 hover:text-red-400 bg-red-500/10 hover:bg-red-500/20 p-0.5 rounded-full transition-colors ml-1 inline-flex items-center justify-center font-bold"
                     title="Clear filter and show all"
                   >
@@ -1295,7 +1304,7 @@ export default function AdminDashboard() {
           {/* Lab Notices Component */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-6">
             <h3 className="font-bold text-lg text-white mb-4">Lab Notices & Announcements</h3>
-            
+
             <div className="flex flex-col md:flex-row gap-4 mb-6">
               <input
                 type="text"
@@ -1338,8 +1347,8 @@ export default function AdminDashboard() {
               {scannedUsnFilter && (
                 <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider animate-in fade-in duration-200 h-fit">
                   Filter: {scannedUsnFilter}
-                  <button 
-                    onClick={() => setScannedUsnFilter(null)} 
+                  <button
+                    onClick={() => setScannedUsnFilter(null)}
                     className="text-red-500 hover:text-red-400 bg-red-500/10 hover:bg-red-500/20 p-0.5 rounded-full transition-colors ml-1 inline-flex items-center justify-center font-bold"
                     title="Clear filter and show all"
                   >
@@ -1728,8 +1737,8 @@ export default function AdminDashboard() {
               {scannedUsnFilter && (
                 <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider animate-in fade-in duration-200">
                   Filter: {scannedUsnFilter}
-                  <button 
-                    onClick={() => setScannedUsnFilter(null)} 
+                  <button
+                    onClick={() => setScannedUsnFilter(null)}
                     className="text-red-500 hover:text-red-400 bg-red-500/10 hover:bg-red-500/20 p-0.5 rounded-full transition-colors ml-1 inline-flex items-center justify-center font-bold"
                     title="Clear filter and show all"
                   >
@@ -2009,7 +2018,7 @@ export default function AdminDashboard() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-            
+
             <div className="mb-4 text-left w-full border-b border-zinc-800 pb-3">
               <h3 className="text-lg font-bold text-white uppercase tracking-wider">
                 {previewType === 'RETURN' ? 'Geotagged Return Proof' : 'Geotagged Collection Proof'}

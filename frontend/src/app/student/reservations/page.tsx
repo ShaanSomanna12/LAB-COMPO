@@ -125,7 +125,19 @@ export default function MyReservations() {
               );
               if (response.ok) {
                 const data = await response.json();
-                const shortAddr = data.display_name || `${res.latitude.toFixed(5)}, ${res.longitude.toFixed(5)}`;
+                let shortAddr = '';
+                if (data.address) {
+                  const a = data.address;
+                  const area = a.suburb || a.neighbourhood || a.residential || a.road || a.city_district || '';
+                  const city = a.city || a.town || a.village || a.county || '';
+                  if (area && city && area.toLowerCase() !== city.toLowerCase()) {
+                    shortAddr = `${area}, ${city}`;
+                  } else {
+                    shortAddr = city || data.display_name || `${res.latitude.toFixed(5)}, ${res.longitude.toFixed(5)}`;
+                  }
+                } else {
+                  shortAddr = data.display_name || `${res.latitude.toFixed(5)}, ${res.longitude.toFixed(5)}`;
+                }
                 newAddresses[cacheKey] = shortAddr;
                 changed = true;
               } else {
