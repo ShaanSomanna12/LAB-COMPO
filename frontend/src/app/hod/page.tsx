@@ -22,6 +22,7 @@ interface RequestItem {
   renewalReason?: string;
   renewalDays?: number;
   isDamaged?: boolean;
+  dueDate?: string;
 }
 
 export default function HodDashboard() {
@@ -39,7 +40,7 @@ export default function HodDashboard() {
   const [hodLabRemarksInput, setHodLabRemarksInput] = useState<string>('');
   
   // Interactive view switcher and graphing states
-  const [viewMode, setViewMode] = useState<'requests' | 'lab-access' | 'analytics'>('lab-access');
+  const [viewMode, setViewMode] = useState<'requests' | 'lab-access' | 'analytics'>('requests');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
 
@@ -47,7 +48,11 @@ export default function HodDashboard() {
     { id: 'EDL', title: 'Engineering Development LAB', color: 'from-blue-600 to-indigo-600' },
     { id: 'ECE', title: 'Electronics & Comm.', color: 'from-purple-600 to-pink-600' },
     { id: 'EEE', title: 'Electrical Engineering', color: 'from-amber-500 to-orange-600' },
-    { id: 'MECH', title: 'Mechanical Engineering', color: 'from-emerald-600 to-teal-600' }
+    { id: 'MECH', title: 'Mechanical Engineering', color: 'from-emerald-600 to-teal-600' },
+    { id: 'CIVIL', title: 'Civil Engineering', color: 'from-rose-500 to-red-600' },
+    { id: 'CSE', title: 'Computer Science & Eng.', color: 'from-red-600 to-orange-600' },
+    { id: 'ISE', title: 'Information Science & Eng.', color: 'from-cyan-600 to-blue-600' },
+    { id: 'AI_ML', title: 'Artificial Intelligence & ML', color: 'from-fuchsia-600 to-violet-600' }
   ];
 
   useEffect(() => {
@@ -164,16 +169,24 @@ export default function HodDashboard() {
     if (!req) return;
     const isRenewal = req.status === 'Pending Renewal HOD';
     const newStatus = approve 
-      ? (isRenewal ? 'Approved Renewal by HOD' : 'Approved by HOD') 
+      ? (isRenewal ? 'Active' : 'APPROVED') 
       : (isRenewal ? 'Active' : 'Rejected');
+    
+    const payload: any = { id, status: newStatus };
+    if (approve && isRenewal && req.renewalDays) {
+      const currentDueDate = req.dueDate ? new Date(req.dueDate) : new Date();
+      currentDueDate.setDate(currentDueDate.getDate() + req.renewalDays);
+      payload.dueDate = currentDueDate.toISOString();
+    }
+
     try {
       const res = await fetch('/api/requests', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, status: newStatus })
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
-        setRequests(prev => prev.map(r => r.id === id ? { ...r, status: newStatus } : r));
+        setRequests(prev => prev.map(r => r.id === id ? { ...r, status: newStatus, dueDate: payload.dueDate || r.dueDate } : r));
         setSelectedReq(null);
       }
     } catch (e) {
@@ -214,7 +227,7 @@ export default function HodDashboard() {
   const displayTotalPending = totalPending + totalLabPending;
 
   const activeDeptPending = pendingRequests.length;
-  const activeDeptApproved = deptRequests.filter(r => r.status.includes('Approved') || r.status === 'Ready for Collection' || r.status === 'Active' || r.status.includes('Renewal')).length;
+  const activeDeptApproved = deptRequests.filter(r => r.status.includes('Approved') || r.status === 'APPROVED' || r.status === 'Ready for Collection' || r.status === 'Active' || r.status.includes('Renewal')).length;
   const activeDeptRejected = deptRequests.filter(r => r.status === 'Rejected').length;
 
   // Lab access specific stats for active department
@@ -286,7 +299,7 @@ export default function HodDashboard() {
 
 
       {/* Dept Selector Ribbon */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8 print:hidden">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-8 print:hidden">
         {DEPT_INFO.map(dept => {
           const isSelected = activeDept === dept.id;
           const isDeptDisabled = isLocked && !isSelected;
@@ -320,7 +333,13 @@ export default function HodDashboard() {
 
       {/* View Switcher Tabs & Inbox Stats */}
       <div className="flex flex-col md:flex-row justify-start items-start md:items-center gap-4 mb-8 print:hidden">
-        <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800 flex-row gap-1 w-full max-w-md">
+        <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800 flex-row gap-1 w-full max-w-xl">
+          <button 
+            onClick={() => setViewMode('requests')} 
+            className={`flex-1 text-center py-1.5 rounded text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${viewMode === 'requests' ? 'bg-zinc-800 text-white border border-zinc-700 shadow-sm' : 'text-zinc-400 hover:text-white border border-transparent hover:bg-zinc-800/50'}`}
+          >
+            Component Requests
+          </button>
           <button 
             onClick={() => setViewMode('lab-access')} 
             className={`flex-1 text-center py-1.5 rounded text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${viewMode === 'lab-access' ? 'bg-zinc-800 text-white border border-zinc-700 shadow-sm' : 'text-zinc-400 hover:text-white border border-transparent hover:bg-zinc-800/50'}`}
@@ -427,11 +446,11 @@ export default function HodDashboard() {
                           <div className="text-zinc-500 text-[10px]">{req.studentName} ({req.usn})</div>
                         </div>
                         <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                          req.status === 'Approved by HOD' || req.status === 'Ready for Collection' || req.status === 'Active'
+                          req.status === 'Approved by HOD' || req.status === 'APPROVED' || req.status === 'Ready for Collection' || req.status === 'Active' || req.status.includes('Approved')
                             ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                             : 'bg-red-500/10 text-red-400 border-red-500/20'
                         }`}>
-                          {req.status === 'Approved by HOD' || req.status === 'Ready for Collection' || req.status === 'Active' ? 'HOD Approved' : 'Rejected'}
+                          {req.status === 'Approved by HOD' || req.status === 'APPROVED' || req.status === 'Ready for Collection' || req.status === 'Active' || req.status.includes('Approved') ? 'HOD Approved' : 'Rejected'}
                         </span>
                       </div>
                     ))}

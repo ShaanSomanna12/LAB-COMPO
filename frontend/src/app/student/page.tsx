@@ -13,6 +13,7 @@ export default function StudentAuth() {
 
   // Form Fields
   const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
   const [usn, setUsn] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
@@ -38,7 +39,7 @@ export default function StudentAuth() {
             .maybeSingle();
 
           if (fetchError || !userData) {
-            throw new Error("Who are you? USN not found. 🕵️‍♂️");
+            throw new Error("USN not found. Please register first.");
           }
 
           const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
@@ -63,7 +64,7 @@ export default function StudentAuth() {
           }
 
           setIsOtpStep(true);
-          setMessage("W! 🚀 OTP sent to your registered email.");
+          setMessage("OTP sent successfully to your registered email.");
         } else {
           // STEP 2: Verify OTP and Reset Password via API
           if (password.length < 6) {
@@ -100,7 +101,7 @@ export default function StudentAuth() {
         if (!isOtpStep) {
           const collegeDomain = "@vvce.ac.in";
           if (!email.toLowerCase().endsWith(collegeDomain)) {
-            setMessage(`Big yikes: You need a valid ${collegeDomain} email to enter. 🛑`);
+            setMessage(`A valid ${collegeDomain} email is required to register.`);
             return;
           }
 
@@ -114,7 +115,7 @@ export default function StudentAuth() {
               email: email,
               otp_code: otpCode,
               otp_expiry: expiryTime,
-              name: 'Please enter your name',
+              name: name,
               role_id: 1
             }, { onConflict: 'usn' });
 
@@ -145,8 +146,8 @@ export default function StudentAuth() {
             .maybeSingle();
 
           if (fetchError || !userData) throw new Error("User not found. Refresh and try again.");
-          if (userData.otp_code !== otp) throw new Error("Nah, wrong code 💀 Try again.");
-          if (new Date(userData.otp_expiry) < new Date()) throw new Error("Bruh, that code expired. ⏳");
+          if (userData.otp_code !== otp) throw new Error("Invalid OTP code. Please try again.");
+          if (new Date(userData.otp_expiry) < new Date()) throw new Error("The OTP code has expired.");
 
           const { data: authData, error: authError } = await supabase.auth.signUp({
             email: email,
@@ -184,7 +185,7 @@ export default function StudentAuth() {
           .maybeSingle();
 
         if (fetchError || !userData) {
-          throw new Error("Who are you? USN not found. Go register first. 🕵️‍♂️");
+          throw new Error("USN not found. Please register first.");
         }
 
         const { error: loginError } = await supabase.auth.signInWithPassword({
@@ -245,17 +246,30 @@ export default function StudentAuth() {
             {!isOtpStep && (
               <>
                 {isRegistering && (
-                  <div>
-                    <label htmlFor="email" className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">
-                      College Email
-                    </label>
-                    <input
-                      id="email" name="email" type="email" required
-                      value={email} onChange={(e) => setEmail(e.target.value)}
-                      placeholder="username@vvce.ac.in"
-                      className="block w-full px-4 py-3.5 bg-black/50 border border-white/5 rounded-2xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-all sm:text-sm"
-                    />
-                  </div>
+                  <>
+                    <div>
+                      <label htmlFor="name" className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">
+                        Full Name
+                      </label>
+                      <input
+                        id="name" name="name" type="text" required
+                        value={name} onChange={(e) => setName(e.target.value)}
+                        placeholder="Your Full Name"
+                        className="block w-full px-4 py-3.5 bg-black/50 border border-white/5 rounded-2xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-all sm:text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="email" className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">
+                        College Email
+                      </label>
+                      <input
+                        id="email" name="email" type="email" required
+                        value={email} onChange={(e) => setEmail(e.target.value)}
+                        placeholder="username@vvce.ac.in"
+                        className="block w-full px-4 py-3.5 bg-black/50 border border-white/5 rounded-2xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-all sm:text-sm"
+                      />
+                    </div>
+                  </>
                 )}
 
                 <div>
@@ -320,7 +334,7 @@ export default function StudentAuth() {
               <div className="animate-in fade-in zoom-in duration-300 space-y-5">
                 <div>
                   <label htmlFor="otp" className="block text-sm font-bold text-zinc-300 text-center mb-2">
-                    Drop the 6-digit code here 👀
+                    Enter 6-Digit OTP Code
                   </label>
                   <p className="text-zinc-500 text-xs text-center mb-5">
                     Sent to your registered email. (Check your spam folder as well!)
@@ -388,14 +402,15 @@ export default function StudentAuth() {
                 setMessage('');
                 setPassword('');
                 setOtp('');
+                setName('');
               }}
               className="text-sm font-medium text-zinc-400 hover:text-white transition-colors duration-200"
             >
               {isOtpStep || isForgotPassword
-                ? "Wait, take me back to login."
+                ? "Return to Login."
                 : isRegistering
-                  ? "Already got an account? Slide in here."
-                  : "New here? Set up your account."}
+                  ? "Already have an account? Log in."
+                  : "New user? Create an account."}
             </button>
           </div>
 

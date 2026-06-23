@@ -125,21 +125,7 @@ export default function MyReservations() {
               );
               if (response.ok) {
                 const data = await response.json();
-                const addr = data.address;
-                let shortAddr = '';
-                if (addr) {
-                  const parts = [];
-                  if (addr.amenity || addr.college || addr.building || addr.office) {
-                    parts.push(addr.amenity || addr.college || addr.building || addr.office);
-                  }
-                  if (addr.road) parts.push(addr.road);
-                  if (addr.suburb || addr.neighbourhood) parts.push(addr.suburb || addr.neighbourhood);
-                  if (addr.city || addr.town || addr.village) parts.push(addr.city || addr.town || addr.village);
-
-                  shortAddr = parts.length > 0 ? parts.join(', ') : (data.display_name || `${res.latitude.toFixed(5)}, ${res.longitude.toFixed(5)}`);
-                } else {
-                  shortAddr = data.display_name || `${res.latitude.toFixed(5)}, ${res.longitude.toFixed(5)}`;
-                }
+                const shortAddr = data.display_name || `${res.latitude.toFixed(5)}, ${res.longitude.toFixed(5)}`;
                 newAddresses[cacheKey] = shortAddr;
                 changed = true;
               } else {

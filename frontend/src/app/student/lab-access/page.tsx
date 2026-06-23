@@ -8,7 +8,7 @@ export default function LabAccessCheckout() {
   const router = useRouter();
   const [studentName, setStudentName] = useState('');
   const [usn, setUsn] = useState('');
-  const [department, setDepartment] = useState('CSE');
+  const [department, setDepartment] = useState('');
   const [section, setSection] = useState('A');
   const [date, setDate] = useState('');
   const [timeSlot, setTimeSlot] = useState('12:30 PM - 01:30 PM');
@@ -126,7 +126,8 @@ export default function LabAccessCheckout() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-zinc-400 mb-1">Department</label>
-                  <select value={department} onChange={e => setDepartment(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 appearance-none">
+                  <select required value={department} onChange={e => setDepartment(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 appearance-none">
+                    <option value="" disabled>Select Department</option>
                     <option value="CSE">1. CSE</option>
                     <option value="MECH">2. Mechanical</option>
                     <option value="ECE">3. ECE</option>

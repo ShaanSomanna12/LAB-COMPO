@@ -17,6 +17,7 @@ export default function StudentAuth() {
 
   // Form Fields
   const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
   const [usn, setUsn] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
@@ -42,7 +43,7 @@ export default function StudentAuth() {
             .maybeSingle();
 
           if (fetchError || !userData) {
-            throw new Error("Who are you? USN not found. 🕵️‍♂️");
+            throw new Error("USN not found. Please register first.");
           }
 
           if (userData.role_id >= 3) {
@@ -110,7 +111,7 @@ export default function StudentAuth() {
         if (!isOtpStep) {
           const collegeDomain = "@vvce.ac.in";
           if (!email.toLowerCase().endsWith(collegeDomain)) {
-            setMessage(`Big yikes: You need a valid ${collegeDomain} email to enter. 🛑`);
+            setMessage(`A valid ${collegeDomain} email is required to register.`);
             return;
           }
 
@@ -124,7 +125,7 @@ export default function StudentAuth() {
               email: email,
               otp_code: otpCode,
               otp_expiry: expiryTime,
-              name: `Student ${formattedUSN}`,
+              name: name,
               role_id: 1
             }, { onConflict: 'usn' });
 
@@ -145,7 +146,7 @@ export default function StudentAuth() {
           }
 
           setIsOtpStep(true);
-          setMessage(`W! 🚀 OTP sent to your email!`);
+          setMessage("OTP sent successfully to your email.");
         } else {
           // =========================================================
           // REGISTRATION - STEP 2: VERIFY CUSTOM OTP & CREATE AUTH
@@ -158,9 +159,9 @@ export default function StudentAuth() {
             .eq('usn', formattedUSN)
             .maybeSingle();
 
-          if (fetchError || !userData) throw new Error("User not found. Refresh and try again.");
-          if (userData.otp_code !== otp) throw new Error("Nah, wrong code 💀 Try again.");
-          if (new Date(userData.otp_expiry) < new Date()) throw new Error("Bruh, that code expired. ⏳");
+          if (fetchError || !userData) throw new Error("User not found. Please refresh and try again.");
+          if (userData.otp_code !== otp) throw new Error("Invalid OTP code. Please try again.");
+          if (new Date(userData.otp_expiry) < new Date()) throw new Error("The OTP code has expired.");
 
           const { error: authError } = await supabase.auth.signUp({
             email: email,
@@ -188,7 +189,10 @@ export default function StudentAuth() {
           'ADMIN_ECE': 'Adminecevvce@00123',
           'ADMIN_EEE': 'Admineeevvce@00123',
           'ADMIN_CIVIL': 'Admincivilvvce@00123',
-          'ADMIN_MECH': 'Adminmechvvce@00123'
+          'ADMIN_MECH': 'Adminmechvvce@00123',
+          'ADMIN_CSE': 'Admincsevvce@00123',
+          'ADMIN_ISE': 'Adminisevvce@00123',
+          'ADMIN_AIML': 'Adminaimlvvce@00123'
         };
 
         const HOD_PASSWORDS: Record<string, string> = {
@@ -196,16 +200,19 @@ export default function StudentAuth() {
           'HODECE_VVCE': 'HODece@00055',
           'HODEEE_VVCE': 'HODeee@00055',
           'HODCIVIL_VVCE': 'HODcivil@00055',
-          'HODMECH_VVCE': 'HODmech@00055'
+          'HODMECH_VVCE': 'HODmech@00055',
+          'HODCSE_VVCE': 'HODcse@00055',
+          'HODISE_VVCE': 'HODise@00055',
+          'HODAIML_VVCE': 'HODaiml@00055'
         };
 
         if (ADMIN_PASSWORDS[formattedUSN]) {
           if (password !== ADMIN_PASSWORDS[formattedUSN]) {
-            throw new Error("Wrong password. Did you forget it already? 😭");
+            throw new Error("Incorrect password. Please try again.");
           }
 
-          // Set department context for Admin dashboard
-          const dept = formattedUSN.replace('ADMIN_', '');
+          let dept = formattedUSN.replace('ADMIN_', '');
+          if (dept === 'AIML') dept = 'AI_ML';
           localStorage.setItem('admin_dept', dept);
 
           document.cookie = "admin_access=true; path=/; max-age=86400";
@@ -219,11 +226,12 @@ export default function StudentAuth() {
 
         if (HOD_PASSWORDS[formattedUSN]) {
           if (password !== HOD_PASSWORDS[formattedUSN]) {
-            throw new Error("Wrong password. Did you forget it already? 😭");
+            throw new Error("Incorrect password. Please try again.");
           }
 
           // Set department context for HOD dashboard
-          const dept = formattedUSN.replace('HOD', '').replace('_VVCE', '');
+          let dept = formattedUSN.replace('HOD', '').replace('_VVCE', '');
+          if (dept === 'AIML') dept = 'AI_ML';
           localStorage.setItem('hod_dept', dept);
 
           document.cookie = "hod_access=true; path=/; max-age=86400";
@@ -242,7 +250,7 @@ export default function StudentAuth() {
           .maybeSingle();
 
         if (fetchError || !userData) {
-          throw new Error("Who are you? USN not found. Go register first. 🕵️‍♂️");
+          throw new Error("USN not found. Please register first.");
         }
 
         const { error: loginError } = await supabase.auth.signInWithPassword({
@@ -305,17 +313,30 @@ export default function StudentAuth() {
             {!isOtpStep && (
               <>
                 {isRegistering && (
-                  <div>
-                    <label htmlFor="email" className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">
-                      College Email
-                    </label>
-                    <input
-                      id="email" name="email" type="email" required
-                      value={email} onChange={(e) => setEmail(e.target.value)}
-                      placeholder="username@vvce.ac.in"
-                      className="block w-full px-4 py-3.5 bg-black/50 border border-white/10 rounded-2xl text-cyan-50 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all sm:text-sm"
-                    />
-                  </div>
+                  <>
+                    <div>
+                      <label htmlFor="name" className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">
+                        Full Name
+                      </label>
+                      <input
+                        id="name" name="name" type="text" required
+                        value={name} onChange={(e) => setName(e.target.value)}
+                        placeholder="Your Full Name"
+                        className="block w-full px-4 py-3.5 bg-black/50 border border-white/10 rounded-2xl text-cyan-50 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all sm:text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="email" className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">
+                        College Email
+                      </label>
+                      <input
+                        id="email" name="email" type="email" required
+                        value={email} onChange={(e) => setEmail(e.target.value)}
+                        placeholder="username@vvce.ac.in"
+                        className="block w-full px-4 py-3.5 bg-black/50 border border-white/10 rounded-2xl text-cyan-50 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all sm:text-sm"
+                      />
+                    </div>
+                  </>
                 )}
 
                 <div>
@@ -380,7 +401,7 @@ export default function StudentAuth() {
               <div className="animate-in fade-in zoom-in duration-300 space-y-5">
                 <div>
                   <label htmlFor="otp" className="block text-sm font-bold text-zinc-300 text-center mb-2">
-                    Drop the 6-digit code here 👀
+                    Enter 6-Digit OTP Code
                   </label>
                   <p className="text-zinc-500 text-xs text-center mb-5">
                     Sent to your registered email. (Check your spam folder as well!)
@@ -448,14 +469,15 @@ export default function StudentAuth() {
                 setMessage('');
                 setPassword('');
                 setOtp('');
+                setName('');
               }}
               className="text-sm font-medium text-cyan-200/50 hover:text-cyan-200 transition-colors duration-200"
             >
               {isOtpStep || isForgotPassword
-                ? "Wait, take me back to login."
+                ? "Return to Login."
                 : isRegistering
-                  ? "Already got an account? Slide in here."
-                  : "New here? Set up your account."}
+                  ? "Already have an account? Log in."
+                  : "New user? Create an account."}
             </button>
           </div>
 

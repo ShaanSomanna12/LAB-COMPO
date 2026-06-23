@@ -1,6 +1,20 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
+import { supabase as anonClient } from '@/lib/supabase';
 import { sendNotificationEmail } from '@/lib/email';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+// Automatically upgrade to admin client (bypassing RLS) on the server if the service role key is available
+const supabase = supabaseServiceRoleKey
+  ? createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false
+      }
+    })
+  : anonClient;
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +44,7 @@ export async function GET() {
       studentDepartment: res.student_department,
       requestDate: res.created_at.split('T')[0],
       duration: res.due_date ? Math.max(1, Math.ceil((new Date(res.due_date).getTime() - new Date(res.created_at).getTime()) / (1000 * 60 * 60 * 24))) : 7,
+      dueDate: res.due_date || null,
       isDamaged: res.is_damaged === true,
       returnedAt: res.returned_at,
       valueTier: res.components?.value_tier,
@@ -51,9 +66,10 @@ export async function GET() {
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();
-    const { id, status, images, geotag, is_damaged, return_condition, quantity, collectionTime } = body;
+    const { id, status, images, geotag, is_damaged, return_condition, returnCondition, quantity, collectionTime, dueDate } = body;
     
     const updates: any = { status };
+    if (dueDate !== undefined) updates.due_date = dueDate;
     if (quantity !== undefined) updates.quantity = quantity;
     if (collectionTime !== undefined) updates.collection_time = collectionTime;
     if (images && images.length > 0) {
@@ -61,7 +77,12 @@ export async function PATCH(request: Request) {
        updates.after_img_url = images[0]; 
     }
     if (is_damaged !== undefined) updates.is_damaged = is_damaged;
-    if (return_condition) updates.return_condition = return_condition;
+    
+    // Support both snake_case and camelCase parameters from the client
+    const finalReturnCondition = return_condition || returnCondition;
+    if (finalReturnCondition) {
+      updates.return_condition = finalReturnCondition;
+    }
     
     if (status === 'RETURNED') {
        updates.returned_at = new Date().toISOString();
@@ -158,7 +179,7 @@ export async function POST(request: Request) {
     // 1. Fetch user ID and Trust Score
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('user_id, trust_score')
+      .select('user_id, trust_score, department')
       .eq('usn', formattedUsn)
       .maybeSingle();
 
@@ -197,7 +218,12 @@ export async function POST(request: Request) {
          isLowTier = true;
       }
       
-      const status = isLowTier ? 'APPROVED' : 'PENDING';
+      let status = 'PENDING';
+      if (isLowTier) {
+        status = 'APPROVED';
+      } else if (component.value_tier === 'HIGH') {
+        status = 'Pending HOD';
+      }
       
       const dueDate = new Date();
       dueDate.setDate(dueDate.getDate() + (duration || 7));
@@ -209,7 +235,7 @@ export async function POST(request: Request) {
           component_id: component.component_id,
           status: status,
           section: section || 'A',
-          student_department: studentDepartment || 'CSE',
+          student_department: studentDepartment || user.department || 'CSE',
           project_title: body.projectTitle || null,
           due_date: dueDate.toISOString(),
           quantity: item.quantity || 1,
@@ -238,29 +264,12 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Reservation ID is required' }, { status: 400 });
     }
 
-    // Try service role first to bypass RLS, otherwise fallback to regular client
-    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabaseAdmin = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-      );
+    const { error } = await supabase
+      .from('reservations')
+      .delete()
+      .eq('reservation_id', parseInt(id, 10));
 
-      const { error } = await supabaseAdmin
-        .from('reservations')
-        .delete()
-        .eq('reservation_id', parseInt(id, 10));
-
-      if (error) throw error;
-    } else {
-      console.warn("Missing service role key, falling back to standard client (requires RLS policy for delete)");
-      const { error } = await supabase
-        .from('reservations')
-        .delete()
-        .eq('reservation_id', parseInt(id, 10));
-
-      if (error) throw error;
-    }
+    if (error) throw error;
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

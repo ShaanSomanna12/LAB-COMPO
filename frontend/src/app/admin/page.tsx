@@ -174,21 +174,7 @@ export default function AdminDashboard() {
         );
         if (response.ok) {
           const data = await response.json();
-          const addr = data.address;
-          let shortAddr = '';
-          if (addr) {
-            const parts = [];
-            if (addr.amenity || addr.college || addr.building || addr.office) {
-              parts.push(addr.amenity || addr.college || addr.building || addr.office);
-            }
-            if (addr.road) parts.push(addr.road);
-            if (addr.suburb || addr.neighbourhood) parts.push(addr.suburb || addr.neighbourhood);
-            if (addr.city || addr.town || addr.village) parts.push(addr.city || addr.town || addr.village);
-
-            shortAddr = parts.length > 0 ? parts.join(', ') : (data.display_name || `${previewLatitude.toFixed(5)}, ${previewLongitude.toFixed(5)}`);
-          } else {
-            shortAddr = data.display_name || `${previewLatitude.toFixed(5)}, ${previewLongitude.toFixed(5)}`;
-          }
+          const shortAddr = data.display_name || `${previewLatitude.toFixed(5)}, ${previewLongitude.toFixed(5)}`;
           setPreviewAddress(shortAddr);
         } else {
           setPreviewAddress(`Location (${previewLatitude.toFixed(5)}, ${previewLongitude.toFixed(5)})`);
@@ -219,7 +205,11 @@ export default function AdminDashboard() {
     { id: 'EDL', title: 'Engineering Development LAB', desc: 'Manage EDL requests & stock.', color: 'from-blue-600 to-indigo-600' },
     { id: 'ECE', title: 'Electronics & Comm.', desc: 'Manage ECE requests & stock.', color: 'from-purple-600 to-pink-600' },
     { id: 'EEE', title: 'Electrical Engineering', desc: 'Manage EEE requests & stock.', color: 'from-amber-500 to-orange-600' },
-    { id: 'MECH', title: 'Mechanical Engineering', desc: 'Manage MECH requests & stock.', color: 'from-emerald-600 to-teal-600' }
+    { id: 'MECH', title: 'Mechanical Engineering', desc: 'Manage MECH requests & stock.', color: 'from-emerald-600 to-teal-600' },
+    { id: 'CIVIL', title: 'Civil Engineering', desc: 'Manage CIVIL requests & stock.', color: 'from-rose-500 to-red-600' },
+    { id: 'CSE', title: 'Computer Science & Eng.', desc: 'Manage CSE requests & stock.', color: 'from-red-600 to-orange-600' },
+    { id: 'ISE', title: 'Information Science & Eng.', desc: 'Manage ISE requests & stock.', color: 'from-cyan-600 to-blue-600' },
+    { id: 'AI_ML', title: 'Artificial Intelligence & ML', desc: 'Manage AI_ML requests & stock.', color: 'from-fuchsia-600 to-violet-600' }
   ];
 
   const fetchLabRequests = async () => {
@@ -1850,7 +1840,9 @@ export default function AdminDashboard() {
                     .filter(req => {
                       if (!sectionSearchQuery.trim()) return true;
                       const query = sectionSearchQuery.toLowerCase();
-                      return req.studentName.toLowerCase().includes(query) || req.usn.toLowerCase().includes(query);
+                      const name = req.studentName || '';
+                      const usnVal = req.usn || '';
+                      return name.toLowerCase().includes(query) || usnVal.toLowerCase().includes(query);
                     })
                     .reduce((acc, req) => {
                       const key = `${req.usn}_${req.requestDate}`;

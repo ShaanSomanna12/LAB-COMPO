@@ -15,7 +15,7 @@ export default function MyProfile() {
   // Profile Fields
   const [name, setName] = useState('');
   const [usn, setUsn] = useState('');
-  const [department, setDepartment] = useState('CSE');
+  const [department, setDepartment] = useState('');
   const [year, setYear] = useState('1st Year');
   const [section, setSection] = useState('');
   const [trustScore, setTrustScore] = useState(100);
