@@ -23,6 +23,7 @@ interface RequestItem {
   renewalDays?: number;
   isDamaged?: boolean;
   dueDate?: string;
+  valueTier?: string;
 }
 
 export default function HodDashboard() {
@@ -216,7 +217,11 @@ export default function HodDashboard() {
   // Filter requests
   const deptRequests = requests.filter(r => r.department === activeDept);
   const pendingRequests = deptRequests.filter(r => r.status === 'Pending HOD' || r.status === 'Pending Renewal HOD');
-  const historyRequests = deptRequests.filter(r => r.status !== 'Pending HOD' && r.status !== 'Pending Renewal HOD');
+  const historyRequests = deptRequests.filter(r => 
+    (r.valueTier === 'HIGH' || r.status === 'Approved by HOD' || r.status === 'Rejected' || r.status === 'Pending Renewal HOD') && 
+    r.status !== 'Pending HOD' && 
+    r.status !== 'Pending Renewal HOD'
+  );
 
   // Stats
   const totalPending = requests.filter(r => r.status === 'Pending HOD' || r.status === 'Pending Renewal HOD').length;
@@ -224,8 +229,8 @@ export default function HodDashboard() {
   const displayTotalPending = totalPending + totalLabPending;
 
   const activeDeptPending = pendingRequests.length;
-  const activeDeptApproved = deptRequests.filter(r => r.status.includes('Approved') || r.status === 'APPROVED' || r.status === 'Ready for Collection' || r.status === 'Active' || r.status.includes('Renewal')).length;
-  const activeDeptRejected = deptRequests.filter(r => r.status === 'Rejected').length;
+  const activeDeptApproved = historyRequests.filter(r => r.status.includes('Approved') || r.status === 'APPROVED' || r.status === 'Ready for Collection' || r.status === 'Active' || r.status.includes('Renewal')).length;
+  const activeDeptRejected = historyRequests.filter(r => r.status === 'Rejected' || r.status === 'REJECTED').length;
 
   // Lab access specific stats for active department
   const activeDeptLabRequests = labRequests.filter(r => r.department === activeDept);

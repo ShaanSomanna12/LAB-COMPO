@@ -42,8 +42,9 @@ export async function GET() {
       status: res.status,
       section: res.section,
       studentDepartment: res.student_department,
-      requestDate: res.created_at.split('T')[0],
-      duration: res.due_date ? Math.max(1, Math.ceil((new Date(res.due_date).getTime() - new Date(res.created_at).getTime()) / (1000 * 60 * 60 * 24))) : 7,
+      requestDate: res.created_at ? res.created_at.split('T')[0] : null,
+      date: res.created_at ? res.created_at.split('T')[0] : null,
+      duration: res.due_date && res.created_at ? Math.max(1, Math.ceil((new Date(res.due_date).getTime() - new Date(res.created_at).getTime()) / (1000 * 60 * 60 * 24))) : 7,
       dueDate: res.due_date || null,
       isDamaged: res.is_damaged === true,
       returnedAt: res.returned_at,
@@ -53,7 +54,8 @@ export async function GET() {
       geotagImageUrl: res.geotag_image_url || null,
       afterImgUrl: res.after_img_url || null,
       latitude: res.latitude || null,
-      longitude: res.longitude || null
+      longitude: res.longitude || null,
+      images: [res.geotag_image_url, res.after_img_url].filter(Boolean)
     }));
 
     return NextResponse.json(formattedData);
@@ -225,7 +227,8 @@ export async function POST(request: Request) {
         status = 'Pending HOD';
       }
       
-      const dueDate = new Date();
+      const collectionDate = date ? new Date(date) : new Date();
+      const dueDate = new Date(collectionDate);
       dueDate.setDate(dueDate.getDate() + (duration || 7));
 
       const { data: reservation, error: resError } = await supabase
@@ -239,7 +242,8 @@ export async function POST(request: Request) {
           project_title: body.projectTitle || null,
           due_date: dueDate.toISOString(),
           quantity: item.quantity || 1,
-          collection_time: time || null
+          collection_time: time || null,
+          created_at: collectionDate.toISOString()
         }])
         .select()
         .single();

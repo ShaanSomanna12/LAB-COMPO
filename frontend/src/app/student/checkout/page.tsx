@@ -648,7 +648,7 @@ export default function StudentCheckout() {
                         />
                       </div>
                       <label htmlFor="liability-checkbox" className="text-xs text-zinc-400 leading-relaxed cursor-pointer select-none">
-                        I hereby agree to the <span className="text-cyan-400 font-bold">Lab Policy & Borrowing Regulations</span> and accept full liability for returning these items in working condition or paying for appropriate replacements.
+                        I hereby agree to the <span className="text-cyan-400 font-bold">Lab Policy & Borrowing Regulations</span> and accept full liability for returning these items in working condition or paying for appropriate replacements. <span className="text-rose-400 font-bold block mt-1">⚠️ Crucial Notice: Issuing of your Hall Ticket will be blocked if the borrowed components are not returned on time.</span>
                       </label>
                     </div>
                   </div>
