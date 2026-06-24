@@ -295,20 +295,49 @@ export default function MyReservations() {
 
   const getStatusStyle = (status: string) => {
     switch (status) {
-      case 'PENDING': return 'text-orange-300 bg-orange-400/10 border-orange-400/30';
-      case 'APPROVED': return 'text-emerald-300 bg-emerald-400/10 border-emerald-400/30';
-      case 'REJECTED': return 'text-rose-300 bg-rose-400/10 border-rose-400/30';
+      case 'PENDING':
+      case 'PENDING_ADMIN':
+        return 'text-orange-300 bg-orange-400/10 border-orange-400/30';
+      case 'APPROVED':
+      case 'Approved by HOD':
+        return 'text-emerald-300 bg-emerald-400/10 border-emerald-400/30';
+      case 'REJECTED':
+      case 'Rejected':
+        return 'text-rose-300 bg-rose-400/10 border-rose-400/30';
       case 'Active':
-      case 'BORROWED': return 'text-cyan-300 bg-cyan-400/10 border-cyan-400/30';
-      case 'PENDING_RETURN': return 'text-amber-300 bg-amber-400/10 border-amber-400/30';
-      case 'RETURNED': return 'text-zinc-300 bg-zinc-400/10 border-zinc-400/30';
-      case 'PENDING_COLLECTION': return 'text-purple-300 bg-purple-400/10 border-purple-400/30';
-      default: return 'text-zinc-300 bg-zinc-400/10 border-zinc-400/30';
+      case 'BORROWED':
+        return 'text-cyan-300 bg-cyan-400/10 border-cyan-400/30';
+      case 'PENDING_RETURN':
+        return 'text-amber-300 bg-amber-400/10 border-amber-400/30';
+      case 'RETURNED':
+      case 'Returned':
+        return 'text-zinc-300 bg-zinc-400/10 border-zinc-400/30';
+      case 'PENDING_COLLECTION':
+        return 'text-purple-300 bg-purple-400/10 border-purple-400/30';
+      case 'Pending HOD':
+      case 'Pending Renewal HOD':
+        return 'text-amber-300 bg-amber-400/10 border-amber-400/30';
+      case 'Ready for Collection':
+        return 'text-teal-300 bg-teal-400/10 border-teal-400/30';
+      default:
+        return 'text-zinc-300 bg-zinc-400/10 border-zinc-400/30';
     }
   };
 
   // Group Reservations
-  const currentStatuses = ['PENDING', 'APPROVED', 'BORROWED', 'Active', 'PENDING_ADMIN', 'Ready for Collection', 'PENDING_RETURN', 'PENDING_COLLECTION'];
+  const currentStatuses = [
+    'PENDING',
+    'APPROVED',
+    'BORROWED',
+    'Active',
+    'PENDING_ADMIN',
+    'Ready for Collection',
+    'PENDING_RETURN',
+    'PENDING_COLLECTION',
+    'Pending HOD',
+    'Pending Renewal HOD',
+    'Approved by HOD'
+  ];
   const currentReservations = reservations.filter(r => currentStatuses.includes(r.status));
   const completedReservations = reservations.filter(r => !currentStatuses.includes(r.status));
 
@@ -645,6 +674,20 @@ export default function MyReservations() {
                           <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                           Awaiting Admin Confirmation
                         </div>
+                      ) : (res.status === 'Pending HOD' || res.status === 'Pending Renewal HOD') ? (
+                        <div className="w-full py-3 bg-amber-500/5 text-amber-500 border border-amber-500/20 rounded-xl font-bold text-sm text-center flex items-center justify-center gap-2 cursor-wait">
+                          <svg className="w-4 h-4 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                          Awaiting HOD Signature
+                        </div>
+                      ) : (res.status === 'PENDING' || res.status === 'PENDING_ADMIN') ? (
+                        <div className="w-full py-3 bg-orange-500/5 text-orange-400 border border-orange-500/20 rounded-xl font-bold text-sm text-center flex items-center justify-center gap-2 cursor-wait">
+                          <svg className="w-4 h-4 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                          </svg>
+                          Awaiting Admin Approval
+                        </div>
                       ) : (
                         <div className="w-full py-3 bg-zinc-900/50 text-zinc-600 border border-zinc-800/30 rounded-xl font-bold text-sm text-center cursor-not-allowed">
                           Awaiting Action
@@ -654,7 +697,7 @@ export default function MyReservations() {
                   ) : (
                     <div className="bg-zinc-950/50 p-4 border-t border-zinc-800/50">
                       <div className="w-full py-3 bg-zinc-900/50 text-zinc-500 border border-zinc-800/30 rounded-xl font-bold text-sm text-center cursor-default">
-                        {res.status === 'RETURNED' ? 'Successfully Returned' : res.status === 'REJECTED' ? 'Request Rejected' : 'Completed'}
+                        {(res.status === 'RETURNED' || res.status === 'Returned') ? 'Successfully Returned' : (res.status === 'REJECTED' || res.status === 'Rejected') ? 'Request Rejected' : 'Completed'}
                       </div>
                     </div>
                   )}

@@ -839,7 +839,7 @@ export default function AdminDashboard() {
               </thead>
               <tbody className="divide-y divide-zinc-800">
                 {(() => {
-                  const currentStatuses = ['PENDING', 'APPROVED', 'Pending HOD', 'Ready for Collection', 'Active', 'BORROWED', 'PENDING_RETURN', 'PENDING_COLLECTION'];
+                  const currentStatuses = ['PENDING', 'APPROVED', 'Pending HOD', 'Pending Renewal HOD', 'Approved by HOD', 'Ready for Collection', 'Active', 'BORROWED', 'PENDING_RETURN', 'PENDING_COLLECTION'];
                   const groupedRequests = requests
                     .filter(r => r.department === adminDept && (!scannedUsnFilter || r.usn === scannedUsnFilter))
                     .filter(req => workflowTab === 'CURRENT' ? currentStatuses.includes(req.status) : !currentStatuses.includes(req.status))
@@ -1833,7 +1833,7 @@ export default function AdminDashboard() {
               </thead>
               <tbody className="divide-y divide-zinc-800">
                 {(() => {
-                  const currentStatuses = ['PENDING', 'APPROVED', 'Pending HOD', 'Ready for Collection', 'Active', 'BORROWED', 'PENDING_RETURN', 'PENDING_COLLECTION'];
+                  const currentStatuses = ['PENDING', 'APPROVED', 'Pending HOD', 'Pending Renewal HOD', 'Approved by HOD', 'Ready for Collection', 'Active', 'BORROWED', 'PENDING_RETURN', 'PENDING_COLLECTION'];
                   const groupedRequests = requests
                     .filter(req => req.department === adminDept && req.studentDepartment === studentDeptFilter && req.section === sectionFilter && (!scannedUsnFilter || req.usn === scannedUsnFilter))
                     .filter(req => sectionTrackingTab === 'CURRENT' ? currentStatuses.includes(req.status) : !currentStatuses.includes(req.status))
