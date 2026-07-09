@@ -178,27 +178,27 @@ export default function AdminDashboard() {
           if (data.address) {
             const a = data.address;
             const parts = [];
-            
+
             // 1. Specific places or features
             const place = a.amenity || a.building || a.office || a.shop || a.tourism || '';
             if (place) parts.push(place);
-            
+
             // 2. Road/Street
             const road = a.road || a.pedestrian || a.highway || '';
             if (road) parts.push(road);
-            
+
             // 3. Suburb/Neighbourhood/Area
             const area = a.suburb || a.neighbourhood || a.quarter || a.residential || a.city_district || a.village || a.subdistrict || '';
             if (area && !parts.some(p => p.toLowerCase().includes(area.toLowerCase()))) {
               parts.push(area);
             }
-            
+
             // 4. City/Town/District
             const city = a.city || a.town || a.county || '';
             if (city && !parts.some(p => p.toLowerCase().includes(city.toLowerCase()))) {
               parts.push(city);
             }
-            
+
             if (parts.length > 0) {
               shortAddr = parts.join(', ');
             } else {

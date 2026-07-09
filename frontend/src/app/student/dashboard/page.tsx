@@ -14,6 +14,8 @@ export default function StudentDashboard() {
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [notices, setNotices] = useState<any[]>([]);
+  const [activeReservations, setActiveReservations] = useState<any[]>([]);
+  const [isLoadingReservations, setIsLoadingReservations] = useState(true);
 
   // Profile States
   const [profile, setProfile] = useState<{
@@ -30,7 +32,7 @@ export default function StudentDashboard() {
         if (user) {
           const { data: userData } = await supabase
             .from('users')
-            .select('name, usn, department, section')
+            .select('user_id, name, usn, department, section')
             .eq('email', user.email)
             .maybeSingle();
 
@@ -48,10 +50,33 @@ export default function StudentDashboard() {
                const noticesData = await res.json();
                if (Array.isArray(noticesData)) setNotices(noticesData);
             }
+
+            // Fetch active reservations
+            const { data: resData, error: resError } = await supabase
+              .from('reservations')
+              .select(`
+                reservation_id,
+                status,
+                created_at,
+                due_date,
+                components!inner(name, department, lab_location)
+              `)
+              .eq('user_id', userData.user_id)
+              .in('status', ['PENDING', 'APPROVED', 'Active', 'BORROWED', 'Ready for Collection', 'PENDING_COLLECTION', 'Pending HOD', 'Pending Renewal HOD'])
+              .order('created_at', { ascending: false })
+              .limit(3);
+
+            if (resError) {
+              console.error('Error fetching dashboard reservations:', resError);
+            } else {
+              setActiveReservations(resData || []);
+            }
           }
         }
       } catch (err) {
         console.error('Error fetching profile:', err);
+      } finally {
+        setIsLoadingReservations(false);
       }
     };
     fetchProfile();
@@ -61,11 +86,42 @@ export default function StudentDashboard() {
     router.push('/student/checkout');
   };
 
+  const getStatusStyle = (status: string) => {
+    switch (status) {
+      case 'PENDING':
+      case 'PENDING_ADMIN':
+        return 'text-orange-300 bg-orange-400/10 border-orange-400/30';
+      case 'APPROVED':
+      case 'Approved by HOD':
+        return 'text-emerald-300 bg-emerald-400/10 border-emerald-400/30';
+      case 'REJECTED':
+      case 'Rejected':
+        return 'text-rose-300 bg-rose-400/10 border-rose-400/30';
+      case 'Active':
+      case 'BORROWED':
+        return 'text-cyan-300 bg-cyan-400/10 border-cyan-400/30';
+      case 'PENDING_RETURN':
+        return 'text-amber-300 bg-amber-400/10 border-amber-400/30';
+      case 'RETURNED':
+      case 'Returned':
+        return 'text-zinc-300 bg-zinc-400/10 border-zinc-400/30';
+      case 'PENDING_COLLECTION':
+        return 'text-purple-300 bg-purple-400/10 border-purple-400/30';
+      case 'Pending HOD':
+      case 'Pending Renewal HOD':
+        return 'text-amber-300 bg-amber-400/10 border-amber-400/30';
+      case 'Ready for Collection':
+        return 'text-teal-300 bg-teal-400/10 border-teal-400/30';
+      default:
+        return 'text-zinc-300 bg-zinc-400/10 border-zinc-400/30';
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-[#020617] text-zinc-100 flex flex-col items-center justify-center p-4 pt-16 font-sans selection:bg-cyan-500/30 overflow-hidden relative">
+    <div className="min-h-screen bg-[#020617] text-zinc-100 flex flex-col items-center justify-start pt-[calc(4.5rem+env(safe-area-inset-top,0px))] pb-4 px-4 font-sans selection:bg-cyan-500/30 overflow-x-hidden relative">
       
       {/* Full Width Top Announcement Banner */}
-      <div className="absolute top-0 left-0 w-full bg-cyan-950/40 border-b border-cyan-500/20 py-2.5 px-4 backdrop-blur-md z-50 text-center flex items-center justify-center gap-3">
+      <div className="absolute top-0 left-0 w-full bg-cyan-950/40 border-b border-cyan-500/20 pt-[calc(0.625rem+env(safe-area-inset-top,0px))] pb-2.5 px-4 backdrop-blur-md z-50 text-center flex items-center justify-center gap-3">
         <span className="relative flex h-2 w-2">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
           <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
@@ -86,7 +142,7 @@ export default function StudentDashboard() {
         {/* Top Navigation Bar */}
         <div className="flex justify-between items-center mb-16 md:mb-24 relative">
           <div className="flex items-center gap-3">
-            <img src={siteConfig.logoUrl} alt="Logo" className="w-14 h-14 object-contain" />
+            <img src={siteConfig.logoUrl} alt="Logo" className="w-10 h-10 md:w-12 md:h-12 object-contain" />
             <span className={`${spaceGrotesk.className} text-2xl font-bold tracking-widest text-white`}>{siteConfig.appName}</span>
           </div>
 
@@ -202,61 +258,92 @@ export default function StudentDashboard() {
           </p>
         </div>
 
-        {/* Action Cards Grid */}
-        <div className="grid grid-cols-1 gap-8 max-w-2xl mx-auto w-full animate-in fade-in slide-in-from-bottom-12 duration-1000 delay-150 fill-mode-both">
+        {/* Action Dashboard Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full animate-in fade-in slide-in-from-bottom-12 duration-1000 delay-150 fill-mode-both items-start">
+          
+          {/* Left Column: Quick Action (Hardware Dashboard) */}
+          <div className="lg:col-span-1">
+            <div
+              onClick={handleHardwareDashboardClick}
+              className="group relative bg-black/40 backdrop-blur-2xl border border-cyan-500/20 hover:border-cyan-500/50 rounded-3xl p-8 cursor-pointer transition-all duration-500 hover:-translate-y-2 shadow-[0_0_50px_rgba(6,182,212,0.15)] hover:shadow-[0_0_40px_-10px_rgba(6,182,212,0.4)] flex flex-col items-center text-center overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-transparent opacity-0 group-hover:opacity-100 transition duration-700"></div>
 
-          {/* Hardware Checkout Card */}
-          <div
-            onClick={handleHardwareDashboardClick}
-            className="group relative bg-black/40 backdrop-blur-2xl border border-cyan-500/20 hover:border-cyan-500/50 rounded-3xl p-10 cursor-pointer transition-all duration-500 hover:-translate-y-2 shadow-[0_0_50px_rgba(6,182,212,0.15)] hover:shadow-[0_0_40px_-10px_rgba(6,182,212,0.4)] flex flex-col items-center text-center overflow-hidden"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-transparent opacity-0 group-hover:opacity-100 transition duration-700"></div>
-
-            <div className="relative z-10">
-              <div className="w-24 h-24 mx-auto bg-cyan-500/10 rounded-full flex items-center justify-center mb-8 text-cyan-400 group-hover:scale-110 transition-transform duration-500 border border-cyan-500/20">
-                <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-                </svg>
-              </div>
-              <h2 className={`${spaceGrotesk.className} text-3xl font-bold text-white mb-4 group-hover:text-cyan-100 transition-colors`}>Hardware Dashboard</h2>
-              <p className="text-zinc-400 font-medium text-base leading-relaxed mb-8 px-4 group-hover:text-zinc-300 transition-colors">
-                Request microcontrollers, sensors, oscilloscopes, and physical components.
-              </p>
-              <div className="inline-flex items-center text-cyan-400 font-bold uppercase tracking-wider group-hover:text-cyan-300 transition-colors">
-                Proceed
-                <svg className="w-5 h-5 ml-2 group-hover:translate-x-2 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          {/* Lab Workspace Access Card - TEMPORARILY DISABLED 
-          <div
-            onClick={() => router.push('/student/lab-access')}
-            className="group relative bg-black/40 backdrop-blur-2xl border border-indigo-500/20 hover:border-indigo-500/50 rounded-3xl p-10 cursor-pointer transition-all duration-500 hover:-translate-y-2 shadow-[0_0_50px_rgba(99,102,241,0.15)] hover:shadow-[0_0_40px_-10px_rgba(99,102,241,0.4)] flex flex-col items-center text-center overflow-hidden"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition duration-700"></div>
-
-            <div className="relative z-10">
-              <div className="w-24 h-24 mx-auto bg-indigo-500/10 rounded-full flex items-center justify-center mb-8 text-indigo-400 group-hover:scale-110 transition-transform duration-500 border border-indigo-500/20">
-                <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <h2 className={`${spaceGrotesk.className} text-3xl font-bold text-white mb-4 group-hover:text-indigo-100 transition-colors`}>Workspace Access</h2>
-              <p className="text-zinc-400 font-medium text-base leading-relaxed mb-8 px-4 group-hover:text-zinc-300 transition-colors">
-                Reserve time slots in specialized laboratories for hands-on project work.
-              </p>
-              <div className="inline-flex items-center text-indigo-400 font-bold uppercase tracking-wider group-hover:text-indigo-300 transition-colors">
-                Reserve Space
-                <svg className="w-5 h-5 ml-2 group-hover:translate-x-2 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                </svg>
+              <div className="relative z-10">
+                <div className="w-16 h-16 mx-auto bg-cyan-500/10 rounded-full flex items-center justify-center mb-6 text-cyan-400 group-hover:scale-110 transition-transform duration-500 border border-cyan-500/20">
+                  <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                  </svg>
+                </div>
+                <h2 className={`${spaceGrotesk.className} text-2xl font-bold text-white mb-3 group-hover:text-cyan-100 transition-colors`}>Hardware Dashboard</h2>
+                <p className="text-zinc-400 font-medium text-sm leading-relaxed mb-6 px-2 group-hover:text-zinc-300 transition-colors">
+                  Request microcontrollers, sensors, oscilloscopes, and components.
+                </p>
+                <div className="inline-flex items-center text-cyan-400 font-bold uppercase tracking-wider group-hover:text-cyan-300 text-xs transition-colors">
+                  Proceed
+                  <svg className="w-4 h-4 ml-1.5 group-hover:translate-x-2 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                </div>
               </div>
             </div>
           </div>
-          */}
+
+          {/* Right Column: Active Reservations */}
+          <div className="lg:col-span-2 bg-black/40 backdrop-blur-2xl border border-zinc-800 rounded-3xl p-6 md:p-8 flex flex-col min-h-[280px]">
+            <div className="flex justify-between items-center mb-6 border-b border-zinc-800/80 pb-4">
+              <h2 className={`${spaceGrotesk.className} text-xl font-bold text-white tracking-wide flex items-center gap-2`}>
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                Active Reservations
+              </h2>
+              <button
+                onClick={() => router.push('/student/reservations')}
+                className="text-xs font-mono uppercase tracking-wider text-cyan-400 hover:text-cyan-300 transition-colors"
+              >
+                View All →
+              </button>
+            </div>
+
+            {isLoadingReservations ? (
+              <div className="space-y-4 flex-1 flex flex-col justify-center">
+                {[1, 2].map(i => (
+                  <div key={i} className="h-16 rounded-xl bg-zinc-900/40 animate-pulse border border-zinc-800/50"></div>
+                ))}
+              </div>
+            ) : activeReservations.length === 0 ? (
+              <div className="flex-grow flex flex-col items-center justify-center py-10 text-center">
+                <div className="w-12 h-12 rounded-full bg-zinc-900/50 flex items-center justify-center text-zinc-600 mb-3 border border-zinc-800">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
+                <p className="text-sm text-zinc-500 font-medium">No active components checked out or pending.</p>
+                <p className="text-xs text-zinc-600 mt-1">Components you request will appear here.</p>
+              </div>
+            ) : (
+              <div className="space-y-4 flex-grow">
+                {activeReservations.map(res => (
+                  <div
+                    key={res.reservation_id}
+                    className="flex justify-between items-center p-4 bg-zinc-900/30 hover:bg-zinc-900/60 border border-zinc-800/50 rounded-2xl transition-all"
+                  >
+                    <div className="flex-1 min-w-0 pr-4">
+                      <h4 className="text-white font-bold text-sm truncate">{res.components?.name}</h4>
+                      <p className="text-xs text-zinc-500 font-mono mt-0.5">
+                        {res.components?.department} • {res.components?.lab_location}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end shrink-0 gap-1.5">
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border ${getStatusStyle(res.status)}`}>
+                        {res.status}
+                      </span>
+                      <span className="text-[10px] text-zinc-600 font-mono">#{res.reservation_id}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
         </div>
       </div>

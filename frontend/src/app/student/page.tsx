@@ -204,14 +204,14 @@ export default function StudentAuth() {
   };
 
   return (
-    <div className="relative min-h-screen bg-black flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 selection:bg-violet-500/30 overflow-hidden">
+    <div className="relative min-h-screen bg-black flex flex-col justify-start md:justify-center pt-[calc(3rem+env(safe-area-inset-top,0px))] pb-12 md:py-12 px-4 sm:px-6 lg:px-8 selection:bg-violet-500/30 overflow-x-hidden">
       {/* Background Glowing Ambient Orbs */}
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-violet-600/20 rounded-full mix-blend-screen filter blur-[128px] opacity-50 animate-pulse pointer-events-none" />
       <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-fuchsia-600/10 rounded-full mix-blend-screen filter blur-[128px] opacity-50 pointer-events-none" />
 
       {/* Header Block */}
       <div className="relative sm:mx-auto sm:w-full sm:max-w-md text-center z-10 flex flex-col items-center">
-        <img src={siteConfig.logoUrl} alt={`${siteConfig.collegeName} Logo`} className="w-20 h-20 mb-4 object-contain" />
+        <img src={siteConfig.logoUrl} alt={`${siteConfig.collegeName} Logo`} className="w-14 h-14 md:w-16 md:h-16 mb-4 object-contain" />
         <h2 className="text-5xl font-black tracking-tighter text-white">
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-fuchsia-500">{siteConfig.appName}</span>
         </h2>

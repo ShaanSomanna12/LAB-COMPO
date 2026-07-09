@@ -219,9 +219,24 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }: Ima
     const scaleX = naturalWidth / displayedWidth;
     const scaleY = naturalHeight / displayedHeight;
 
+    // Cap maximum dimensions to 600px for optimized loading
+    const MAX_DIMENSION = 600;
+    let targetWidth = crop.width * scaleX;
+    let targetHeight = crop.height * scaleY;
+
+    if (targetWidth > MAX_DIMENSION || targetHeight > MAX_DIMENSION) {
+      if (targetWidth > targetHeight) {
+        targetHeight = (targetHeight * MAX_DIMENSION) / targetWidth;
+        targetWidth = MAX_DIMENSION;
+      } else {
+        targetWidth = (targetWidth * MAX_DIMENSION) / targetHeight;
+        targetHeight = MAX_DIMENSION;
+      }
+    }
+
     const canvas = document.createElement('canvas');
-    canvas.width = crop.width * scaleX;
-    canvas.height = crop.height * scaleY;
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -234,8 +249,8 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }: Ima
       crop.height * scaleY,
       0,
       0,
-      canvas.width,
-      canvas.height
+      targetWidth,
+      targetHeight
     );
 
     // Dynamic compression at 80% quality JPEG

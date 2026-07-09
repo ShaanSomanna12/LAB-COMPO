@@ -107,74 +107,94 @@ export default function MyReservations() {
 
   useEffect(() => {
     const resolveAddresses = async () => {
-      const newAddresses = { ...addresses };
+      // Load address cache from localStorage to avoid hitting API repeatedly
+      let cachedAddrs: Record<string, string> = {};
+      try {
+        const stored = localStorage.getItem('geotag_address_cache');
+        if (stored) cachedAddrs = JSON.parse(stored);
+      } catch (e) {
+        console.error("Failed to parse address cache:", e);
+      }
+
+      const newAddresses = { ...addresses, ...cachedAddrs };
       let changed = false;
 
-      for (const res of reservations) {
-        if (res.latitude && res.longitude) {
-          const cacheKey = `${res.latitude},${res.longitude}`;
-          if (!newAddresses[cacheKey]) {
-            try {
-              const response = await fetch(
-                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${res.latitude}&lon=${res.longitude}`,
-                {
-                  headers: {
-                    'User-Agent': 'Phoenix-Lab-Portal/1.0'
-                  }
-                }
-              );
-              if (response.ok) {
-                const data = await response.json();
-                let shortAddr = '';
-                if (data.address) {
-                  const a = data.address;
-                  const parts = [];
-                  
-                  // 1. Specific places or features
-                  const place = a.amenity || a.building || a.office || a.shop || a.tourism || '';
-                  if (place) parts.push(place);
-                  
-                  // 2. Road/Street
-                  const road = a.road || a.pedestrian || a.highway || '';
-                  if (road) parts.push(road);
-                  
-                  // 3. Suburb/Neighbourhood/Area
-                  const area = a.suburb || a.neighbourhood || a.quarter || a.residential || a.city_district || a.village || a.subdistrict || '';
-                  if (area && !parts.some(p => p.toLowerCase().includes(area.toLowerCase()))) {
-                    parts.push(area);
-                  }
-                  
-                  // 4. City/Town/District
-                  const city = a.city || a.town || a.county || '';
-                  if (city && !parts.some(p => p.toLowerCase().includes(city.toLowerCase()))) {
-                    parts.push(city);
-                  }
-                  
-                  if (parts.length > 0) {
-                    shortAddr = parts.join(', ');
-                  } else {
-                    shortAddr = data.display_name || `${res.latitude.toFixed(5)}, ${res.longitude.toFixed(5)}`;
-                  }
-                } else {
-                  shortAddr = data.display_name || `${res.latitude.toFixed(5)}, ${res.longitude.toFixed(5)}`;
-                }
-                newAddresses[cacheKey] = shortAddr;
-                changed = true;
-              } else {
-                newAddresses[cacheKey] = `Location (${res.latitude.toFixed(5)}, ${res.longitude.toFixed(5)})`;
-                changed = true;
-              }
-            } catch (err) {
-              console.error("Geocoding error:", err);
-              newAddresses[cacheKey] = `Location (${res.latitude.toFixed(5)}, ${res.longitude.toFixed(5)})`;
-              changed = true;
-            }
-          }
+      const reservationsToResolve = reservations.filter(res => {
+        if (!res.latitude || !res.longitude) return false;
+        const cacheKey = `${res.latitude},${res.longitude}`;
+        if (newAddresses[cacheKey]) return false;
+        return true;
+      });
+
+      if (reservationsToResolve.length === 0) {
+        const totalKeys = Object.keys(newAddresses).length;
+        const currentKeys = Object.keys(addresses).length;
+        if (totalKeys !== currentKeys) {
+          setAddresses(newAddresses);
         }
+        return;
       }
+
+      // Resolve Nominatim queries in parallel
+      const fetchPromises = reservationsToResolve.map(async (res) => {
+        const lat = res.latitude!;
+        const lon = res.longitude!;
+        const cacheKey = `${lat},${lon}`;
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`,
+            {
+              headers: {
+                'User-Agent': 'Phoenix-Lab-Portal/1.0'
+              }
+            }
+          );
+          if (response.ok) {
+            const data = await response.json();
+            let shortAddr = '';
+            if (data.address) {
+              const a = data.address;
+              const parts = [];
+              const place = a.amenity || a.building || a.office || a.shop || a.tourism || '';
+              if (place) parts.push(place);
+              const road = a.road || a.pedestrian || a.highway || '';
+              if (road) parts.push(road);
+              const area = a.suburb || a.neighbourhood || a.quarter || a.residential || a.city_district || a.village || a.subdistrict || '';
+              if (area && !parts.some(p => p.toLowerCase().includes(area.toLowerCase()))) parts.push(area);
+              const city = a.city || a.town || a.county || '';
+              if (city && !parts.some(p => p.toLowerCase().includes(city.toLowerCase()))) parts.push(city);
+              
+              if (parts.length > 0) {
+                shortAddr = parts.join(', ');
+              } else {
+                shortAddr = data.display_name || `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+              }
+            } else {
+              shortAddr = data.display_name || `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+            }
+            return { key: cacheKey, value: shortAddr };
+          }
+        } catch (err) {
+          console.error("Geocoding error:", err);
+        }
+        return { key: cacheKey, value: `Location (${lat.toFixed(5)}, ${lon.toFixed(5)})` };
+      });
+
+      const results = await Promise.all(fetchPromises);
+      results.forEach(res => {
+        if (res && !newAddresses[res.key]) {
+          newAddresses[res.key] = res.value;
+          changed = true;
+        }
+      });
 
       if (changed) {
         setAddresses(newAddresses);
+        try {
+          localStorage.setItem('geotag_address_cache', JSON.stringify(newAddresses));
+        } catch (e) {
+          console.error("Failed to save address cache:", e);
+        }
       }
     };
 
@@ -236,6 +256,55 @@ export default function MyReservations() {
     }
   };
 
+  const compressImage = (file: File, maxDimension: number = 800, quality: number = 0.75): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxDimension || height > maxDimension) {
+            if (width > height) {
+              height = (height * maxDimension) / width;
+              width = maxDimension;
+            } else {
+              width = (width * maxDimension) / height;
+              height = maxDimension;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Canvas context could not be created'));
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                resolve(blob);
+              } else {
+                reject(new Error('Canvas toBlob failed'));
+              }
+            },
+            'image/jpeg',
+            quality
+          );
+        };
+        img.onerror = () => reject(new Error('Failed to load image resource'));
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     const targetId = uploadType === 'RETURN' ? returnResId : selectedResId;
@@ -259,14 +328,26 @@ export default function MyReservations() {
 
       const { latitude, longitude } = position.coords;
 
+      // Compress the image before uploading to speed up process and save bandwidth
+      let fileToUpload: Blob = file;
+      try {
+        fileToUpload = await compressImage(file, 800, 0.75);
+      } catch (compressErr) {
+        console.warn("Client-side image compression failed, uploading raw file instead:", compressErr);
+      }
+
       // 2. Upload Image to Supabase Storage
-      const fileExt = file.name.split('.').pop();
+      const fileExt = 'jpg';
       const fileName = `${targetId}_${uploadType === 'RETURN' ? 'return' : 'collect'}_${Date.now()}.${fileExt}`;
       const filePath = `${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from('reservations-images')
-        .upload(filePath, file);
+        .upload(filePath, fileToUpload, {
+          contentType: 'image/jpeg',
+          cacheControl: '3600',
+          upsert: false
+        });
 
       if (uploadError) throw uploadError;
 

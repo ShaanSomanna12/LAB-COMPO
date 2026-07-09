@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { Space_Grotesk } from 'next/font/google';
 import ParticleNetwork from '@/components/ui/ParticleNetwork';
 import { siteConfig } from '@/config/site';
+import { Skeleton } from '@/components/ui/Skeleton';
 
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] });
 
@@ -60,6 +61,7 @@ export default function StudentCheckout() {
   
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingInventory, setIsLoadingInventory] = useState(true);
   const [notices, setNotices] = useState<any[]>([]);
 
   useEffect(() => {
@@ -90,12 +92,16 @@ export default function StudentCheckout() {
     fetchUserDetails();
 
     // Fetch inventory
+    setIsLoadingInventory(true);
     fetch('/api/inventory')
       .then(res => res.json())
       .then(data => {
         setInventory(data);
       })
-      .catch(err => console.error("Failed to load inventory", err));
+      .catch(err => console.error("Failed to load inventory", err))
+      .finally(() => {
+        setIsLoadingInventory(false);
+      });
 
     setMinDate(new Date().toLocaleDateString('en-CA'));
   }, []);
@@ -383,9 +389,13 @@ export default function StudentCheckout() {
                 </div>
 
                 <div className="relative z-10 pt-4 mt-4 border-t border-slate-900/60 flex items-center justify-between">
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-cyan-950/40 text-cyan-400 border border-cyan-900/40">
-                    {getDeptItemCount(dept.id)} components present
-                  </span>
+                  {isLoadingInventory ? (
+                    <span className="w-28 h-4 bg-slate-900/50 rounded animate-pulse border border-slate-800"></span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-cyan-950/40 text-cyan-400 border border-cyan-900/40">
+                      {getDeptItemCount(dept.id)} components present
+                    </span>
+                  )}
                   <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest group-hover:text-cyan-400 transition-colors">Select →</span>
                 </div>
               </div>
@@ -417,7 +427,19 @@ export default function StudentCheckout() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                {filteredInventory.length === 0 ? (
+                {isLoadingInventory ? (
+                  Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="bg-slate-950/40 border border-slate-850 rounded-2xl p-4 space-y-4 animate-pulse">
+                      <Skeleton className="h-40 w-full rounded-xl bg-slate-900/40 border border-slate-800" />
+                      <Skeleton className="h-4 w-3/4 rounded bg-slate-900/40" />
+                      <Skeleton className="h-3 w-1/2 rounded bg-slate-900/40" />
+                      <div className="flex justify-between items-center pt-3 border-t border-slate-900/60">
+                        <Skeleton className="h-3.5 w-1/3 rounded bg-slate-900/40" />
+                        <Skeleton className="h-3.5 w-1/4 rounded bg-slate-900/40" />
+                      </div>
+                    </div>
+                  ))
+                ) : filteredInventory.length === 0 ? (
                   <div className="col-span-full py-20 flex flex-col items-center justify-center border border-dashed border-slate-800 rounded-2xl bg-slate-950/30">
                     <svg className="w-12 h-12 text-zinc-700 mb-4 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />

@@ -264,14 +264,14 @@ export default function StudentAuth() {
   };
 
   return (
-    <div className="relative min-h-screen bg-[#020617] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 selection:bg-cyan-500/30 overflow-hidden">
+    <div className="relative min-h-screen bg-[#020617] flex flex-col justify-start md:justify-center pt-[calc(3rem+env(safe-area-inset-top,0px))] pb-12 md:py-12 px-4 sm:px-6 lg:px-8 selection:bg-cyan-500/30 overflow-x-hidden">
       
       {/* 3D Particle Network Background */}
       <ParticleNetwork />
 
       {/* Header Block */}
       <div className="relative sm:mx-auto sm:w-full sm:max-w-md text-center z-10 flex flex-col items-center">
-        <img src={siteConfig.logoUrl} alt={`${siteConfig.collegeName} Logo`} className="w-20 h-20 mb-4 object-contain" />
+        <img src={siteConfig.logoUrl} alt={`${siteConfig.collegeName} Logo`} className="w-14 h-14 md:w-16 md:h-16 mb-4 object-contain" />
         <h2 className={`${spaceGrotesk.className} text-5xl font-black tracking-tighter text-white drop-shadow-2xl`}>
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-500">{siteConfig.appName}</span>
         </h2>
