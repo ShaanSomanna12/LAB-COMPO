@@ -7,6 +7,9 @@ import { Space_Grotesk } from 'next/font/google';
 import ParticleNetwork from '@/components/ui/ParticleNetwork';
 import { siteConfig } from '@/config/site';
 import { toast } from 'sonner';
+import { motion, AnimatePresence } from 'framer-motion';
+import { LogOut, User, Microchip, Clock, ChevronRight, Bell, Menu, X, ArrowRight, QrCode, Eye } from 'lucide-react';
+import QRCode from 'react-qr-code';
 
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] });
 
@@ -14,8 +17,7 @@ export default function StudentDashboard() {
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [notices, setNotices] = useState<any[]>([]);
-  const [activeReservations, setActiveReservations] = useState<any[]>([]);
-  const [isLoadingReservations, setIsLoadingReservations] = useState(true);
+  const [showQr, setShowQr] = useState(false);
 
   // Profile States
   const [profile, setProfile] = useState<{
@@ -50,33 +52,10 @@ export default function StudentDashboard() {
                const noticesData = await res.json();
                if (Array.isArray(noticesData)) setNotices(noticesData);
             }
-
-            // Fetch active reservations
-            const { data: resData, error: resError } = await supabase
-              .from('reservations')
-              .select(`
-                reservation_id,
-                status,
-                created_at,
-                due_date,
-                components!inner(name, department, lab_location)
-              `)
-              .eq('user_id', userData.user_id)
-              .in('status', ['PENDING', 'APPROVED', 'Active', 'BORROWED', 'Ready for Collection', 'PENDING_COLLECTION', 'Pending HOD', 'Pending Renewal HOD'])
-              .order('created_at', { ascending: false })
-              .limit(3);
-
-            if (resError) {
-              console.error('Error fetching dashboard reservations:', resError);
-            } else {
-              setActiveReservations(resData || []);
-            }
           }
         }
       } catch (err) {
         console.error('Error fetching profile:', err);
-      } finally {
-        setIsLoadingReservations(false);
       }
     };
     fetchProfile();
@@ -86,270 +65,315 @@ export default function StudentDashboard() {
     router.push('/student/checkout');
   };
 
-  const getStatusStyle = (status: string) => {
-    switch (status) {
-      case 'PENDING':
-      case 'PENDING_ADMIN':
-        return 'text-orange-300 bg-orange-400/10 border-orange-400/30';
-      case 'APPROVED':
-      case 'Approved by HOD':
-        return 'text-emerald-300 bg-emerald-400/10 border-emerald-400/30';
-      case 'REJECTED':
-      case 'Rejected':
-        return 'text-rose-300 bg-rose-400/10 border-rose-400/30';
-      case 'Active':
-      case 'BORROWED':
-        return 'text-cyan-300 bg-cyan-400/10 border-cyan-400/30';
-      case 'PENDING_RETURN':
-        return 'text-amber-300 bg-amber-400/10 border-amber-400/30';
-      case 'RETURNED':
-      case 'Returned':
-        return 'text-zinc-300 bg-zinc-400/10 border-zinc-400/30';
-      case 'PENDING_COLLECTION':
-        return 'text-purple-300 bg-purple-400/10 border-purple-400/30';
-      case 'Pending HOD':
-      case 'Pending Renewal HOD':
-        return 'text-amber-300 bg-amber-400/10 border-amber-400/30';
-      case 'Ready for Collection':
-        return 'text-teal-300 bg-teal-400/10 border-teal-400/30';
-      default:
-        return 'text-zinc-300 bg-zinc-400/10 border-zinc-400/30';
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-[#020617] text-zinc-100 flex flex-col items-center justify-start pt-[calc(4.5rem+env(safe-area-inset-top,0px))] pb-4 px-4 font-sans selection:bg-cyan-500/30 overflow-x-hidden relative">
-      
-      {/* Full Width Top Announcement Banner */}
-      <div className="absolute top-0 left-0 w-full bg-cyan-950/40 border-b border-cyan-500/20 pt-[calc(0.625rem+env(safe-area-inset-top,0px))] pb-2.5 px-4 backdrop-blur-md z-50 text-center flex items-center justify-center gap-3">
-        <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
-        </span>
-        <p className="text-xs md:text-sm font-bold text-cyan-50 uppercase tracking-widest">
-          Welcome to {siteConfig.collegeName} Lab Portal
-        </p>
-      </div>
-
-      {/* Base Deep Radial Gradient */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-20%,_#1e1b4b_0%,_#020617_100%)]"></div>
-
-      {/* 3D Particle Network Background */}
-      <ParticleNetwork />
-
-      <div className="w-full max-w-5xl relative z-10 px-4 py-8 min-h-screen flex flex-col">
-
-        {/* Top Navigation Bar */}
-        <div className="flex justify-between items-center mb-16 md:mb-24 relative">
-          <div className="flex items-center gap-3">
-            <img src={siteConfig.logoUrl} alt="Logo" className="w-10 h-10 md:w-12 md:h-12 object-contain" />
-            <span className={`${spaceGrotesk.className} text-2xl font-bold tracking-widest text-white`}>{siteConfig.appName}</span>
-          </div>
-
-          {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center gap-4">
-            <button
-              onClick={() => router.push('/student/reservations')}
-              className="px-5 py-2.5 bg-zinc-900/50 hover:bg-emerald-500/10 border border-zinc-800 hover:border-emerald-500/30 text-zinc-300 hover:text-emerald-400 rounded-full transition-all font-mono text-sm uppercase tracking-wider"
+    <>
+      {/* Zoomed QR Code Modal */}
+      <AnimatePresence>
+        {showQr && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-xl p-4"
+            onClick={() => setShowQr(false)} // Close if clicked outside
+          >
+            <motion.div 
+              initial={{ scale: 0.8, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.8, y: 20 }}
+              onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside modal
+              className="relative bg-white p-8 rounded-3xl shadow-[0_0_50px_rgba(139,92,246,0.4)] flex flex-col items-center max-w-sm w-full"
             >
-              Reservations
-            </button>
-            <button
-              onClick={() => router.push('/student/profile')}
-              className="flex items-center gap-2 px-5 py-2.5 bg-zinc-900/50 hover:bg-rose-500/10 border border-zinc-800 hover:border-rose-500/30 text-zinc-300 hover:text-rose-400 rounded-full transition-all font-mono text-sm uppercase tracking-wider"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-              Profile
-            </button>
-            <button
-              onClick={async () => {
-                await supabase.auth.signOut();
-                router.push('/');
-              }}
-              className="px-5 py-2.5 bg-red-950/30 hover:bg-red-900/50 border border-red-900/50 hover:border-red-500 text-red-400 hover:text-red-300 rounded-full transition-all font-mono text-sm uppercase tracking-wider"
-            >
-              Logout
-            </button>
-          </div>
-
-          {/* Mobile Navigation Toggle */}
-          <div className="md:hidden flex items-center">
-            <button
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="p-2 text-zinc-400 hover:text-white transition-colors"
-              aria-label="Toggle Menu"
-            >
-              {isMobileMenuOpen ? (
-                <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              ) : (
-                <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              )}
-            </button>
-          </div>
-
-          {/* Mobile Dropdown Menu */}
-          {isMobileMenuOpen && (
-            <div className="absolute top-14 right-0 w-56 bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50 md:hidden animate-in fade-in slide-in-from-top-4 duration-200">
-              <div className="flex flex-col py-2">
-                <button
-                  onClick={() => router.push('/student/reservations')}
-                  className="w-full text-left px-5 py-3 hover:bg-white/5 text-zinc-300 hover:text-emerald-400 transition-colors font-mono text-sm uppercase tracking-wider border-b border-white/5"
-                >
-                  Reservations
-                </button>
-                <button
-                  onClick={() => router.push('/student/profile')}
-                  className="w-full text-left flex items-center gap-2 px-5 py-3 hover:bg-white/5 text-zinc-300 hover:text-rose-400 transition-colors font-mono text-sm uppercase tracking-wider border-b border-white/5"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                  Profile
-                </button>
-                <button
-                  onClick={async () => {
-                    await supabase.auth.signOut();
-                    router.push('/');
-                  }}
-                  className="w-full text-left px-5 py-3 hover:bg-white/5 text-red-400 hover:text-red-300 transition-colors font-mono text-sm uppercase tracking-wider"
-                >
-                  Logout
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-
-
-          {/* Active Notices Banner */}
-          {notices.length > 0 && (
-            <div className="mb-12 space-y-3 z-20 relative animate-in fade-in slide-in-from-top-8 duration-700">
-              {notices.map(notice => (
-                <div key={notice.id} className={`p-4 rounded-2xl border flex items-start gap-4 shadow-2xl backdrop-blur-md ${notice.type === 'alert' ? 'bg-red-500/10 border-red-500/30 text-red-100' : notice.type === 'warning' ? 'bg-amber-500/10 border-amber-500/30 text-amber-100' : 'bg-cyan-500/10 border-cyan-500/30 text-cyan-100'}`}>
-                  <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${notice.type === 'alert' ? 'bg-red-500/20 text-red-400' : notice.type === 'warning' ? 'bg-amber-500/20 text-amber-400' : 'bg-cyan-500/20 text-cyan-400'}`}>
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-sm tracking-wide uppercase mb-1 flex items-center gap-2">
-                      {notice.type === 'alert' ? 'Critical Alert' : notice.type === 'warning' ? 'Lab Warning' : 'Lab Announcement'}
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-black/30">{notice.admin_dept} Admin</span>
-                    </h4>
-                    <p className="text-sm font-medium opacity-90 leading-relaxed">{notice.message}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-        {/* Centered Hero Section */}
-        <div className="text-center mb-20 animate-in fade-in slide-in-from-bottom-8 duration-700">
-          <h1 className={`${spaceGrotesk.className} text-5xl md:text-7xl font-black text-white tracking-tighter drop-shadow-2xl mb-6`}>
-            Equip. <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-500">Reserve.</span> Build.
-          </h1>
-          <p className="text-zinc-400 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">
-            Access the physical tools and specialized environments you need for your next project.
-          </p>
-        </div>
-
-        {/* Action Dashboard Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full animate-in fade-in slide-in-from-bottom-12 duration-1000 delay-150 fill-mode-both items-start">
-          
-          {/* Left Column: Quick Action (Hardware Dashboard) */}
-          <div className="lg:col-span-1">
-            <div
-              onClick={handleHardwareDashboardClick}
-              className="group relative bg-black/40 backdrop-blur-2xl border border-cyan-500/20 hover:border-cyan-500/50 rounded-3xl p-8 cursor-pointer transition-all duration-500 hover:-translate-y-2 shadow-[0_0_50px_rgba(6,182,212,0.15)] hover:shadow-[0_0_40px_-10px_rgba(6,182,212,0.4)] flex flex-col items-center text-center overflow-hidden"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-transparent opacity-0 group-hover:opacity-100 transition duration-700"></div>
-
-              <div className="relative z-10">
-                <div className="w-16 h-16 mx-auto bg-cyan-500/10 rounded-full flex items-center justify-center mb-6 text-cyan-400 group-hover:scale-110 transition-transform duration-500 border border-cyan-500/20">
-                  <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-                  </svg>
-                </div>
-                <h2 className={`${spaceGrotesk.className} text-2xl font-bold text-white mb-3 group-hover:text-cyan-100 transition-colors`}>Hardware Dashboard</h2>
-                <p className="text-zinc-400 font-medium text-sm leading-relaxed mb-6 px-2 group-hover:text-zinc-300 transition-colors">
-                  Request microcontrollers, sensors, oscilloscopes, and components.
-                </p>
-                <div className="inline-flex items-center text-cyan-400 font-bold uppercase tracking-wider group-hover:text-cyan-300 text-xs transition-colors">
-                  Proceed
-                  <svg className="w-4 h-4 ml-1.5 group-hover:translate-x-2 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column: Active Reservations */}
-          <div className="lg:col-span-2 bg-black/40 backdrop-blur-2xl border border-zinc-800 rounded-3xl p-6 md:p-8 flex flex-col min-h-[280px]">
-            <div className="flex justify-between items-center mb-6 border-b border-zinc-800/80 pb-4">
-              <h2 className={`${spaceGrotesk.className} text-xl font-bold text-white tracking-wide flex items-center gap-2`}>
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                Active Reservations
-              </h2>
-              <button
-                onClick={() => router.push('/student/reservations')}
-                className="text-xs font-mono uppercase tracking-wider text-cyan-400 hover:text-cyan-300 transition-colors"
+              <button 
+                onClick={() => setShowQr(false)}
+                className="absolute top-4 right-4 p-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-600 hover:text-black rounded-full transition-colors"
               >
-                View All →
+                <X className="w-5 h-5" />
+              </button>
+              
+              <h3 className={`${spaceGrotesk.className} text-3xl font-black text-black mb-1`}>DIGITAL PASS</h3>
+              <p className="text-zinc-500 font-mono text-xs uppercase tracking-widest mb-8">Scan at Admin Desk</p>
+              
+              <div className="bg-white p-4 border-4 border-dashed border-violet-500/30 rounded-3xl">
+                <QRCode
+                  value={profile?.usn || 'PENDING'}
+                  size={240}
+                  level="H"
+                  className="rounded-xl"
+                  fgColor="#000000"
+                  bgColor="#ffffff"
+                />
+              </div>
+              
+              <div className="mt-8 pt-6 border-t border-zinc-200 w-full text-center">
+                <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Student USN</p>
+                <p className="font-mono text-2xl font-bold text-violet-600">{profile?.usn || 'N/A'}</p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="min-h-screen bg-[#020617] text-zinc-100 flex flex-col items-center justify-start pt-[calc(4.5rem+env(safe-area-inset-top,0px))] pb-12 px-4 font-sans selection:bg-cyan-500/30 overflow-x-hidden relative">
+        
+        {/* Top Banner */}
+        <motion.div 
+          initial={{ y: -50, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="absolute top-0 left-0 w-full bg-black/40 border-b border-white/5 pt-[calc(0.625rem+env(safe-area-inset-top,0px))] pb-2.5 px-4 backdrop-blur-xl z-50 text-center flex items-center justify-center gap-3"
+        >
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <p className="text-xs font-bold text-zinc-300 uppercase tracking-widest">
+            {siteConfig.collegeName} Secure Portal
+          </p>
+        </motion.div>
+
+        {/* Dynamic Background */}
+        <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-[#020617] to-[#020617] pointer-events-none" />
+        <div className="fixed top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-cyan-600/10 blur-[120px] pointer-events-none mix-blend-screen" />
+        <div className="fixed bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-violet-600/10 blur-[120px] pointer-events-none mix-blend-screen" />
+        
+        <ParticleNetwork />
+
+        <div className="w-full max-w-6xl relative z-10 px-4 py-8 flex flex-col min-h-[calc(100vh-8rem)]">
+
+          {/* Navigation Bar */}
+          <motion.nav 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex justify-between items-center mb-12 bg-white/5 border border-white/10 backdrop-blur-2xl rounded-3xl p-4 shadow-2xl"
+          >
+            <div className="flex items-center gap-4 pl-2">
+              <img src={siteConfig.logoUrl} alt="Logo" className="w-10 h-10 object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]" />
+              <span className={`${spaceGrotesk.className} text-xl font-bold tracking-widest text-white hidden sm:block`}>
+                {siteConfig.appName}
+              </span>
+            </div>
+
+            <div className="hidden md:flex items-center gap-3 pr-2">
+              <button onClick={() => router.push('/student/reservations')} className="flex items-center gap-2 px-5 py-2.5 rounded-full hover:bg-white/10 text-zinc-300 hover:text-white transition-all font-mono text-sm tracking-wide">
+                <Clock className="w-4 h-4" />
+                Reservations
+              </button>
+              <button onClick={() => router.push('/student/profile')} className="flex items-center gap-2 px-5 py-2.5 rounded-full hover:bg-white/10 text-zinc-300 hover:text-white transition-all font-mono text-sm tracking-wide">
+                <User className="w-4 h-4" />
+                Profile
+              </button>
+              <div className="w-px h-6 bg-white/10 mx-2" />
+              <button onClick={async () => { await supabase.auth.signOut(); router.push('/'); }} className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 transition-all font-mono text-sm tracking-wide group">
+                <LogOut className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                Logout
               </button>
             </div>
 
-            {isLoadingReservations ? (
-              <div className="space-y-4 flex-1 flex flex-col justify-center">
-                {[1, 2].map(i => (
-                  <div key={i} className="h-16 rounded-xl bg-zinc-900/40 animate-pulse border border-zinc-800/50"></div>
-                ))}
-              </div>
-            ) : activeReservations.length === 0 ? (
-              <div className="flex-grow flex flex-col items-center justify-center py-10 text-center">
-                <div className="w-12 h-12 rounded-full bg-zinc-900/50 flex items-center justify-center text-zinc-600 mb-3 border border-zinc-800">
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
+            <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="md:hidden p-2 text-zinc-300 hover:text-white">
+              {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+          </motion.nav>
+
+          {/* Mobile Menu */}
+          <AnimatePresence>
+            {isMobileMenuOpen && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="md:hidden bg-zinc-900/90 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden mb-8"
+              >
+                <div className="flex flex-col p-2">
+                  <button onClick={() => router.push('/student/reservations')} className="flex items-center gap-3 p-4 text-zinc-300 hover:bg-white/5 rounded-xl transition-colors">
+                    <Clock className="w-5 h-5" /> Reservations
+                  </button>
+                  <button onClick={() => router.push('/student/profile')} className="flex items-center gap-3 p-4 text-zinc-300 hover:bg-white/5 rounded-xl transition-colors">
+                    <User className="w-5 h-5" /> Profile
+                  </button>
+                  <button onClick={async () => { await supabase.auth.signOut(); router.push('/'); }} className="flex items-center gap-3 p-4 text-red-400 hover:bg-red-500/10 rounded-xl transition-colors">
+                    <LogOut className="w-5 h-5" /> Logout
+                  </button>
                 </div>
-                <p className="text-sm text-zinc-500 font-medium">No active components checked out or pending.</p>
-                <p className="text-xs text-zinc-600 mt-1">Components you request will appear here.</p>
-              </div>
-            ) : (
-              <div className="space-y-4 flex-grow">
-                {activeReservations.map(res => (
-                  <div
-                    key={res.reservation_id}
-                    className="flex justify-between items-center p-4 bg-zinc-900/30 hover:bg-zinc-900/60 border border-zinc-800/50 rounded-2xl transition-all"
-                  >
-                    <div className="flex-1 min-w-0 pr-4">
-                      <h4 className="text-white font-bold text-sm truncate">{res.components?.name}</h4>
-                      <p className="text-xs text-zinc-500 font-mono mt-0.5">
-                        {res.components?.department} • {res.components?.lab_location}
-                      </p>
-                    </div>
-                    <div className="flex flex-col items-end shrink-0 gap-1.5">
-                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border ${getStatusStyle(res.status)}`}>
-                        {res.status}
-                      </span>
-                      <span className="text-[10px] text-zinc-600 font-mono">#{res.reservation_id}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Welcome Hero */}
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.1, duration: 0.6 }}
+            className="mb-12 flex flex-col md:flex-row items-start md:items-center justify-between gap-6"
+          >
+            <div>
+              <h1 className={`${spaceGrotesk.className} text-4xl md:text-5xl lg:text-6xl font-black text-white tracking-tighter mb-2`}>
+                Welcome back, <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-violet-400">{profile?.name?.split(' ')[0] || 'Student'}</span>.
+              </h1>
+              <p className="text-zinc-400 text-lg flex items-center gap-3">
+                <span className="font-mono bg-white/5 px-2 py-1 rounded-md border border-white/10 text-cyan-100">{profile?.usn}</span>
+                <span>{profile?.department} {profile?.section && `• Sec ${profile?.section}`}</span>
+              </p>
+            </div>
+          </motion.div>
+
+          {/* Notices */}
+          <AnimatePresence>
+            {notices.length > 0 && (
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-10 grid gap-4"
+              >
+                {notices.map(notice => (
+                  <div key={notice.id} className={`p-5 rounded-2xl border flex items-start gap-4 backdrop-blur-xl ${notice.type === 'alert' ? 'bg-red-500/10 border-red-500/30' : notice.type === 'warning' ? 'bg-amber-500/10 border-amber-500/30' : 'bg-cyan-500/10 border-cyan-500/30'}`}>
+                    <Bell className={`w-6 h-6 mt-1 shrink-0 ${notice.type === 'alert' ? 'text-red-400' : notice.type === 'warning' ? 'text-amber-400' : 'text-cyan-400'}`} />
+                    <div>
+                      <h4 className={`font-bold text-sm tracking-wide uppercase mb-1 flex items-center gap-2 ${notice.type === 'alert' ? 'text-red-300' : notice.type === 'warning' ? 'text-amber-300' : 'text-cyan-300'}`}>
+                        {notice.type === 'alert' ? 'Critical Alert' : notice.type === 'warning' ? 'Warning' : 'Announcement'}
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-black/40 border border-white/10">{notice.admin_dept}</span>
+                      </h4>
+                      <p className="text-sm font-medium text-zinc-300 leading-relaxed">{notice.message}</p>
                     </div>
                   </div>
                 ))}
-              </div>
+              </motion.div>
             )}
-          </div>
+          </AnimatePresence>
 
+          {/* Dashboard Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-grow">
+            
+            {/* Main Action: Hardware Checkout */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="lg:col-span-5 h-full"
+            >
+              <div
+                onClick={handleHardwareDashboardClick}
+                className="group relative h-full bg-gradient-to-br from-zinc-900/80 to-black/80 backdrop-blur-xl border border-white/10 hover:border-cyan-500/50 rounded-3xl p-8 cursor-pointer transition-all duration-500 shadow-[0_8px_32px_rgba(0,0,0,0.4)] hover:shadow-[0_0_40px_-10px_rgba(6,182,212,0.3)] overflow-hidden flex flex-col justify-between min-h-[320px]"
+              >
+                {/* Animated Glow */}
+                <div className="absolute -inset-0.5 bg-gradient-to-r from-cyan-500 to-violet-500 rounded-3xl opacity-0 group-hover:opacity-20 transition duration-1000 blur-lg" />
+                
+                <div className="relative z-10 flex-grow flex flex-col items-start justify-center">
+                  <div className="w-16 h-16 bg-cyan-500/10 rounded-2xl flex items-center justify-center text-cyan-400 group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-500 border border-cyan-500/20 shadow-[inset_0_0_20px_rgba(6,182,212,0.1)] mb-6">
+                    <Microchip className="w-8 h-8" />
+                  </div>
+                  <h2 className={`${spaceGrotesk.className} text-3xl font-bold text-white mb-4 group-hover:text-cyan-200 transition-colors`}>
+                    Hardware Request
+                  </h2>
+                  <p className="text-zinc-400 font-medium text-base leading-relaxed max-w-sm">
+                    Browse the catalog, check real-time availability, and reserve lab components for your projects.
+                  </p>
+                </div>
+
+                <div className="relative z-10 mt-8 flex items-center justify-between w-full border-t border-white/10 pt-6">
+                  <span className="text-sm font-bold uppercase tracking-widest text-zinc-500 group-hover:text-cyan-400 transition-colors">Start Request</span>
+                  <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-cyan-500 group-hover:text-black text-zinc-400 transition-all duration-300">
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Secondary Action: Digital Lab ID */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="lg:col-span-7 bg-zinc-900/40 backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-8 flex flex-col justify-between min-h-[320px] shadow-[0_8px_32px_rgba(0,0,0,0.4)] relative overflow-hidden"
+            >
+              {/* Card Background Patterns */}
+              <div className="absolute top-0 right-0 w-64 h-64 bg-violet-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none" />
+              <div className="absolute bottom-0 left-0 w-64 h-64 bg-cyan-500/5 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3 pointer-events-none" />
+              
+              <div className="flex justify-between items-center mb-8 relative z-10">
+                <h2 className={`${spaceGrotesk.className} text-xl font-bold text-white tracking-wide flex items-center gap-3`}>
+                  <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center border border-violet-500/20">
+                    <QrCode className="w-4 h-4 text-violet-400" />
+                  </div>
+                  Digital Lab ID
+                </h2>
+                <span className="text-[10px] font-mono uppercase tracking-widest text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/20 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Active Identity
+                </span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-8 flex-grow relative z-10">
+                {/* QR Code Container (Blurred default) */}
+                <div className="relative p-3 bg-white rounded-2xl shadow-[0_0_30px_rgba(255,255,255,0.1)] shrink-0 border-4 border-zinc-800 overflow-hidden group">
+                  <div className="blur-md scale-95 opacity-50 transition-all duration-700">
+                    <QRCode
+                      value={profile?.usn || 'PENDING'}
+                      size={120}
+                      level="M"
+                      className="rounded-lg"
+                    />
+                  </div>
+                  
+                  {/* Reveal Overlay -> Opens Modal */}
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
+                    <button 
+                      onClick={() => setShowQr(true)}
+                      className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold px-4 py-2 rounded-full shadow-[0_0_20px_rgba(139,92,246,0.5)] transition-transform active:scale-95"
+                    >
+                      <Eye className="w-4 h-4" />
+                      Reveal QR
+                    </button>
+                  </div>
+                </div>
+
+                {/* Student Details */}
+                <div className="flex-1 flex flex-col justify-center w-full mt-2 sm:mt-0">
+                  <div className="space-y-6 text-center sm:text-left">
+                    <div>
+                      <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Authorized Student</p>
+                      <h3 className={`${spaceGrotesk.className} text-2xl font-bold text-white truncate`}>
+                        {profile?.name || 'Loading...'}
+                      </h3>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">USN</p>
+                        <p className="font-mono text-cyan-400 font-bold truncate">
+                          {profile?.usn || 'N/A'}
+                        </p>
+                      </div>
+                      <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Department</p>
+                        <p className="font-mono text-zinc-300 font-bold truncate">
+                          {profile?.department || 'N/A'} {profile?.section && `(${profile?.section})`}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Highly Visible Instructional Banner */}
+              <div className="mt-8 pt-5 border-t border-white/10 flex flex-col sm:flex-row justify-between items-center relative z-10 gap-4">
+                <div className="flex items-start sm:items-center gap-3 bg-cyan-500/10 border border-cyan-500/20 px-4 py-3 rounded-xl w-full">
+                  <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
+                    <QrCode className="w-4 h-4 text-cyan-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-cyan-200">How to use your pass</p>
+                    <p className="text-xs font-medium text-cyan-100/70 mt-0.5 leading-relaxed">
+                      Tap <span className="font-bold text-cyan-100">Reveal QR</span> and show it to the admin desk to instantly collect or return your reserved hardware.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+          
         </div>
       </div>
-
-
-
-    </div>
+    </>
   );
 }
