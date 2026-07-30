@@ -2,10 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
 import ImageCropper from './ImageCropper';
-import { Scanner } from '@yudiel/react-qr-scanner';
 import { siteConfig } from '@/config/site';
+
+const Scanner = dynamic(
+  () => import('@yudiel/react-qr-scanner').then((mod) => mod.Scanner),
+  { ssr: false }
+);
 
 
 type RequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'Pending HOD' | 'Ready for Collection' | 'Active' | 'Returned' | 'RETURNED' | 'BORROWED' | 'PENDING_RETURN' | 'PENDING_COLLECTION';
@@ -245,9 +250,10 @@ export default function AdminDashboard() {
     try {
       const res = await fetch('/api/lab-access');
       const data = await res.json();
-      setLabRequests(data);
+      setLabRequests(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error('Failed to fetch lab access requests', e);
+      setLabRequests([]);
     }
   };
 
@@ -262,8 +268,22 @@ export default function AdminDashboard() {
     }
 
     // Fetch unified data from API
-    fetch('/api/inventory').then(res => res.json()).then(data => setInventory(data));
-    fetch('/api/requests').then(res => res.json()).then(data => setRequests(data));
+    fetch('/api/inventory')
+      .then(res => res.json())
+      .then(data => setInventory(Array.isArray(data) ? data : []))
+      .catch(err => {
+        console.error('Failed to fetch inventory:', err);
+        setInventory([]);
+      });
+
+    fetch('/api/requests')
+      .then(res => res.json())
+      .then(data => setRequests(Array.isArray(data) ? data : []))
+      .catch(err => {
+        console.error('Failed to fetch requests:', err);
+        setRequests([]);
+      });
+
     fetchLabRequests();
   }, []);
 
@@ -304,13 +324,16 @@ export default function AdminDashboard() {
     const targetYear = parseInt(monthStr.split('-')[0], 10);
     const targetMonth = parseInt(monthStr.split('-')[1], 10) - 1;
 
-    const monthReqs = requests.filter(r => {
+    const safeRequests = Array.isArray(requests) ? requests : [];
+    const safeLabRequests = Array.isArray(labRequests) ? labRequests : [];
+
+    const monthReqs = safeRequests.filter(r => {
       if (!r.requestDate || r.department !== adminDept || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return false;
       const d = new Date(r.requestDate);
       return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
     });
 
-    const monthLabReqs = labRequests.filter(r => {
+    const monthLabReqs = safeLabRequests.filter(r => {
       if (!r.accessDate || r.department !== adminDept || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return false;
       const d = new Date(r.accessDate);
       return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
@@ -320,13 +343,13 @@ export default function AdminDashboard() {
     const prevYear = prevDate.getFullYear();
     const prevMonth = prevDate.getMonth();
 
-    const prevMonthReqs = requests.filter(r => {
+    const prevMonthReqs = safeRequests.filter(r => {
       if (!r.requestDate || r.department !== adminDept || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return false;
       const d = new Date(r.requestDate);
       return d.getFullYear() === prevYear && d.getMonth() === prevMonth;
     });
 
-    const prevMonthLabReqs = labRequests.filter(r => {
+    const prevMonthLabReqs = safeLabRequests.filter(r => {
       if (!r.accessDate || r.department !== adminDept || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return false;
       const d = new Date(r.accessDate);
       return d.getFullYear() === prevYear && d.getMonth() === prevMonth;
@@ -353,11 +376,14 @@ export default function AdminDashboard() {
     const daysInMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
     const dailyData = [];
 
+    const safeRequests = Array.isArray(requests) ? requests : [];
+    const safeLabRequests = Array.isArray(labRequests) ? labRequests : [];
+
     for (let day = 1; day <= daysInMonth; day++) {
       const datePrefix = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
-      const reqsCount = requests.filter(r => r.requestDate === datePrefix && r.department === adminDept && (!scannedUsnFilter || r.usn === scannedUsnFilter)).length;
-      const labsCount = labRequests.filter(r => r.accessDate === datePrefix && r.department === adminDept && (!scannedUsnFilter || r.usn === scannedUsnFilter)).length;
+      const reqsCount = safeRequests.filter(r => r.requestDate === datePrefix && r.department === adminDept && (!scannedUsnFilter || r.usn === scannedUsnFilter)).length;
+      const labsCount = safeLabRequests.filter(r => r.accessDate === datePrefix && r.department === adminDept && (!scannedUsnFilter || r.usn === scannedUsnFilter)).length;
 
       dailyData.push({
         day,
@@ -375,8 +401,10 @@ export default function AdminDashboard() {
     const targetMonth = parseInt(monthStr.split('-')[1], 10) - 1;
 
     const activities: any[] = [];
+    const safeRequests = Array.isArray(requests) ? requests : [];
+    const safeLabRequests = Array.isArray(labRequests) ? labRequests : [];
 
-    requests.forEach(r => {
+    safeRequests.forEach(r => {
       if (!r.requestDate || r.department !== adminDept || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return;
       const d = new Date(r.requestDate);
       if (d.getFullYear() === targetYear && d.getMonth() === targetMonth) {
@@ -392,7 +420,7 @@ export default function AdminDashboard() {
       }
     });
 
-    labRequests.forEach(l => {
+    safeLabRequests.forEach(l => {
       if (!l.accessDate || l.department !== adminDept || (scannedUsnFilter && l.usn !== scannedUsnFilter)) return;
       const d = new Date(l.accessDate);
       if (d.getFullYear() === targetYear && d.getMonth() === targetMonth) {

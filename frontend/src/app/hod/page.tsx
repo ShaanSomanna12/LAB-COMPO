@@ -73,9 +73,10 @@ export default function HodDashboard() {
       setLoading(true);
       const res = await fetch('/api/requests');
       const data = await res.json();
-      setRequests(data);
+      setRequests(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error('Failed to fetch requests', e);
+      setRequests([]);
     } finally {
       setLoading(false);
     }
@@ -85,9 +86,10 @@ export default function HodDashboard() {
     try {
       const res = await fetch('/api/lab-access');
       const data = await res.json();
-      setLabRequests(data);
+      setLabRequests(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error('Failed to fetch lab access requests:', e);
+      setLabRequests([]);
     }
   };
 
@@ -95,9 +97,10 @@ export default function HodDashboard() {
     try {
       const res = await fetch('/api/inventory');
       const data = await res.json();
-      setInventory(data);
+      setInventory(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error('Failed to fetch inventory', e);
+      setInventory([]);
     }
   };
 

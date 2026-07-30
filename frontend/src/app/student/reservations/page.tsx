@@ -256,7 +256,7 @@ export default function MyReservations() {
     }
   };
 
-  const compressImage = (file: File, maxDimension: number = 800, quality: number = 0.75): Promise<Blob> => {
+  const compressImage = (file: File, maxDimension: number = 600, quality: number = 0.70): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -331,7 +331,7 @@ export default function MyReservations() {
       // Compress the image before uploading to speed up process and save bandwidth
       let fileToUpload: Blob = file;
       try {
-        fileToUpload = await compressImage(file, 800, 0.75);
+        fileToUpload = await compressImage(file, 600, 0.70);
       } catch (compressErr) {
         console.warn("Client-side image compression failed, uploading raw file instead:", compressErr);
       }

@@ -253,8 +253,8 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }: Ima
       targetHeight
     );
 
-    // Dynamic compression at 80% quality JPEG
-    const base64Cropped = canvas.toDataURL('image/jpeg', 0.80);
+    // Dynamic compression at 70% quality JPEG (optimized for fast web loading)
+    const base64Cropped = canvas.toDataURL('image/jpeg', 0.70);
     onCropComplete(base64Cropped);
   };
 

@@ -96,9 +96,12 @@ export default function StudentCheckout() {
     fetch('/api/inventory')
       .then(res => res.json())
       .then(data => {
-        setInventory(data);
+        setInventory(Array.isArray(data) ? data : []);
       })
-      .catch(err => console.error("Failed to load inventory", err))
+      .catch(err => {
+        console.error("Failed to load inventory", err);
+        setInventory([]);
+      })
       .finally(() => {
         setIsLoadingInventory(false);
       });
@@ -471,7 +474,7 @@ export default function StudentCheckout() {
                         <div className="h-44 bg-slate-950 border-b border-slate-850 relative overflow-hidden flex items-center justify-center p-4">
                           <div className="absolute inset-0 cyber-grid opacity-10 pointer-events-none"></div>
                           {item.photo_url ? (
-                            <img src={item.photo_url} alt={item.name} className="max-w-full max-h-full object-contain group-hover:scale-102 transition-transform duration-700" />
+                            <img src={item.photo_url} alt={item.name} loading="lazy" decoding="async" className="max-w-full max-h-full object-contain group-hover:scale-102 transition-transform duration-700" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-zinc-700 text-xs font-mono">NO COMPONENT PHOTO</div>
                           )}
@@ -702,7 +705,7 @@ export default function StudentCheckout() {
                     <div className="flex gap-3">
                       <div className="w-12 h-12 rounded-lg overflow-hidden bg-slate-900 border border-slate-850 shrink-0 flex items-center justify-center p-1">
                         {item.photo_url ? (
-                          <img src={item.photo_url} alt="Item" className="max-w-full max-h-full object-contain" />
+                          <img src={item.photo_url} alt="Item" loading="lazy" decoding="async" className="max-w-full max-h-full object-contain" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-xs">📷</div>
                         )}
