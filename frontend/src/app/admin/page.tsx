@@ -114,10 +114,9 @@ const calculatePenalty = (requestDateStr: string, durationDays: number, componen
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'requests' | 'inventory' | 'lab-access' | 'analytics' | 'section-tracking'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'inventory' | 'analytics' | 'section-tracking'>('requests');
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [labRequests, setLabRequests] = useState<any[]>([]);
   const [collegeName, setCollegeName] = useState(siteConfig.collegeName);
   const [showAddModal, setShowAddModal] = useState(false);
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
@@ -246,17 +245,6 @@ export default function AdminDashboard() {
     { id: 'CIVIL', title: 'Civil Engineering', desc: 'Manage CIVIL requests & stock.', color: 'from-rose-500 to-red-600' }
   ];
 
-  const fetchLabRequests = async () => {
-    try {
-      const res = await fetch('/api/lab-access');
-      const data = await res.json();
-      setLabRequests(Array.isArray(data) ? data : []);
-    } catch (e) {
-      console.error('Failed to fetch lab access requests', e);
-      setLabRequests([]);
-    }
-  };
-
   useEffect(() => {
     const storedCollege = localStorage.getItem('collegeName');
     if (storedCollege) setCollegeName(storedCollege.toUpperCase());
@@ -287,17 +275,14 @@ export default function AdminDashboard() {
       });
 
     fetchRequestsData();
-    fetchLabRequests();
 
-    // Auto-poll requests & lab requests every 5 seconds for real-time updates
+    // Auto-poll requests every 5 seconds for real-time updates
     const interval = setInterval(() => {
       fetchRequestsData();
-      fetchLabRequests();
     }, 5000);
 
     const handleFocus = () => {
       fetchRequestsData();
-      fetchLabRequests();
     };
     window.addEventListener('focus', handleFocus);
 
@@ -345,17 +330,10 @@ export default function AdminDashboard() {
     const targetMonth = parseInt(monthStr.split('-')[1], 10) - 1;
 
     const safeRequests = Array.isArray(requests) ? requests : [];
-    const safeLabRequests = Array.isArray(labRequests) ? labRequests : [];
 
     const monthReqs = safeRequests.filter(r => {
       if (!r.requestDate || (r.department !== adminDept && r.studentDepartment !== adminDept) || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return false;
       const d = new Date(r.requestDate);
-      return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
-    });
-
-    const monthLabReqs = safeLabRequests.filter(r => {
-      if (!r.accessDate || (r.department !== adminDept && r.studentDepartment !== adminDept) || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return false;
-      const d = new Date(r.accessDate);
       return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
     });
 
@@ -369,22 +347,16 @@ export default function AdminDashboard() {
       return d.getFullYear() === prevYear && d.getMonth() === prevMonth;
     });
 
-    const prevMonthLabReqs = safeLabRequests.filter(r => {
-      if (!r.accessDate || (r.department !== adminDept && r.studentDepartment !== adminDept) || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return false;
-      const d = new Date(r.accessDate);
-      return d.getFullYear() === prevYear && d.getMonth() === prevMonth;
-    });
-
     return {
       curr: {
         reqs: monthReqs.length,
-        labs: monthLabReqs.length,
-        total: monthReqs.length + monthLabReqs.length
+        labs: 0,
+        total: monthReqs.length
       },
       prev: {
         reqs: prevMonthReqs.length,
-        labs: prevMonthLabReqs.length,
-        total: prevMonthReqs.length + prevMonthLabReqs.length
+        labs: 0,
+        total: prevMonthReqs.length
       }
     };
   };
@@ -397,20 +369,18 @@ export default function AdminDashboard() {
     const dailyData = [];
 
     const safeRequests = Array.isArray(requests) ? requests : [];
-    const safeLabRequests = Array.isArray(labRequests) ? labRequests : [];
 
     for (let day = 1; day <= daysInMonth; day++) {
       const datePrefix = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
       const reqsCount = safeRequests.filter(r => r.requestDate === datePrefix && (r.department === adminDept || r.studentDepartment === adminDept) && (!scannedUsnFilter || r.usn === scannedUsnFilter)).length;
-      const labsCount = safeLabRequests.filter(r => r.accessDate === datePrefix && (r.department === adminDept || r.studentDepartment === adminDept) && (!scannedUsnFilter || r.usn === scannedUsnFilter)).length;
 
       dailyData.push({
         day,
         dateStr: datePrefix,
         reservations: reqsCount,
-        labAccess: labsCount,
-        total: reqsCount + labsCount
+        labAccess: 0,
+        total: reqsCount
       });
     }
     return dailyData;
@@ -422,7 +392,6 @@ export default function AdminDashboard() {
 
     const activities: any[] = [];
     const safeRequests = Array.isArray(requests) ? requests : [];
-    const safeLabRequests = Array.isArray(labRequests) ? labRequests : [];
 
     safeRequests.forEach(r => {
       if (!r.requestDate || (r.department !== adminDept && r.studentDepartment !== adminDept) || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return;
@@ -436,22 +405,6 @@ export default function AdminDashboard() {
           date: r.requestDate,
           status: r.status,
           timestamp: new Date(r.requestDate).getTime()
-        });
-      }
-    });
-
-    safeLabRequests.forEach(l => {
-      if (!l.accessDate || (l.department !== adminDept && l.studentDepartment !== adminDept) || (scannedUsnFilter && l.usn !== scannedUsnFilter)) return;
-      const d = new Date(l.accessDate);
-      if (d.getFullYear() === targetYear && d.getMonth() === targetMonth) {
-        activities.push({
-          type: 'lab-access',
-          id: l.id || `LAB-${Math.floor(1000 + Math.random() * 9000)}`,
-          title: `Lab Access: ${l.labName}`,
-          student: `${l.studentName} (${l.usn})`,
-          date: l.accessDate,
-          status: l.status,
-          timestamp: new Date(l.accessDate).getTime()
         });
       }
     });
@@ -499,26 +452,6 @@ export default function AdminDashboard() {
     '2026-02': 'February 2026'
   };
   const selectedMonthLabel = monthLabels[selectedAnalyticsMonth] || selectedAnalyticsMonth;
-
-  const handleLabAccessAction = async (id: string, approve: boolean, remarks: string) => {
-    const newStatus = approve ? 'APPROVED' : 'REJECTED_ADMIN';
-    try {
-      const res = await fetch('/api/lab-access', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, status: newStatus, adminRemarks: remarks })
-      });
-      if (res.ok) {
-        setLabRequests(prev => prev.map(r => r.id === id ? { ...r, status: newStatus, adminRemarks: remarks } : r));
-        alert(approve ? 'Workspace access permit granted!' : 'Workspace access permit denied.');
-      } else {
-        alert('Failed to update workspace access permit.');
-      }
-    } catch (e) {
-      console.error(e);
-      alert('Connection error.');
-    }
-  };
 
   const updateRequestStatus = async (id: string, status: string, quantity?: number, collectionTime?: string) => {
     await fetch('/api/requests', {
@@ -760,19 +693,19 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white p-8 font-sans">
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 border-b border-zinc-800 pb-6 relative">
+    <div className="min-h-screen bg-zinc-950 text-white p-3 sm:p-6 md:p-8 font-sans">
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 sm:mb-8 border-b border-zinc-800 pb-4 sm:pb-6 relative">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-red-400 to-orange-400 bg-clip-text text-transparent">LAB ADMIN PORTAL</h1>
-          <p className="text-zinc-400 mt-1">
+          <h1 className="text-xl sm:text-3xl font-bold tracking-tight bg-gradient-to-r from-red-400 to-orange-400 bg-clip-text text-transparent">LAB ADMIN PORTAL</h1>
+          <p className="text-zinc-400 mt-0.5 sm:mt-1 text-xs sm:text-sm">
             {adminDept ? `Managing ${adminDept} Department.` : collegeName}
           </p>
         </div>
 
         {/* Desktop & Mobile Top Actions */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
           {adminDept && !isLocked && (
-            <button onClick={() => setAdminDept(null)} className="hidden md:block px-5 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-sm transition-colors font-medium">
+            <button onClick={() => setAdminDept(null)} className="hidden md:block px-3 py-1.5 sm:px-5 sm:py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-xs sm:text-sm transition-colors font-medium">
               ← Back to Departments
             </button>
           )}
@@ -780,7 +713,7 @@ export default function AdminDashboard() {
             localStorage.removeItem('admin_dept');
             localStorage.removeItem('hod_dept');
             router.push('/');
-          }} className="px-5 py-2 bg-red-600/10 text-red-500 border border-red-500/20 hover:bg-red-600/20 rounded-lg text-sm transition-colors font-medium">
+          }} className="px-3 py-1.5 sm:px-5 sm:py-2 bg-red-600/10 text-red-500 border border-red-500/20 hover:bg-red-600/20 rounded-lg text-xs sm:text-sm transition-colors font-medium">
             Logout
           </button>
         </div>
@@ -788,34 +721,28 @@ export default function AdminDashboard() {
 
       {/* Main Navigation Tabs */}
       {adminDept && (
-        <div className="flex overflow-x-auto gap-2 pb-4 mb-6 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
+        <div className="flex overflow-x-auto gap-2 pb-3 mb-6 scrollbar-hide -mx-3 px-3 sm:mx-0 sm:px-0">
           <button
             onClick={() => setActiveTab('requests')}
-            className={`whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'requests' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.15)]' : 'bg-zinc-800/60 text-zinc-300 border border-zinc-700/50 hover:bg-zinc-700 hover:text-white shadow-sm'}`}
+            className={`whitespace-nowrap px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${activeTab === 'requests' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.15)]' : 'bg-zinc-800/60 text-zinc-300 border border-zinc-700/50 hover:bg-zinc-700 hover:text-white shadow-sm'}`}
           >
             Requests Workflow
           </button>
           <button
-            onClick={() => setActiveTab('lab-access')}
-            className={`whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'lab-access' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.15)]' : 'bg-zinc-800/60 text-zinc-300 border border-zinc-700/50 hover:bg-zinc-700 hover:text-white shadow-sm'}`}
-          >
-            Lab Workspace Access
-          </button>
-          <button
             onClick={() => setActiveTab('inventory')}
-            className={`whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'inventory' ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.15)]' : 'bg-zinc-800/60 text-zinc-300 border border-zinc-700/50 hover:bg-zinc-700 hover:text-white shadow-sm'}`}
+            className={`whitespace-nowrap px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${activeTab === 'inventory' ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.15)]' : 'bg-zinc-800/60 text-zinc-300 border border-zinc-700/50 hover:bg-zinc-700 hover:text-white shadow-sm'}`}
           >
             Inventory Management
           </button>
           <button
             onClick={() => setActiveTab('analytics')}
-            className={`whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'analytics' ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30 shadow-[0_0_15px_rgba(168,85,247,0.15)]' : 'bg-zinc-800/60 text-zinc-300 border border-zinc-700/50 hover:bg-zinc-700 hover:text-white shadow-sm'}`}
+            className={`whitespace-nowrap px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${activeTab === 'analytics' ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30 shadow-[0_0_15px_rgba(168,85,247,0.15)]' : 'bg-zinc-800/60 text-zinc-300 border border-zinc-700/50 hover:bg-zinc-700 hover:text-white shadow-sm'}`}
           >
             Monthly Updates
           </button>
           <button
             onClick={() => setActiveTab('section-tracking')}
-            className={`whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'section-tracking' ? 'bg-pink-500/15 text-pink-400 border border-pink-500/30 shadow-[0_0_15px_rgba(236,72,153,0.15)]' : 'bg-zinc-800/60 text-zinc-300 border border-zinc-700/50 hover:bg-zinc-700 hover:text-white shadow-sm'}`}
+            className={`whitespace-nowrap px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${activeTab === 'section-tracking' ? 'bg-pink-500/15 text-pink-400 border border-pink-500/30 shadow-[0_0_15px_rgba(236,72,153,0.15)]' : 'bg-zinc-800/60 text-zinc-300 border border-zinc-700/50 hover:bg-zinc-700 hover:text-white shadow-sm'}`}
           >
             Section Tracking
           </button>
@@ -824,10 +751,10 @@ export default function AdminDashboard() {
 
       {/* Landing State */}
       {!adminDept && (
-        <div className="flex flex-col gap-6 max-w-4xl mx-auto mt-12">
-          <div className="text-center mb-6">
-            <h2 className="text-3xl text-white font-bold mb-2">{collegeName}</h2>
-            <p className="text-lg text-zinc-400">Please select your administrative department to manage requests and inventory.</p>
+        <div className="flex flex-col gap-4 sm:gap-6 max-w-4xl mx-auto mt-6 sm:mt-12">
+          <div className="text-center mb-4 sm:mb-6">
+            <h2 className="text-xl sm:text-3xl text-white font-bold mb-1 sm:mb-2">{collegeName}</h2>
+            <p className="text-xs sm:text-lg text-zinc-400">Please select your administrative department to manage requests and inventory.</p>
           </div>
           {DEPT_INFO.map(dept => (
             <div
@@ -835,15 +762,15 @@ export default function AdminDashboard() {
               onClick={() => setAdminDept(dept.id)}
               className="group cursor-pointer rounded-2xl p-[1px] bg-gradient-to-r transition-all duration-300 hover:scale-[1.02] w-full"
             >
-              <div className={`w-full bg-zinc-900 rounded-2xl p-6 hover:bg-gradient-to-r ${dept.color} transition-all duration-300 flex flex-col md:flex-row items-center gap-4 md:gap-8 border border-zinc-800 hover:border-transparent opacity-90 hover:opacity-100 text-center md:text-left`}>
+              <div className={`w-full bg-zinc-900 rounded-2xl p-4 sm:p-6 hover:bg-gradient-to-r ${dept.color} transition-all duration-300 flex flex-col md:flex-row items-center gap-3 md:gap-8 border border-zinc-800 hover:border-transparent opacity-90 hover:opacity-100 text-center md:text-left`}>
                 <div className="flex-1">
-                  <h2 className="text-4xl font-black mb-1 flex items-center gap-3 tracking-tight drop-shadow-md">
+                  <h2 className="text-2xl sm:text-4xl font-black mb-1 flex items-center justify-center md:justify-start gap-3 tracking-tight drop-shadow-md">
                     <span className={`bg-gradient-to-r ${dept.color} bg-clip-text text-transparent brightness-110`}>{dept.id}</span>
-                    <span className="text-white text-2xl font-bold text-zinc-300">HQ</span>
+                    <span className="text-white text-lg sm:text-2xl font-bold text-zinc-300">HQ</span>
                   </h2>
-                  <p className="text-zinc-500 group-hover:text-white/70 text-sm mt-1">{dept.desc}</p>
+                  <p className="text-zinc-500 group-hover:text-white/70 text-xs sm:text-sm mt-1">{dept.desc}</p>
                 </div>
-                <div className="mr-4 text-zinc-600 group-hover:text-white/80 transition-colors">
+                <div className="mr-4 text-zinc-600 group-hover:text-white/80 transition-colors hidden md:block">
                   <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
                 </div>
               </div>
@@ -1061,168 +988,33 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {adminDept && activeTab === 'lab-access' && (
-        <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-300">
-          <div className="flex justify-between items-center mb-4">
-            <div className="flex items-center gap-4">
-              <h2 className="text-2xl font-bold">{adminDept} Lab Workspace Access Requests</h2>
-              {scannedUsnFilter && (
-                <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider animate-in fade-in duration-200">
-                  Filter: {scannedUsnFilter}
-                  <button
-                    onClick={() => setScannedUsnFilter(null)}
-                    className="text-red-500 hover:text-red-400 bg-red-500/10 hover:bg-red-500/20 p-0.5 rounded-full transition-colors ml-1 inline-flex items-center justify-center font-bold"
-                    title="Clear filter and show all"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              )}
-            </div>
-            <button
-              onClick={fetchLabRequests}
-              className="px-4 py-2 bg-zinc-900 border border-zinc-800 text-xs font-semibold rounded-lg hover:bg-zinc-800 text-zinc-300 flex items-center gap-1.5 transition"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89H18" />
-              </svg>
-              Refresh Queue
-            </button>
-          </div>
 
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden overflow-x-auto">
-            <table className="w-full text-left text-sm min-w-[800px]">
-              <thead className="bg-zinc-800/50 text-zinc-400 uppercase text-xs font-semibold">
-                <tr>
-                  <th className="px-6 py-4">Request ID</th>
-                  <th className="px-6 py-4">Student Info</th>
-                  <th className="px-6 py-4">Workspace / Lab</th>
-                  <th className="px-6 py-4">Date & Slot</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800">
-                {labRequests.filter(r => (r.department === adminDept || r.studentDepartment === adminDept) && (!scannedUsnFilter || r.usn === scannedUsnFilter)).length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-zinc-500">No lab access requests found.</td>
-                  </tr>
-                )}
-                {labRequests.filter(req => (req.department === adminDept || req.studentDepartment === adminDept) && (!scannedUsnFilter || req.usn === scannedUsnFilter)).map(req => {
-                  return (
-                    <tr key={req.id} className="hover:bg-zinc-800/30 transition-colors">
-                      <td className="px-6 py-4 font-mono text-zinc-300">{req.id}</td>
-                      <td className="px-6 py-4">
-                        <div className="font-semibold text-white">{req.studentName}</div>
-                        <div className="text-zinc-500 font-mono text-xs mt-0.5">{req.usn}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-zinc-200">{req.labName}</div>
-                        <div className="text-xs text-zinc-500 italic truncate max-w-xs mt-1" title={req.purpose}>
-                          "{req.purpose}"
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-zinc-300 font-mono">{req.accessDate}</div>
-                        <div className="text-xs text-zinc-500 mt-0.5">{req.timeSlot}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 w-fit ${req.status === 'APPROVED' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                          req.status === 'PENDING_ADMIN' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
-                            req.status === 'PENDING_HOD' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                              'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                          }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${req.status === 'APPROVED' ? 'bg-emerald-400' :
-                            req.status === 'PENDING_ADMIN' ? 'bg-purple-400 animate-pulse' :
-                              req.status === 'PENDING_HOD' ? 'bg-amber-400 animate-pulse' :
-                                'bg-rose-400'
-                            }`}></span>
-                          {req.status === 'PENDING_HOD' ? 'Awaiting HOD' :
-                            req.status === 'PENDING_ADMIN' ? 'Awaiting Admin' :
-                              req.status === 'APPROVED' ? 'Approved & Active' : 'Declined'}
-                        </span>
-
-                        {req.hodRemarks && (
-                          <div className="mt-2 text-[11px] text-purple-400 max-w-xs leading-tight">
-                            <span className="font-semibold font-sans">HOD Remarks:</span> {req.hodRemarks}
-                          </div>
-                        )}
-                        {req.adminRemarks && (
-                          <div className="mt-1 text-[11px] text-zinc-400 max-w-xs leading-tight">
-                            <span className="font-semibold font-sans">Admin Remarks:</span> {req.adminRemarks}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        {req.status === 'PENDING_HOD' && (
-                          <span className="text-xs text-zinc-500 italic">Locked (Awaiting HOD Sign-off)</span>
-                        )}
-                        {req.status === 'PENDING_ADMIN' && (
-                          <div className="flex gap-2 justify-end">
-                            <button
-                              onClick={() => {
-                                const remarks = prompt('Enter rejection reason for this permit request (optional):');
-                                if (remarks !== null) {
-                                  handleLabAccessAction(req.id, false, remarks);
-                                }
-                              }}
-                              className="px-3 py-1.5 bg-red-600/15 text-red-500 border border-red-500/20 hover:bg-red-650 hover:text-white rounded-lg text-xs font-semibold transition cursor-pointer"
-                            >
-                              Deny Pass
-                            </button>
-                            <button
-                              onClick={() => {
-                                const remarks = prompt('Enter logistics instructions or remarks for student (optional):', 'Pass granted. Please bring your institutional ID card.');
-                                if (remarks !== null) {
-                                  handleLabAccessAction(req.id, true, remarks);
-                                }
-                              }}
-                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-black font-bold rounded-lg text-xs transition cursor-pointer"
-                            >
-                              Grant Pass
-                            </button>
-                          </div>
-                        )}
-                        {(req.status === 'APPROVED' || req.status.startsWith('REJECTED')) && (
-                          <span className="text-xs text-zinc-500">Request Decided</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       {adminDept && activeTab === 'inventory' && (
         <div className="space-y-6 max-w-6xl mx-auto">
           {/* HUD Metrics Cards */}
-          <section className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-            <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl flex flex-col justify-between hover:border-zinc-700 transition-colors">
-              <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">[ OUT_OF_STOCK ]</div>
-              <div className="text-2xl font-black mt-2 font-mono text-amber-400">{inventory.filter(item => item.department === adminDept && item.available === 0).length}</div>
+          <section className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 sm:gap-4 mb-6">
+            <div className="bg-zinc-900 border border-zinc-800 p-3 sm:p-4 rounded-xl flex flex-col justify-between hover:border-zinc-700 transition-colors">
+              <div className="text-[9px] sm:text-[10px] font-mono text-zinc-500 uppercase tracking-wider">[ OUT_OF_STOCK ]</div>
+              <div className="text-xl sm:text-2xl font-black mt-1 sm:mt-2 font-mono text-amber-400">{inventory.filter(item => item.department === adminDept && item.available === 0).length}</div>
             </div>
-            <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl flex flex-col justify-between hover:border-zinc-700 transition-colors">
-              <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">[ TOTAL_STOCK ]</div>
-              <div className="text-2xl font-black mt-2 font-mono text-zinc-200">{inventory.filter(item => item.department === adminDept).length}</div>
+            <div className="bg-zinc-900 border border-zinc-800 p-3 sm:p-4 rounded-xl flex flex-col justify-between hover:border-zinc-700 transition-colors">
+              <div className="text-[9px] sm:text-[10px] font-mono text-zinc-500 uppercase tracking-wider">[ TOTAL_STOCK ]</div>
+              <div className="text-xl sm:text-2xl font-black mt-1 sm:mt-2 font-mono text-zinc-200">{inventory.filter(item => item.department === adminDept).length}</div>
             </div>
-            <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl flex flex-col justify-between hover:border-zinc-700 transition-colors">
-              <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">[ ACTIVE_LOANS ]</div>
-              <div className="text-2xl font-black mt-2 font-mono text-indigo-400">
+            <div className="bg-zinc-900 border border-zinc-800 p-3 sm:p-4 rounded-xl flex flex-col justify-between hover:border-zinc-700 transition-colors">
+              <div className="text-[9px] sm:text-[10px] font-mono text-zinc-500 uppercase tracking-wider">[ ACTIVE_LOANS ]</div>
+              <div className="text-xl sm:text-2xl font-black mt-1 sm:mt-2 font-mono text-indigo-400">
                 {requests.filter(req => (req.department === adminDept || req.studentDepartment === adminDept) && ['Active', 'BORROWED', 'PENDING_RETURN'].includes(req.status)).reduce((sum, req) => sum + (req.quantity || 1), 0)}
               </div>
             </div>
-            <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl flex flex-col justify-between hover:border-zinc-700 transition-colors">
-              <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">[ BROKEN_UNITS ]</div>
-              <div className="text-2xl font-black mt-2 font-mono text-rose-400">{inventory.filter(item => item.department === adminDept && item.status === 'Under Repair').length}</div>
+            <div className="bg-zinc-900 border border-zinc-800 p-3 sm:p-4 rounded-xl flex flex-col justify-between hover:border-zinc-700 transition-colors">
+              <div className="text-[9px] sm:text-[10px] font-mono text-zinc-500 uppercase tracking-wider">[ BROKEN_UNITS ]</div>
+              <div className="text-xl sm:text-2xl font-black mt-1 sm:mt-2 font-mono text-rose-400">{inventory.filter(item => item.department === adminDept && item.status === 'Under Repair').length}</div>
             </div>
-            <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl flex flex-col justify-between hover:border-zinc-700 transition-colors">
-              <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">[ PORTAL_SYNC ]</div>
-              <div className="text-sm font-bold mt-3 font-mono text-emerald-400 flex items-center gap-1.5 uppercase">
+            <div className="bg-zinc-900 border border-zinc-800 p-3 sm:p-4 rounded-xl flex flex-col justify-between hover:border-zinc-700 transition-colors">
+              <div className="text-[9px] sm:text-[10px] font-mono text-zinc-500 uppercase tracking-wider">[ PORTAL_SYNC ]</div>
+              <div className="text-xs sm:text-sm font-bold mt-2 sm:mt-3 font-mono text-emerald-400 flex items-center gap-1.5 uppercase">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 ACTIVE
               </div>
