@@ -24,8 +24,8 @@ export async function GET() {
       .from('reservations')
       .select(`
         *,
-        users!inner(name, usn),
-        components!inner(name, department, lab_location, value_tier)
+        users(name, usn),
+        components(name, department, lab_location, value_tier)
       `)
       .order('created_at', { ascending: false });
 
@@ -212,18 +212,18 @@ export async function POST(request: Request) {
         continue;
       }
 
-      // Smart Approvals: if LOW tier, auto-approve
-      let isLowTier = component.value_tier === 'LOW';
+      const tierUpper = (component.value_tier || 'MEDIUM').toUpperCase();
+      let isLowTier = tierUpper === 'LOW';
       
       // Trust Score Benefit: Auto-approve HIGH tier if score >= 150
-      if (trustScore >= 150 && component.value_tier === 'HIGH') {
+      if (trustScore >= 150 && tierUpper === 'HIGH') {
          isLowTier = true;
       }
       
       let status = 'PENDING';
       if (isLowTier) {
         status = 'APPROVED';
-      } else if (component.value_tier === 'HIGH') {
+      } else if (tierUpper === 'HIGH') {
         status = 'Pending HOD';
       }
       

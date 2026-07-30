@@ -267,6 +267,16 @@ export default function AdminDashboard() {
       setIsLocked(true);
     }
 
+    const fetchRequestsData = async () => {
+      try {
+        const res = await fetch('/api/requests');
+        const data = await res.json();
+        setRequests(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('Failed to fetch requests:', err);
+      }
+    };
+
     // Fetch unified data from API
     fetch('/api/inventory')
       .then(res => res.json())
@@ -276,15 +286,25 @@ export default function AdminDashboard() {
         setInventory([]);
       });
 
-    fetch('/api/requests')
-      .then(res => res.json())
-      .then(data => setRequests(Array.isArray(data) ? data : []))
-      .catch(err => {
-        console.error('Failed to fetch requests:', err);
-        setRequests([]);
-      });
-
+    fetchRequestsData();
     fetchLabRequests();
+
+    // Auto-poll requests & lab requests every 5 seconds for real-time updates
+    const interval = setInterval(() => {
+      fetchRequestsData();
+      fetchLabRequests();
+    }, 5000);
+
+    const handleFocus = () => {
+      fetchRequestsData();
+      fetchLabRequests();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   const fetchNotices = async (dept: string) => {
@@ -328,13 +348,13 @@ export default function AdminDashboard() {
     const safeLabRequests = Array.isArray(labRequests) ? labRequests : [];
 
     const monthReqs = safeRequests.filter(r => {
-      if (!r.requestDate || r.department !== adminDept || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return false;
+      if (!r.requestDate || (r.department !== adminDept && r.studentDepartment !== adminDept) || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return false;
       const d = new Date(r.requestDate);
       return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
     });
 
     const monthLabReqs = safeLabRequests.filter(r => {
-      if (!r.accessDate || r.department !== adminDept || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return false;
+      if (!r.accessDate || (r.department !== adminDept && r.studentDepartment !== adminDept) || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return false;
       const d = new Date(r.accessDate);
       return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
     });
@@ -344,13 +364,13 @@ export default function AdminDashboard() {
     const prevMonth = prevDate.getMonth();
 
     const prevMonthReqs = safeRequests.filter(r => {
-      if (!r.requestDate || r.department !== adminDept || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return false;
+      if (!r.requestDate || (r.department !== adminDept && r.studentDepartment !== adminDept) || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return false;
       const d = new Date(r.requestDate);
       return d.getFullYear() === prevYear && d.getMonth() === prevMonth;
     });
 
     const prevMonthLabReqs = safeLabRequests.filter(r => {
-      if (!r.accessDate || r.department !== adminDept || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return false;
+      if (!r.accessDate || (r.department !== adminDept && r.studentDepartment !== adminDept) || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return false;
       const d = new Date(r.accessDate);
       return d.getFullYear() === prevYear && d.getMonth() === prevMonth;
     });
@@ -382,8 +402,8 @@ export default function AdminDashboard() {
     for (let day = 1; day <= daysInMonth; day++) {
       const datePrefix = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
-      const reqsCount = safeRequests.filter(r => r.requestDate === datePrefix && r.department === adminDept && (!scannedUsnFilter || r.usn === scannedUsnFilter)).length;
-      const labsCount = safeLabRequests.filter(r => r.accessDate === datePrefix && r.department === adminDept && (!scannedUsnFilter || r.usn === scannedUsnFilter)).length;
+      const reqsCount = safeRequests.filter(r => r.requestDate === datePrefix && (r.department === adminDept || r.studentDepartment === adminDept) && (!scannedUsnFilter || r.usn === scannedUsnFilter)).length;
+      const labsCount = safeLabRequests.filter(r => r.accessDate === datePrefix && (r.department === adminDept || r.studentDepartment === adminDept) && (!scannedUsnFilter || r.usn === scannedUsnFilter)).length;
 
       dailyData.push({
         day,
@@ -405,7 +425,7 @@ export default function AdminDashboard() {
     const safeLabRequests = Array.isArray(labRequests) ? labRequests : [];
 
     safeRequests.forEach(r => {
-      if (!r.requestDate || r.department !== adminDept || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return;
+      if (!r.requestDate || (r.department !== adminDept && r.studentDepartment !== adminDept) || (scannedUsnFilter && r.usn !== scannedUsnFilter)) return;
       const d = new Date(r.requestDate);
       if (d.getFullYear() === targetYear && d.getMonth() === targetMonth) {
         activities.push({
@@ -421,7 +441,7 @@ export default function AdminDashboard() {
     });
 
     safeLabRequests.forEach(l => {
-      if (!l.accessDate || l.department !== adminDept || (scannedUsnFilter && l.usn !== scannedUsnFilter)) return;
+      if (!l.accessDate || (l.department !== adminDept && l.studentDepartment !== adminDept) || (scannedUsnFilter && l.usn !== scannedUsnFilter)) return;
       const d = new Date(l.accessDate);
       if (d.getFullYear() === targetYear && d.getMonth() === targetMonth) {
         activities.push({
@@ -889,7 +909,7 @@ export default function AdminDashboard() {
                 {(() => {
                   const currentStatuses = ['PENDING', 'APPROVED', 'Pending HOD', 'Pending Renewal HOD', 'Approved by HOD', 'Ready for Collection', 'Active', 'BORROWED', 'PENDING_RETURN', 'PENDING_COLLECTION'];
                   const groupedRequests = requests
-                    .filter(r => r.department === adminDept && (!scannedUsnFilter || r.usn === scannedUsnFilter))
+                    .filter(r => (r.department === adminDept || r.studentDepartment === adminDept) && (!scannedUsnFilter || r.usn === scannedUsnFilter))
                     .filter(req => workflowTab === 'CURRENT' ? currentStatuses.includes(req.status) : !currentStatuses.includes(req.status))
                     .reduce((acc, req) => {
                       const key = `${req.usn}_${req.requestDate}`;
@@ -1085,12 +1105,12 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800">
-                {labRequests.filter(r => r.department === adminDept && (!scannedUsnFilter || r.usn === scannedUsnFilter)).length === 0 && (
+                {labRequests.filter(r => (r.department === adminDept || r.studentDepartment === adminDept) && (!scannedUsnFilter || r.usn === scannedUsnFilter)).length === 0 && (
                   <tr>
                     <td colSpan={6} className="px-6 py-8 text-center text-zinc-500">No lab access requests found.</td>
                   </tr>
                 )}
-                {labRequests.filter(req => req.department === adminDept && (!scannedUsnFilter || req.usn === scannedUsnFilter)).map(req => {
+                {labRequests.filter(req => (req.department === adminDept || req.studentDepartment === adminDept) && (!scannedUsnFilter || req.usn === scannedUsnFilter)).map(req => {
                   return (
                     <tr key={req.id} className="hover:bg-zinc-800/30 transition-colors">
                       <td className="px-6 py-4 font-mono text-zinc-300">{req.id}</td>
@@ -1193,7 +1213,7 @@ export default function AdminDashboard() {
             <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl flex flex-col justify-between hover:border-zinc-700 transition-colors">
               <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">[ ACTIVE_LOANS ]</div>
               <div className="text-2xl font-black mt-2 font-mono text-indigo-400">
-                {requests.filter(req => req.department === adminDept && ['Active', 'BORROWED', 'PENDING_RETURN'].includes(req.status)).reduce((sum, req) => sum + (req.quantity || 1), 0)}
+                {requests.filter(req => (req.department === adminDept || req.studentDepartment === adminDept) && ['Active', 'BORROWED', 'PENDING_RETURN'].includes(req.status)).reduce((sum, req) => sum + (req.quantity || 1), 0)}
               </div>
             </div>
             <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl flex flex-col justify-between hover:border-zinc-700 transition-colors">
@@ -1883,7 +1903,7 @@ export default function AdminDashboard() {
                 {(() => {
                   const currentStatuses = ['PENDING', 'APPROVED', 'Pending HOD', 'Pending Renewal HOD', 'Approved by HOD', 'Ready for Collection', 'Active', 'BORROWED', 'PENDING_RETURN', 'PENDING_COLLECTION'];
                   const groupedRequests = requests
-                    .filter(req => req.department === adminDept && req.studentDepartment === studentDeptFilter && req.section === sectionFilter && (!scannedUsnFilter || req.usn === scannedUsnFilter))
+                    .filter(req => (req.department === adminDept || req.studentDepartment === adminDept) && (req.studentDepartment === studentDeptFilter || !studentDeptFilter) && req.section === sectionFilter && (!scannedUsnFilter || req.usn === scannedUsnFilter))
                     .filter(req => sectionTrackingTab === 'CURRENT' ? currentStatuses.includes(req.status) : !currentStatuses.includes(req.status))
                     .filter(req => {
                       if (!sectionStartDate && !sectionEndDate) return true;

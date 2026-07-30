@@ -11,6 +11,7 @@ interface RequestItem {
   usn: string;
   component: string;
   department: string;
+  studentDepartment?: string;
   duration: number;
   requestDate: string;
   status: string;
@@ -63,14 +64,31 @@ export default function HodDashboard() {
       setIsLocked(true);
     }
 
-    fetchRequests();
+    fetchRequests(true);
     fetchInventory();
     fetchLabRequests();
+
+    // Real-time polling interval (every 5 seconds) to catch incoming student requests immediately
+    const interval = setInterval(() => {
+      fetchRequests(false);
+      fetchLabRequests();
+    }, 5000);
+
+    const handleFocus = () => {
+      fetchRequests(false);
+      fetchLabRequests();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
-  const fetchRequests = async () => {
+  const fetchRequests = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const res = await fetch('/api/requests');
       const data = await res.json();
       setRequests(Array.isArray(data) ? data : []);
@@ -78,7 +96,7 @@ export default function HodDashboard() {
       console.error('Failed to fetch requests', e);
       setRequests([]);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -124,7 +142,7 @@ export default function HodDashboard() {
       });
     }
 
-    const deptRequests = requests.filter(r => r.department === activeDept);
+    const deptRequests = requests.filter(r => r.department === activeDept || r.studentDepartment === activeDept);
     const deptInventory = inventory.filter(i => i.department === activeDept);
 
     // 1. Group real student requests by month
@@ -217,18 +235,19 @@ export default function HodDashboard() {
     }
   };
 
-  // Filter requests
-  const deptRequests = requests.filter(r => r.department === activeDept);
-  const pendingRequests = deptRequests.filter(r => r.status === 'Pending HOD' || r.status === 'Pending Renewal HOD');
+  // Filter requests (matching either component department or student department)
+  const deptRequests = requests.filter(r => r.department === activeDept || r.studentDepartment === activeDept);
+  const pendingRequests = deptRequests.filter(r => r.status === 'Pending HOD' || r.status === 'PENDING_HOD' || r.status === 'Pending Renewal HOD');
   const historyRequests = deptRequests.filter(r => 
-    (r.valueTier === 'HIGH' || r.status === 'Approved by HOD' || r.status === 'Rejected' || r.status === 'Pending Renewal HOD') && 
+    (r.valueTier === 'HIGH' || r.status === 'Approved by HOD' || r.status === 'APPROVED' || r.status === 'Rejected' || r.status === 'Pending Renewal HOD') && 
     r.status !== 'Pending HOD' && 
+    r.status !== 'PENDING_HOD' &&
     r.status !== 'Pending Renewal HOD'
   );
 
   // Stats
-  const totalPending = requests.filter(r => r.status === 'Pending HOD' || r.status === 'Pending Renewal HOD').length;
-  const totalLabPending = labRequests.filter(r => r.status === 'PENDING_HOD').length;
+  const totalPending = requests.filter(r => (r.department === activeDept || r.studentDepartment === activeDept) && (r.status === 'Pending HOD' || r.status === 'PENDING_HOD' || r.status === 'Pending Renewal HOD')).length;
+  const totalLabPending = labRequests.filter(r => (r.department === activeDept || r.studentDepartment === activeDept) && r.status === 'PENDING_HOD').length;
   const displayTotalPending = totalPending + totalLabPending;
 
   const activeDeptPending = pendingRequests.length;
@@ -309,8 +328,8 @@ export default function HodDashboard() {
           const isSelected = activeDept === dept.id;
           const isDeptDisabled = isLocked && !isSelected;
           const pendingCount = viewMode === 'lab-access'
-            ? labRequests.filter(r => r.department === dept.id && r.status === 'PENDING_HOD').length
-            : requests.filter(r => r.department === dept.id && (r.status === 'Pending HOD' || r.status === 'Pending Renewal HOD')).length;
+            ? labRequests.filter(r => (r.department === dept.id || r.studentDepartment === dept.id) && r.status === 'PENDING_HOD').length
+            : requests.filter(r => (r.department === dept.id || r.studentDepartment === dept.id) && (r.status === 'Pending HOD' || r.status === 'PENDING_HOD' || r.status === 'Pending Renewal HOD')).length;
           return (
             <button
               key={dept.id}
@@ -851,7 +870,7 @@ export default function HodDashboard() {
       {/* Analytics Tab Content */}
       {viewMode === 'analytics' && (() => {
         const deptInv = inventory.filter(item => item.department === activeDept);
-        const deptReqs = requests.filter(r => r.department === activeDept);
+        const deptReqs = requests.filter(r => r.department === activeDept || r.studentDepartment === activeDept);
         
         const totalReqs = deptReqs.length;
         const activeLoans = deptReqs.filter(r => r.status === 'Active').length;
