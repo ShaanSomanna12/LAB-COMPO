@@ -38,8 +38,13 @@ export default function HodDashboard() {
   
   // Interactive view switcher and graphing states
   const [viewMode, setViewMode] = useState<'requests' | 'analytics'>('requests');
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
+
+  const handleLogout = () => {
+    localStorage.removeItem('admin_dept');
+    localStorage.removeItem('hod_dept');
+    router.push('/');
+  };
 
   const DEPT_INFO = [
     { id: 'EDL', title: 'Engineering Development LAB', color: 'from-blue-600 to-indigo-600' },
@@ -154,10 +159,10 @@ export default function HodDashboard() {
       months[5].stockAdded = Math.max(baselineCurrent, sessionAdded);
     }
 
-    // Default visual population for display completeness
-    months.forEach(m => {
+    // Default visual population for display completeness (deterministic, index-seeded)
+    months.forEach((m, idx) => {
       if (m.stockAdded === 0 && totalStock > 0) {
-        m.stockAdded = Math.max(1, Math.floor(Math.random() * 2) + 1);
+        m.stockAdded = Math.max(1, (idx % 3) + 1);
       }
     });
 
@@ -211,67 +216,38 @@ export default function HodDashboard() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white p-3 sm:p-6 md:p-8 font-sans print:bg-white print:text-black">
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 sm:mb-8 border-b border-zinc-800 pb-4 sm:pb-6 relative print:hidden">
-        <div className="pr-12">
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
-            HOD APPROVAL WORKSPACE
-          </h1>
-          <p className="text-zinc-400 mt-0.5 sm:mt-1 text-xs sm:text-sm md:text-base">
-            {collegeName} • Head of Department Panel
-          </p>
-        </div>
-
-        {/* Desktop Nav */}
-        <div className="hidden md:flex items-center gap-4">
-          <button 
-            onClick={() => {
-              localStorage.removeItem('admin_dept');
-              localStorage.removeItem('hod_dept');
-              router.push('/');
-            }} 
-            className="px-5 py-2 bg-red-600/10 text-red-500 border border-red-500/20 hover:bg-red-600/20 rounded-lg text-sm transition-colors font-medium"
-          >
-            Logout
-          </button>
-        </div>
-
-        {/* Mobile Navigation Toggle */}
-        <div className="md:hidden absolute top-0 right-0 flex items-center z-50">
-          <button
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="p-2 text-zinc-400 hover:text-white transition-colors"
-          >
-            {isMobileMenuOpen ? (
-              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            ) : (
-              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            )}
-          </button>
-        </div>
-
-        {/* Mobile Dropdown Menu */}
-        {isMobileMenuOpen && (
-          <div className="absolute top-16 right-0 w-56 bg-zinc-900/95 backdrop-blur-xl border border-zinc-800 rounded-2xl shadow-2xl p-4 flex flex-col gap-3 z-50 md:hidden animate-in fade-in slide-in-from-top-4">
-            <button 
-              onClick={() => {
-                localStorage.removeItem('admin_dept');
-                localStorage.removeItem('hod_dept');
-                router.push('/');
-              }} 
-              className="w-full text-center px-4 py-3 bg-red-600/10 text-red-500 hover:bg-red-600/20 rounded-lg text-sm transition-colors font-medium"
-            >
-              Logout
-            </button>
+      {/* ── Redesigned HOD Header ── */}
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 relative print:hidden">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shrink-0 shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
           </div>
-        )}
+          <div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent uppercase">HOD Workspace</h1>
+              {isLocked && activeDept && (
+                <span className="px-2.5 py-0.5 bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 rounded-full text-[11px] font-black uppercase tracking-widest">{activeDept}</span>
+              )}
+              <div className="flex items-center gap-1.5 bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-0.5 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
+                <span className="text-cyan-400 text-[10px] font-bold uppercase tracking-wider">Live</span>
+              </div>
+            </div>
+            <p className="text-zinc-500 mt-0.5 text-xs">{collegeName} • Head of Department Panel</p>
+          </div>
+        </div>
+        <button
+          onClick={handleLogout}
+          className="px-4 py-2 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 rounded-xl text-xs font-bold transition-colors"
+        >
+          Logout
+        </button>
       </header>
+      <div className="border-b border-zinc-800/50 mb-6 sm:mb-8 print:hidden"></div>
 
-
-      {/* Dept Selector Ribbon */}
+      {/* ── Dept Selector Ribbon ── */}
       <div className="flex overflow-x-auto gap-2.5 pb-3 mb-6 scrollbar-hide -mx-3 px-3 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-3 md:grid-cols-5 sm:gap-3 print:hidden">
         {DEPT_INFO.map(dept => {
           const isSelected = activeDept === dept.id;
@@ -282,19 +258,35 @@ export default function HodDashboard() {
               key={dept.id}
               onClick={() => { if (!isDeptDisabled) { setActiveDept(dept.id); setSelectedReq(null); } }}
               disabled={isDeptDisabled}
-              className={`shrink-0 w-36 sm:w-auto p-[1px] rounded-xl transition-all duration-300 ${isSelected ? 'bg-gradient-to-r ' + dept.color : 'bg-zinc-900 border border-zinc-800'} ${isDeptDisabled ? 'opacity-30 cursor-not-allowed' : 'hover:border-zinc-700'}`}
+              className={`shrink-0 w-36 sm:w-auto rounded-xl transition-all duration-300 ${
+                isSelected
+                  ? 'ring-2 ring-offset-2 ring-offset-zinc-950 ring-emerald-500/60 shadow-[0_0_20px_rgba(16,185,129,0.15)]'
+                  : ''
+              } ${isDeptDisabled ? 'opacity-30 cursor-not-allowed' : ''}`}
             >
-              <div className={`rounded-xl p-3 sm:p-4 bg-zinc-950 text-left h-full flex flex-col justify-between transition-all duration-300 hover:bg-zinc-900/50 ${isSelected ? 'brightness-110' : ''}`}>
+              <div className={`rounded-xl p-3 sm:p-4 text-left h-full flex flex-col justify-between transition-all duration-300 border ${
+                isSelected
+                  ? `bg-gradient-to-br ${dept.color} border-transparent`
+                  : 'bg-zinc-900 border-zinc-800 hover:border-zinc-600 hover:bg-zinc-800/60'
+              }`}>
                 <div>
                   <div className="flex justify-between items-start">
-                    <span className="text-lg sm:text-2xl font-black tracking-tight">{dept.id}</span>
+                    <span className={`text-lg sm:text-2xl font-black tracking-tight ${
+                      isSelected ? 'text-white drop-shadow-sm' : 'text-zinc-200'
+                    }`}>{dept.id}</span>
                     {pendingCount > 0 && (
-                      <span className="bg-amber-500/10 text-amber-500 border border-amber-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        isSelected
+                          ? 'bg-black/25 text-white border border-white/20'
+                          : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                      }`}>
                         {pendingCount} new
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] sm:text-xs text-zinc-500 mt-1 line-clamp-1">{dept.title}</p>
+                  <p className={`text-[11px] sm:text-xs mt-1 line-clamp-1 ${
+                    isSelected ? 'text-white/70' : 'text-zinc-500'
+                  }`}>{dept.title}</p>
                 </div>
               </div>
             </button>
@@ -333,19 +325,19 @@ export default function HodDashboard() {
         <>
           {/* Stats Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6 mb-6 sm:mb-8 max-w-4xl">
-            <div className="bg-zinc-900/40 border border-zinc-800/80 p-4 sm:p-6 rounded-2xl flex flex-col justify-between">
+            <div className="bg-zinc-900 border border-amber-500/20 p-4 sm:p-6 rounded-2xl flex flex-col justify-between shadow-[0_0_20px_rgba(245,158,11,0.05)]">
               <div className="text-zinc-500 text-[10px] sm:text-xs font-semibold uppercase tracking-wider">Awaiting Decisions</div>
-              <div className="text-2xl sm:text-4xl font-extrabold text-amber-400 mt-1 sm:mt-2">{activeDeptPending}</div>
+              <div className="text-3xl sm:text-4xl font-extrabold text-amber-400 mt-1 sm:mt-2">{activeDeptPending}</div>
               <p className="text-[11px] sm:text-xs text-zinc-500 mt-1">Pending HOD approval in {activeDept}</p>
             </div>
-            <div className="bg-zinc-900/40 border border-zinc-800/80 p-4 sm:p-6 rounded-2xl flex flex-col justify-between">
+            <div className="bg-zinc-900 border border-emerald-500/20 p-4 sm:p-6 rounded-2xl flex flex-col justify-between shadow-[0_0_20px_rgba(16,185,129,0.05)]">
               <div className="text-zinc-500 text-[10px] sm:text-xs font-semibold uppercase tracking-wider">Approved Requests</div>
-              <div className="text-2xl sm:text-4xl font-extrabold text-emerald-400 mt-1 sm:mt-2">{activeDeptApproved}</div>
+              <div className="text-3xl sm:text-4xl font-extrabold text-emerald-400 mt-1 sm:mt-2">{activeDeptApproved}</div>
               <p className="text-[11px] sm:text-xs text-zinc-500 mt-1">Total approved & active loans</p>
             </div>
-            <div className="bg-zinc-900/40 border border-zinc-800/80 p-4 sm:p-6 rounded-2xl flex flex-col justify-between">
+            <div className="bg-zinc-900 border border-red-500/20 p-4 sm:p-6 rounded-2xl flex flex-col justify-between shadow-[0_0_20px_rgba(239,68,68,0.05)]">
               <div className="text-zinc-500 text-[10px] sm:text-xs font-semibold uppercase tracking-wider">Rejected Requests</div>
-              <div className="text-2xl sm:text-4xl font-extrabold text-red-500 mt-1 sm:mt-2">{activeDeptRejected}</div>
+              <div className="text-3xl sm:text-4xl font-extrabold text-red-500 mt-1 sm:mt-2">{activeDeptRejected}</div>
               <p className="text-[11px] sm:text-xs text-zinc-500 mt-1">Requests declined or returned</p>
             </div>
           </div>
@@ -630,32 +622,7 @@ export default function HodDashboard() {
         const chartData = getAnalyticsData();
         const maxVal = Math.max(...chartData.map(d => Math.max(d.borrowed, d.stockAdded)), 8);
         const yMax = Math.ceil(maxVal / 4) * 4;
-
-        // Path generators for fuchsia (borrows) and cyan (stock additions) lines
-        let borrowPath = '';
-        let stockPath = '';
-        let borrowArea = 'M 50 220';
-        let stockArea = 'M 50 220';
-
-        chartData.forEach((d, idx) => {
-          const x = 50 + idx * 104;
-          const yBorrow = 220 - (d.borrowed / yMax) * 180;
-          const yStock = 220 - (d.stockAdded / yMax) * 180;
-
-          if (idx === 0) {
-            borrowPath = `M ${x} ${yBorrow}`;
-            stockPath = `M ${x} ${yStock}`;
-          } else {
-            borrowPath += ` L ${x} ${yBorrow}`;
-            stockPath += ` L ${x} ${yStock}`;
-          }
-
-          borrowArea += ` L ${x} ${yBorrow}`;
-          stockArea += ` L ${x} ${yStock}`;
-        });
-
-        borrowArea += ' L 570 220 Z';
-        stockArea += ' L 570 220 Z';
+        // Note: SVG path generators removed — chart now uses Recharts AreaChart directly
 
         return (
           <div className="space-y-8 max-w-6xl mx-auto" id="analytics-dashboard-export-target">

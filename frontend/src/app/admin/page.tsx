@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
@@ -49,22 +49,7 @@ interface InventoryItem {
   value_tier?: string;
 }
 
-const defaultInventory: InventoryItem[] = [
-  { id: 1, name: 'Raspberry Pi 4 Model B', available: 4, total: 5, desc: 'High-performance single-board computer. Used for heavy processing and ML nodes.', department: 'EDL', location: 'Lab 201', status: 'Available' },
-  { id: 2, name: 'Arduino Mega 2560', available: 0, total: 2, desc: 'Advanced microcontroller board based on the ATmega2560. Ideal for complex robotics projects.', department: 'MECH', location: 'Mechatronics Lab', status: 'Available' },
-  { id: 3, name: 'NVIDIA Jetson Nano', available: 2, total: 2, desc: 'Small, powerful computer for embedded applications and AI neural networks.', department: 'EDL', location: 'AI Lab 404', status: 'Available' },
-  { id: 4, name: 'Fluke 117 Multimeter', available: 12, total: 15, desc: 'True-RMS digital multimeter with integrated non-contact voltage detection.', department: 'EEE', location: 'Circuits Lab', status: 'Available' },
-  { id: 5, name: 'RIGOL DS1054Z Oscilloscope', available: 3, total: 4, desc: '50 MHz Digital Oscilloscope with 4 channels. Crucial for signal analysis.', department: 'ECE', location: 'Signals Lab', status: 'Available' },
-  { id: 6, name: 'ESP32 Wi-Fi/BT Module', available: 18, total: 20, desc: 'Low-cost, low-power system on a chip with integrated Wi-Fi and dual-mode Bluetooth.', department: 'EDL', location: 'IoT Lab', status: 'Available' },
-  { id: 7, name: 'Hakko FX-888D Soldering Station', available: 6, total: 6, desc: 'Digital precision soldering iron with adjustable thermal recovery and heating speeds.', department: 'EEE', location: 'Fabrication Room', status: 'Under Repair' },
-  { id: 8, name: 'Lidar Sensor (RPLIDAR A1)', available: 1, total: 2, desc: '360-degree 2D laser scanner (LIDAR) solution for ROS mapping and SLAM algorithms.', department: 'MECH', location: 'Autonomous Systems Lab', status: 'Available' }
-];
-
-const mockRequests: RequestItem[] = [
-  { id: 'REQ-001', studentName: 'Rahul Kumar', usn: '4VV25CS045', component: 'Raspberry Pi 4 Model B', department: 'EDL', duration: 7, requestDate: '2026-04-18', status: 'Pending HOD' },
-  { id: 'REQ-002', studentName: 'Aditi Sharma', usn: '4VV25EC012', component: 'RIGOL DS1054Z Oscilloscope', department: 'ECE', duration: 3, requestDate: '2026-04-18', status: 'Ready for Collection' },
-  { id: 'REQ-003', studentName: 'Rohan Sharma', usn: '4VV25CS001', component: 'Arduino Mega 2560', department: 'MECH', duration: 14, requestDate: '2026-04-15', status: 'Active' },
-];
+// Note: defaultInventory and mockRequests removed — data is fetched live from API
 
 const getComponentPrice = (componentName: string) => {
   const name = componentName.toLowerCase();
@@ -159,6 +144,14 @@ export default function AdminDashboard() {
   const [previewLongitude, setPreviewLongitude] = useState<number | null>(null);
   const [previewType, setPreviewType] = useState<'COLLECT' | 'RETURN' | null>(null);
   const [previewAddress, setPreviewAddress] = useState<string | null>(null);
+
+  // Modal states replacing native browser dialogs (alert/confirm/prompt)
+  const [confirmModal, setConfirmModal] = useState<{ title: string; body: string; confirmText?: string; onConfirm: () => void } | null>(null);
+  const [approveModal, setApproveModal] = useState<{ id: string; component: string; requestedQty: number; valueTier: string; collectionTime: string } | null>(null);
+  const [approveQty, setApproveQty] = useState(1);
+  const [approveTime, setApproveTime] = useState('');
+  const [stockEditModal, setStockEditModal] = useState<{ id: string | number; name: string; currentTotal: number } | null>(null);
+  const [stockEditValue, setStockEditValue] = useState('');
 
   useEffect(() => {
     const resolveAddress = async () => {
@@ -461,27 +454,28 @@ export default function AdminDashboard() {
     });
   };
 
-  const handleApprove = async (id: string) => {
+  const handleApprove = (id: string) => {
     const req = requests.find(r => r.id === id);
     if (!req) return;
+    setApproveModal({
+      id: req.id,
+      component: req.component,
+      requestedQty: req.quantity || 1,
+      valueTier: req.valueTier || 'MEDIUM',
+      collectionTime: req.collectionTime || ''
+    });
+    setApproveQty(req.quantity || 1);
+    setApproveTime(req.collectionTime || '');
+  };
 
-    let finalQuantity = req.quantity || 1;
-    const inputQty = prompt(`Approve request for ${req.component}\nRequested quantity: ${req.quantity || 1}\nEnter quantity to approve:`, String(req.quantity || 1));
-    if (inputQty === null) return; // Cancelled
-
-    const parsedQty = parseInt(inputQty, 10);
-    if (!isNaN(parsedQty) && parsedQty > 0) {
-      finalQuantity = parsedQty;
-    }
-
-    let finalCollectionTime = req.collectionTime || '';
-    const inputTime = prompt(`Approve request for ${req.component}\nStudent requested time: ${req.collectionTime || 'Not specified'}\nEnter approved collection time (leave as is to accept student's time):`, req.collectionTime || '');
-    if (inputTime === null) return; // Cancelled
-    finalCollectionTime = inputTime;
-
+  const confirmApprove = async () => {
+    if (!approveModal) return;
+    const req = requests.find(r => r.id === approveModal.id);
+    if (!req) return;
     const newStatus = req.valueTier === 'HIGH' ? 'Pending HOD' : 'APPROVED';
-    await updateRequestStatus(id, newStatus, finalQuantity, finalCollectionTime);
-    setRequests(reqs => reqs.map(r => r.id === id ? { ...r, status: newStatus, quantity: finalQuantity, collectionTime: finalCollectionTime } : r));
+    await updateRequestStatus(approveModal.id, newStatus, approveQty, approveTime);
+    setRequests(reqs => reqs.map(r => r.id === approveModal.id ? { ...r, status: newStatus, quantity: approveQty, collectionTime: approveTime } : r));
+    setApproveModal(null);
   };
 
   const handleReject = async (id: string) => {
@@ -489,29 +483,36 @@ export default function AdminDashboard() {
     setRequests(reqs => reqs.filter(r => r.id !== id));
   };
 
-  const handleCheckout = async (id: string) => {
-    if (!window.confirm("Are you sure you want to mark this component as checked out / collected?")) {
-      return;
-    }
-    await updateRequestStatus(id, 'Active');
-    setRequests(reqs => reqs.map(r => r.id === id ? { ...r, status: 'Active' } : r));
+  const handleCheckout = (id: string) => {
+    setConfirmModal({
+      title: 'Confirm Component Checkout',
+      body: 'Mark this component as checked out and collected by the student?',
+      confirmText: 'Mark Collected',
+      onConfirm: async () => {
+        await updateRequestStatus(id, 'Active');
+        setRequests(reqs => reqs.map(r => r.id === id ? { ...r, status: 'Active' } : r));
+        setConfirmModal(null);
+      }
+    });
   };
 
-  const handleReturn = async (id: string) => {
-    if (!window.confirm("Are you sure you want to confirm the return of this component?")) {
-      return;
-    }
+  const handleReturn = (id: string) => {
     const req = requests.find(r => r.id === id);
-    if (req) {
-      const penaltyInfo = calculatePenalty(req.requestDate, req.duration, req.component);
-      if (penaltyInfo.isDelayed) {
-        alert(`Component returned successfully!\nOutstanding Penalty to Settle: ₹${penaltyInfo.penalty} (${penaltyInfo.weeksDelayed} week(s) late, computed at 5% of ₹${penaltyInfo.itemPrice} per week).`);
-      } else {
-        alert('Component returned successfully with zero penalty.');
+    if (!req) return;
+    const penaltyInfo = calculatePenalty(req.requestDate, req.duration, req.component);
+    const penaltyNote = penaltyInfo.isDelayed
+      ? `Late by ${penaltyInfo.delayDays} day(s). Outstanding penalty: ₹${penaltyInfo.penalty} (${penaltyInfo.weeksDelayed} wk × 5% of ₹${penaltyInfo.itemPrice}).`
+      : 'Returned on time — no penalty applies.';
+    setConfirmModal({
+      title: 'Confirm Component Return',
+      body: penaltyNote,
+      confirmText: 'Confirm Return',
+      onConfirm: async () => {
+        await updateRequestStatus(id, 'RETURNED');
+        setRequests(reqs => reqs.filter(r => r.id !== id));
+        setConfirmModal(null);
       }
-    }
-    await updateRequestStatus(id, 'RETURNED');
-    setRequests(reqs => reqs.filter(r => r.id !== id));
+    });
   };
 
   const toggleRepairStatus = async (id: string | number) => {
@@ -538,35 +539,30 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleUpdateStock = async (id: string | number) => {
+  const handleUpdateStock = (id: string | number) => {
     const item = inventory.find(i => i.id === id);
     if (!item) return;
-    const newTotalStr = window.prompt(`Enter new total stock count for ${item.name}:`, item.total.toString());
-    if (newTotalStr === null) return;
+    setStockEditModal({ id, name: item.name, currentTotal: item.total });
+    setStockEditValue(String(item.total));
+  };
 
-    const newTotal = parseInt(newTotalStr, 10);
-    if (isNaN(newTotal) || newTotal < 0) {
-      alert("Please enter a valid positive number.");
-      return;
-    }
-
+  const confirmUpdateStock = async () => {
+    if (!stockEditModal) return;
+    const newTotal = parseInt(stockEditValue, 10);
+    if (isNaN(newTotal) || newTotal < 0) return;
     try {
       const res = await fetch('/api/inventory', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id,
-          total: newTotal,
-          available: newTotal
-        })
+        body: JSON.stringify({ id: stockEditModal.id, total: newTotal, available: newTotal })
       });
-
       if (res.ok) {
-        setInventory(prev => prev.map(i => i.id === id ? { ...i, total: newTotal, available: newTotal } : i));
+        setInventory(prev => prev.map(i => i.id === stockEditModal.id ? { ...i, total: newTotal, available: newTotal } : i));
       }
     } catch (err) {
       console.error(err);
     }
+    setStockEditModal(null);
   };
 
   const handleTierChange = async (id: string | number, newTier: string) => {
@@ -679,72 +675,110 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeleteDevice = async (id: string | number) => {
-    if (window.confirm('Are you sure you want to completely remove this component from the inventory? This cannot be undone.')) {
-      try {
-        const res = await fetch(`/api/inventory?id=${id}`, { method: 'DELETE' });
-        if (res.ok) {
-          setInventory(prev => prev.filter(item => item.id !== id));
+  const handleDeleteDevice = (id: string | number) => {
+    setConfirmModal({
+      title: 'Remove from Inventory',
+      body: 'Permanently remove this component from the catalog? This action cannot be undone.',
+      confirmText: 'Delete',
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/inventory?id=${id}`, { method: 'DELETE' });
+          if (res.ok) setInventory(prev => prev.filter(item => item.id !== id));
+        } catch (err) {
+          console.error(err);
         }
-      } catch (err) {
-        console.error(err);
+        setConfirmModal(null);
       }
-    }
+    });
   };
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white p-3 sm:p-6 md:p-8 font-sans">
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 sm:mb-8 border-b border-zinc-800 pb-4 sm:pb-6 relative">
-        <div>
-          <h1 className="text-xl sm:text-3xl font-bold tracking-tight bg-gradient-to-r from-red-400 to-orange-400 bg-clip-text text-transparent">LAB ADMIN PORTAL</h1>
-          <p className="text-zinc-400 mt-0.5 sm:mt-1 text-xs sm:text-sm">
-            {adminDept ? `Managing ${adminDept} Department.` : collegeName}
-          </p>
+      {/* ── Redesigned Header ── */}
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 relative">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-orange-500 flex items-center justify-center shrink-0 shadow-[0_0_20px_rgba(244,63,94,0.3)]">
+            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+          </div>
+          <div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight bg-gradient-to-r from-rose-400 via-orange-300 to-amber-400 bg-clip-text text-transparent uppercase">Lab Admin Portal</h1>
+              {adminDept && (
+                <span className="px-2.5 py-0.5 bg-amber-500/15 text-amber-400 border border-amber-500/25 rounded-full text-[11px] font-black uppercase tracking-widest">{adminDept}</span>
+              )}
+              <div className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span className="text-emerald-400 text-[10px] font-bold uppercase tracking-wider">Live</span>
+              </div>
+            </div>
+            <p className="text-zinc-500 mt-0.5 text-xs">{collegeName} • Administrative Control Panel</p>
+          </div>
         </div>
-
-        {/* Desktop & Mobile Top Actions */}
-        <div className="flex items-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-3">
           {adminDept && !isLocked && (
-            <button onClick={() => setAdminDept(null)} className="hidden md:block px-3 py-1.5 sm:px-5 sm:py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-xs sm:text-sm transition-colors font-medium">
-              ← Back to Departments
+            <button onClick={() => setAdminDept(null)} className="hidden md:flex items-center gap-1.5 px-4 py-2 bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700/50 rounded-xl text-xs font-medium transition-colors text-zinc-300">
+              ← Departments
             </button>
           )}
           <button onClick={() => {
             localStorage.removeItem('admin_dept');
             localStorage.removeItem('hod_dept');
             router.push('/');
-          }} className="px-3 py-1.5 sm:px-5 sm:py-2 bg-red-600/10 text-red-500 border border-red-500/20 hover:bg-red-600/20 rounded-lg text-xs sm:text-sm transition-colors font-medium">
+          }} className="px-4 py-2 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 rounded-xl text-xs font-bold transition-colors">
             Logout
           </button>
         </div>
       </header>
+      <div className="border-b border-zinc-800/50 mb-6 sm:mb-8"></div>
 
-      {/* Main Navigation Tabs */}
+      {/* ── Main Navigation Tabs with icons ── */}
       {adminDept && (
-        <div className="flex overflow-x-auto gap-2 pb-3 mb-6 scrollbar-hide -mx-3 px-3 sm:mx-0 sm:px-0">
+        <div className="flex overflow-x-auto gap-1.5 pb-3 mb-6 scrollbar-hide -mx-3 px-3 sm:mx-0 sm:px-0 sm:bg-zinc-900/50 sm:border sm:border-zinc-800/60 sm:rounded-2xl sm:p-1.5">
           <button
             onClick={() => setActiveTab('requests')}
-            className={`whitespace-nowrap px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${activeTab === 'requests' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.15)]' : 'bg-zinc-800/60 text-zinc-300 border border-zinc-700/50 hover:bg-zinc-700 hover:text-white shadow-sm'}`}
+            className={`whitespace-nowrap flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 border ${
+              activeTab === 'requests'
+                ? 'bg-amber-500/15 text-amber-400 border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.12)]'
+                : 'text-zinc-400 border-transparent hover:bg-zinc-800/60 hover:text-white'
+            }`}
           >
-            Requests Workflow
+            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+            Requests
           </button>
           <button
             onClick={() => setActiveTab('inventory')}
-            className={`whitespace-nowrap px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${activeTab === 'inventory' ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.15)]' : 'bg-zinc-800/60 text-zinc-300 border border-zinc-700/50 hover:bg-zinc-700 hover:text-white shadow-sm'}`}
+            className={`whitespace-nowrap flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 border ${
+              activeTab === 'inventory'
+                ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.12)]'
+                : 'text-zinc-400 border-transparent hover:bg-zinc-800/60 hover:text-white'
+            }`}
           >
-            Inventory Management
+            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+            Inventory
           </button>
           <button
             onClick={() => setActiveTab('analytics')}
-            className={`whitespace-nowrap px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${activeTab === 'analytics' ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30 shadow-[0_0_15px_rgba(168,85,247,0.15)]' : 'bg-zinc-800/60 text-zinc-300 border border-zinc-700/50 hover:bg-zinc-700 hover:text-white shadow-sm'}`}
+            className={`whitespace-nowrap flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 border ${
+              activeTab === 'analytics'
+                ? 'bg-purple-500/15 text-purple-400 border-purple-500/30 shadow-[0_0_15px_rgba(168,85,247,0.12)]'
+                : 'text-zinc-400 border-transparent hover:bg-zinc-800/60 hover:text-white'
+            }`}
           >
-            Monthly Updates
+            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+            Analytics
           </button>
           <button
             onClick={() => setActiveTab('section-tracking')}
-            className={`whitespace-nowrap px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${activeTab === 'section-tracking' ? 'bg-pink-500/15 text-pink-400 border border-pink-500/30 shadow-[0_0_15px_rgba(236,72,153,0.15)]' : 'bg-zinc-800/60 text-zinc-300 border border-zinc-700/50 hover:bg-zinc-700 hover:text-white shadow-sm'}`}
+            className={`whitespace-nowrap flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 border ${
+              activeTab === 'section-tracking'
+                ? 'bg-pink-500/15 text-pink-400 border-pink-500/30 shadow-[0_0_15px_rgba(236,72,153,0.12)]'
+                : 'text-zinc-400 border-transparent hover:bg-zinc-800/60 hover:text-white'
+            }`}
           >
-            Section Tracking
+            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            Sections
           </button>
         </div>
       )}
@@ -992,37 +1026,36 @@ export default function AdminDashboard() {
 
       {adminDept && activeTab === 'inventory' && (
         <div className="space-y-6 max-w-6xl mx-auto">
-          {/* HUD Metrics Cards */}
           <section className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 sm:gap-4 mb-6">
-            <div className="bg-zinc-900 border border-zinc-800 p-3 sm:p-4 rounded-xl flex flex-col justify-between hover:border-zinc-700 transition-colors">
-              <div className="text-[9px] sm:text-[10px] font-mono text-zinc-500 uppercase tracking-wider">[ OUT_OF_STOCK ]</div>
-              <div className="text-xl sm:text-2xl font-black mt-1 sm:mt-2 font-mono text-amber-400">{inventory.filter(item => item.department === adminDept && item.available === 0).length}</div>
+            <div className="bg-zinc-900 border border-zinc-800 p-3 sm:p-4 rounded-xl flex flex-col justify-between hover:border-amber-500/30 transition-colors">
+              <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Out of Stock</div>
+              <div className="text-xl sm:text-2xl font-black mt-2 text-amber-400">{inventory.filter(item => item.department === adminDept && item.available === 0).length}</div>
             </div>
-            <div className="bg-zinc-900 border border-zinc-800 p-3 sm:p-4 rounded-xl flex flex-col justify-between hover:border-zinc-700 transition-colors">
-              <div className="text-[9px] sm:text-[10px] font-mono text-zinc-500 uppercase tracking-wider">[ TOTAL_STOCK ]</div>
-              <div className="text-xl sm:text-2xl font-black mt-1 sm:mt-2 font-mono text-zinc-200">{inventory.filter(item => item.department === adminDept).length}</div>
+            <div className="bg-zinc-900 border border-zinc-800 p-3 sm:p-4 rounded-xl flex flex-col justify-between hover:border-zinc-600 transition-colors">
+              <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Total Items</div>
+              <div className="text-xl sm:text-2xl font-black mt-2 text-zinc-100">{inventory.filter(item => item.department === adminDept).length}</div>
             </div>
-            <div className="bg-zinc-900 border border-zinc-800 p-3 sm:p-4 rounded-xl flex flex-col justify-between hover:border-zinc-700 transition-colors">
-              <div className="text-[9px] sm:text-[10px] font-mono text-zinc-500 uppercase tracking-wider">[ ACTIVE_LOANS ]</div>
-              <div className="text-xl sm:text-2xl font-black mt-1 sm:mt-2 font-mono text-indigo-400">
+            <div className="bg-zinc-900 border border-zinc-800 p-3 sm:p-4 rounded-xl flex flex-col justify-between hover:border-indigo-500/30 transition-colors">
+              <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Active Loans</div>
+              <div className="text-xl sm:text-2xl font-black mt-2 text-indigo-400">
                 {requests.filter(req => (req.department === adminDept || req.studentDepartment === adminDept) && ['Active', 'BORROWED', 'PENDING_RETURN'].includes(req.status)).reduce((sum, req) => sum + (req.quantity || 1), 0)}
               </div>
             </div>
-            <div className="bg-zinc-900 border border-zinc-800 p-3 sm:p-4 rounded-xl flex flex-col justify-between hover:border-zinc-700 transition-colors">
-              <div className="text-[9px] sm:text-[10px] font-mono text-zinc-500 uppercase tracking-wider">[ BROKEN_UNITS ]</div>
-              <div className="text-xl sm:text-2xl font-black mt-1 sm:mt-2 font-mono text-rose-400">{inventory.filter(item => item.department === adminDept && item.status === 'Under Repair').length}</div>
+            <div className="bg-zinc-900 border border-zinc-800 p-3 sm:p-4 rounded-xl flex flex-col justify-between hover:border-rose-500/30 transition-colors">
+              <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Under Repair</div>
+              <div className="text-xl sm:text-2xl font-black mt-2 text-rose-400">{inventory.filter(item => item.department === adminDept && item.status === 'Under Repair').length}</div>
             </div>
-            <div className="bg-zinc-900 border border-zinc-800 p-3 sm:p-4 rounded-xl flex flex-col justify-between hover:border-zinc-700 transition-colors">
-              <div className="text-[9px] sm:text-[10px] font-mono text-zinc-500 uppercase tracking-wider">[ PORTAL_SYNC ]</div>
-              <div className="text-xs sm:text-sm font-bold mt-2 sm:mt-3 font-mono text-emerald-400 flex items-center gap-1.5 uppercase">
+            <div className="bg-zinc-900 border border-zinc-800 p-3 sm:p-4 rounded-xl flex flex-col justify-between hover:border-emerald-500/30 transition-colors">
+              <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Sync Status</div>
+              <div className="text-xs sm:text-sm font-bold mt-2 text-emerald-400 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                ACTIVE
+                Live
               </div>
             </div>
           </section>
 
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold tracking-tight text-white uppercase font-mono">[{adminDept}_INVENTORY_CATALOG]</h2>
+            <h2 className="text-xl font-bold tracking-tight text-white">{adminDept} Inventory Catalog</h2>
             <button
               onClick={() => {
                 setEditingDeviceId(null);
@@ -1235,7 +1268,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* KPI Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-cyan-500/5 blur-xl pointer-events-none"></div>
               <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Total Monthly Updates</p>
@@ -1272,6 +1305,18 @@ export default function AdminDashboard() {
                   {labsChangeStr}
                 </span>
                 <span className="text-zinc-500">vs previous month ({analyticsStats.prev.labs})</span>
+              </div>
+            </div>
+
+            <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-rose-500/5 blur-xl pointer-events-none"></div>
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">High-Value Items</p>
+              <h2 className="text-4xl font-extrabold mt-3 text-white tracking-tight">
+                {inventory.filter(i => i.department === adminDept && i.value_tier === 'HIGH').length}
+              </h2>
+              <div className="mt-4 flex items-center gap-1.5 text-xs">
+                <span className="font-bold px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400">HOD Approval</span>
+                <span className="text-zinc-500">requires dual sign-off</span>
               </div>
             </div>
           </div>
@@ -1907,6 +1952,104 @@ export default function AdminDashboard() {
                 </div>
               )
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Confirm Action Modal ── */}
+      {confirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-rose-500/15 flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+              </div>
+              <h3 className="text-base font-bold text-white">{confirmModal.title}</h3>
+            </div>
+            <p className="text-zinc-400 text-sm leading-relaxed mb-6 pl-11">{confirmModal.body}</p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmModal(null)} className="flex-1 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold rounded-xl text-sm transition-colors">Cancel</button>
+              <button onClick={confirmModal.onConfirm} className="flex-[2] py-2.5 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-400 hover:to-rose-500 text-white font-bold rounded-xl text-sm transition-all active:scale-[0.98]">{confirmModal.confirmText || 'Confirm'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Approve Request Modal ── */}
+      {approveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+              </div>
+              <h3 className="text-base font-bold text-white">Approve Request</h3>
+            </div>
+            <p className="text-zinc-500 text-sm mb-5 pl-11">Confirming <span className="text-zinc-200 font-semibold">{approveModal.component}</span></p>
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Approved Quantity</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={approveQty}
+                  onChange={e => setApproveQty(parseInt(e.target.value) || 1)}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-cyan-500 transition-colors"
+                />
+                <p className="text-zinc-600 text-[11px] mt-1">Student requested: {approveModal.requestedQty}</p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Collection Time / Slot</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 2PM–4PM, Lab 301"
+                  value={approveTime}
+                  onChange={e => setApproveTime(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-cyan-500 transition-colors"
+                />
+                {approveModal.collectionTime && <p className="text-zinc-600 text-[11px] mt-1">Student specified: {approveModal.collectionTime}</p>}
+              </div>
+              {approveModal.valueTier === 'HIGH' && (
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 text-amber-400 text-xs font-semibold flex items-center gap-2">
+                  <span>⚠️</span> High-value item — will forward to HOD for final approval.
+                </div>
+              )}
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setApproveModal(null)} className="flex-1 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold rounded-xl text-sm transition-colors">Cancel</button>
+              <button onClick={confirmApprove} className="flex-[2] py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-bold rounded-xl text-sm transition-all active:scale-[0.98]">✓ Approve Request</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Stock Edit Modal ── */}
+      {stockEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-8 h-8 rounded-lg bg-cyan-500/15 flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+              </div>
+              <h3 className="text-base font-bold text-white">Update Stock Count</h3>
+            </div>
+            <p className="text-zinc-500 text-sm mb-5 pl-11 leading-relaxed"><span className="text-zinc-300 font-medium">{stockEditModal.name}</span></p>
+            <div className="mb-6">
+              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">New Total Stock</label>
+              <input
+                type="number"
+                min="0"
+                value={stockEditValue}
+                onChange={e => setStockEditValue(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-cyan-500 transition-colors"
+                autoFocus
+              />
+              <p className="text-zinc-600 text-[11px] mt-1">Current total: {stockEditModal.currentTotal}</p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setStockEditModal(null)} className="flex-1 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold rounded-xl text-sm transition-colors">Cancel</button>
+              <button onClick={confirmUpdateStock} className="flex-[2] py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white font-bold rounded-xl text-sm transition-all active:scale-[0.98]">Update Stock</button>
+            </div>
           </div>
         </div>
       )}
