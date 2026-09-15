@@ -74,12 +74,12 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // ══════════════════════════════════════════════════════════════════════════
   // TIER 2: API mutation route protection
   // ══════════════════════════════════════════════════════════════════════════
-  const isApiMutationRoute =
-    pathname.startsWith('/api/inventory') ||
-    pathname.startsWith('/api/notices')   ||
-    pathname.startsWith('/api/requests');
+  // Only privileged mutations: inventory, notices, or admin request updates (PUT/PATCH/DELETE)
+  const isPrivilegedMutation =
+    (pathname.startsWith('/api/inventory') || pathname.startsWith('/api/notices')) && MUTATION_METHODS.has(requestMethod) ||
+    pathname.startsWith('/api/requests') && (requestMethod === 'PATCH' || requestMethod === 'PUT' || requestMethod === 'DELETE');
 
-  if (isApiMutationRoute && MUTATION_METHODS.has(requestMethod)) {
+  if (isPrivilegedMutation) {
     // Token must be present and roleId must be in the privileged set
     const isPrivileged =
       !!payload &&

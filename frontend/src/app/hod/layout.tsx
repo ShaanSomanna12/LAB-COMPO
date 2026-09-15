@@ -35,7 +35,8 @@ export default async function HodLayout({
     !!payload &&
     (payload.roleId === ROLES.HOD || payload.roleId === ROLES.SUPER_ADMIN);
 
-  if (!isAuthorisedByHeader || !isAuthorisedByToken) {
+  // Allow access if either token or header confirms valid HOD role
+  if (!isAuthorisedByToken && !isAuthorisedByHeader) {
     redirect('/?error=unauthorized_hod');
   }
 

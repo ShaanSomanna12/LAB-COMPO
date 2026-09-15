@@ -130,8 +130,8 @@ export default function StudentCheckout() {
       setCart(prev => prev.filter(i => i.id !== id));
       return;
     }
-    const isLowTier = item.value_tier === 'LOW';
-    const maxQty = isLowTier ? Math.min(3, item.available) : item.available;
+    // Credit Overusage Mode: Allow requesting up to full available inventory stock
+    const maxQty = item.available;
     
     if (newQty > maxQty) newQty = maxQty;
 

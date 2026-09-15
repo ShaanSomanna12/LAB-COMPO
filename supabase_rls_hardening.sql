@@ -61,11 +61,11 @@ CREATE POLICY "users_select_public"
   FOR SELECT
   USING (true);
 
--- INSERT: open for self-registration; app-layer validates email domain + USN
-CREATE POLICY "users_insert_self"
+-- INSERT: blocked for clients; user creation goes through server API (/api/send-otp)
+CREATE POLICY "users_insert_blocked"
   ON public.users
   FOR INSERT
-  WITH CHECK (true);
+  WITH CHECK (false);
 
 -- UPDATE: only the authenticated owner may update their own row
 -- (service_role bypasses this entirely and can update anyone)
@@ -178,11 +178,11 @@ CREATE POLICY "reservations_select_own"
   FOR SELECT
   USING (auth.uid()::text = user_id::text);
 
--- Students may insert reservations for themselves
-CREATE POLICY "reservations_insert_own"
+-- INSERT: blocked for clients; reservations are created via server API (/api/requests)
+CREATE POLICY "reservations_insert_blocked"
   ON public.reservations
   FOR INSERT
-  WITH CHECK (auth.uid()::text = user_id::text);
+  WITH CHECK (false);
 
 -- Status updates (APPROVED/REJECTED/RETURNED) go through server API routes
 CREATE POLICY "reservations_update_blocked"
@@ -245,10 +245,10 @@ CREATE POLICY "lab_access_select_public"
   FOR SELECT
   USING (true);
 
-CREATE POLICY "lab_access_insert_auth"
+CREATE POLICY "lab_access_insert_blocked"
   ON public.lab_access_requests
   FOR INSERT
-  WITH CHECK (auth.uid() IS NOT NULL);
+  WITH CHECK (false);
 
 CREATE POLICY "lab_access_update_blocked"
   ON public.lab_access_requests

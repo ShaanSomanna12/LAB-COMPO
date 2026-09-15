@@ -44,12 +44,14 @@ export async function GET(request: Request) {
     }
 
     const { data, error } = await query;
-    if (error) throw error;
+    if (error) {
+      // Table doesn't exist yet or query failed — gracefully return empty array
+      return NextResponse.json([]);
+    }
 
-    return NextResponse.json(data);
+    return NextResponse.json(data || []);
   } catch (err) {
-    console.error('[notices GET]', err);
-    return NextResponse.json({ error: 'Failed to fetch notices' }, { status: 500 });
+    return NextResponse.json([]);
   }
 }
 

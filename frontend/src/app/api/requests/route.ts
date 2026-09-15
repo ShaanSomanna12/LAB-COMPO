@@ -210,10 +210,7 @@ export async function POST(request: Request) {
     }
 
     const trustScore = user.trust_score !== undefined && user.trust_score !== null ? user.trust_score : 100;
-
-    if (trustScore < 50) {
-       return NextResponse.json({ error: 'Checkout blocked. Your trust score is too low. Please contact HOD.' }, { status: 403 });
-    }
+    const isLowTrustOverusage = trustScore < 50;
 
     const newReservations = [];
 
@@ -241,7 +238,10 @@ export async function POST(request: Request) {
       }
       
       let status = 'PENDING';
-      if (isLowTier) {
+      if (isLowTrustOverusage) {
+        // Credit Overusage Mode: Low trust score requests require HOD approval
+        status = 'Pending HOD';
+      } else if (isLowTier) {
         status = 'APPROVED';
       } else if (tierUpper === 'HIGH') {
         status = 'Pending HOD';

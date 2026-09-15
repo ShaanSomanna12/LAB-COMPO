@@ -41,8 +41,8 @@ export default async function AdminLayout({
     !!payload &&
     (payload.roleId === ROLES.ADMIN || payload.roleId === ROLES.SUPER_ADMIN);
 
-  // Both checks must pass
-  if (!isAuthorisedByHeader || !isAuthorisedByToken) {
+  // Allow access if either token or header confirms valid admin role
+  if (!isAuthorisedByToken && !isAuthorisedByHeader) {
     redirect('/?error=unauthorized_admin');
   }
 

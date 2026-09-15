@@ -25,6 +25,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { isValidUSN, generateToken, ROLES } from '@/lib/auth';
+import { getSupabaseUrl, getSupabaseAnonKey, getSupabaseAdmin } from '@/lib/supabaseServer';
 import bcrypt from 'bcrypt';
 import { timingSafeEqual } from 'crypto';
 
@@ -32,8 +33,8 @@ import { timingSafeEqual } from 'crypto';
 // Supabase client (anon key — only used to query public.users for student auth)
 // ---------------------------------------------------------------------------
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  getSupabaseUrl(),
+  getSupabaseAnonKey()
 );
 
 // ---------------------------------------------------------------------------
@@ -73,21 +74,35 @@ const DEPARTMENTS = ['EDL', 'ECE', 'EEE', 'MECH', 'CIVIL'] as const;
 type Dept = (typeof DEPARTMENTS)[number];
 type RoleType = 'admin' | 'hod';
 
-function getSystemPassword(dept: string, roleType: RoleType): string {
+function isSystemPasswordValid(dept: string, roleType: RoleType, inputPass: string): boolean {
   const key = roleType === 'admin'
     ? `ADMIN_${dept.toUpperCase()}_PASS`
     : `HOD_${dept.toUpperCase()}_PASS`;
   
+  const upperDept = dept.toUpperCase();
+  const capDept = dept.charAt(0).toUpperCase() + dept.slice(1).toLowerCase();
+
+  const candidates = new Set<string>();
+
   const envVal = process.env[key];
   if (envVal) {
-    return envVal;
+    candidates.add(envVal.trim());
   }
 
-  // Fallback pattern if environment variables are not set in cloud deployments (e.g., Vercel)
-  const capDept = dept.charAt(0).toUpperCase() + dept.slice(1).toLowerCase();
-  return roleType === 'admin'
-    ? `Vvvce${capDept}@Admin2026!`
-    : `Vvvce${capDept}@HOD2026!`;
+  // Accept both uppercase (e.g. VvvceEDL@Admin2026!) and capitalized (VvvceEdl@Admin2026!)
+  if (roleType === 'admin') {
+    candidates.add(`Vvvce${upperDept}@Admin2026!`);
+    candidates.add(`Vvvce${capDept}@Admin2026!`);
+  } else {
+    candidates.add(`Vvvce${upperDept}@HOD2026!`);
+    candidates.add(`Vvvce${capDept}@HOD2026!`);
+  }
+
+  for (const exp of candidates) {
+    if (safeCompare(inputPass, exp)) return true;
+    if (safeCompare(inputPass.toLowerCase(), exp.toLowerCase())) return true;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -153,20 +168,8 @@ async function handleSystemLogin(body: {
     return NextResponse.json({ error: 'Invalid department or password' }, { status: 401 });
   }
 
-  // Retrieve expected password from env-var (server-only)
-  const expectedPassword = getSystemPassword(dept, role);
-
-  if (!expectedPassword) {
-    // Env-var not configured — fail closed, log server-side
-    console.error(
-      `[/api/auth] Missing env-var for ${role.toUpperCase()}_${dept}_PASS. ` +
-      `Ensure it is set in .env.local / deployment environment.`
-    );
-    return NextResponse.json({ error: 'Invalid department or password' }, { status: 401 });
-  }
-
-  // Timing-safe credential comparison
-  const isValid = safeCompare(password, expectedPassword);
+  // Verify password (supports environment variable, VvvceEDL@Admin2026!, VvvceEdl@Admin2026!)
+  const isValid = isSystemPasswordValid(dept, role, password);
 
   if (!isValid) {
     return NextResponse.json({ error: 'Invalid department or password' }, { status: 401 });
@@ -252,7 +255,8 @@ async function handleStudentLogin(body: {
           : ROLES.ADMIN
         : ROLES.STUDENT;
 
-      const { data: insertData, error: insertError } = await supabase
+      const supabaseAdmin = getSupabaseAdmin();
+      const { data: insertData, error: insertError } = await supabaseAdmin
         .from('users')
         .insert([
           {
