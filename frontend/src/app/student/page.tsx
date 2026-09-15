@@ -135,6 +135,47 @@ export default function StudentAuth() {
         // =========================================================
         // STANDARD LOGIN FLOW
         // =========================================================
+
+        // --- ADMIN & HOD LOGIN (server-side validation) ---
+        const isAdminUSN = formattedUSN.startsWith('ADMIN');
+        const isHodUSN   = formattedUSN.startsWith('HOD');
+
+        if (isAdminUSN || isHodUSN) {
+          let department: string;
+          let roleType: 'admin' | 'hod';
+
+          if (isAdminUSN) {
+            department = formattedUSN.replace(/^ADMIN_?/, '').replace(/_?VVCE$/, '').trim();
+            roleType = 'admin';
+          } else {
+            department = formattedUSN.replace(/^HOD_?/, '').replace(/_?VVCE$/, '').trim();
+            roleType = 'hod';
+          }
+
+          const loginRes = await fetch('/api/auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ department, password, roleType }),
+          });
+
+          const loginData = await loginRes.json().catch(() => ({}));
+
+          if (!loginRes.ok) {
+            throw new Error('Invalid department or password.');
+          }
+
+          if (roleType === 'admin') {
+            localStorage.setItem('admin_dept', loginData.user?.department ?? department);
+            setMessage('Entering Lab Admin Portal.. ⚡');
+            setTimeout(() => { window.location.href = '/admin'; }, 500);
+          } else {
+            localStorage.setItem('hod_dept', loginData.user?.department ?? department);
+            setMessage('Entering HOD Workspace.. ⚡');
+            setTimeout(() => { window.location.href = '/hod'; }, 500);
+          }
+          return;
+        }
+
         const { data: userData, error: fetchError } = await supabase
           .from('users')
           .select('email')

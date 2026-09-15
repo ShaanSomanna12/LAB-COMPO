@@ -140,22 +140,21 @@ export default function StudentAuth() {
         // --- ADMIN & HOD LOGIN (server-side validation) ---
         // Credentials are never stored in client JS.
         // Dispatch to /api/auth with { department, password, roleType }.
-        const isAdminUSN = formattedUSN.startsWith('ADMIN_');
+        const isAdminUSN = formattedUSN.startsWith('ADMIN');
         const isHodUSN   = formattedUSN.startsWith('HOD');
 
         if (isAdminUSN || isHodUSN) {
           // Derive department and roleType from the typed USN
-          // Admin format: ADMIN_EDL  → dept=EDL, roleType='admin'
-          // HOD format:   HODEDL_VVCE or HODEDL → dept=EDL, roleType='hod'
+          // Admin formats: ADMIN_EDL, ADMINEDL, ADMIN_EDL_VVCE -> dept=EDL, roleType='admin'
+          // HOD formats: HOD_EDL, HODEDL, HODEDL_VVCE, HOD_EDL_VVCE -> dept=EDL, roleType='hod'
           let department: string;
           let roleType: 'admin' | 'hod';
 
           if (isAdminUSN) {
-            department = formattedUSN.replace('ADMIN_', '').trim();
+            department = formattedUSN.replace(/^ADMIN_?/, '').replace(/_?VVCE$/, '').trim();
             roleType = 'admin';
           } else {
-            // Strip leading "HOD" and optional trailing "_VVCE"
-            department = formattedUSN.replace(/^HOD/, '').replace(/_VVCE$/, '').trim();
+            department = formattedUSN.replace(/^HOD_?/, '').replace(/_?VVCE$/, '').trim();
             roleType = 'hod';
           }
 
