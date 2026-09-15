@@ -183,58 +183,54 @@ export default function StudentAuth() {
         // STANDARD LOGIN FLOW
         // =========================================================
 
-        // --- ADMIN & HOD BYPASS LOGIC ---
-        const ADMIN_PASSWORDS: Record<string, string> = {
-          'ADMIN_EDL': 'Adminedlvvce@00123',
-          'ADMIN_ECE': 'Adminecevvce@00123',
-          'ADMIN_EEE': 'Admineeevvce@00123',
-          'ADMIN_CIVIL': 'Admincivilvvce@00123',
-          'ADMIN_MECH': 'Adminmechvvce@00123'
-        };
+        // --- ADMIN & HOD LOGIN (server-side validation) ---
+        // Credentials are never stored in client JS.
+        // Dispatch to /api/auth with { department, password, roleType }.
+        const isAdminUSN = formattedUSN.startsWith('ADMIN_');
+        const isHodUSN   = formattedUSN.startsWith('HOD');
 
-        const HOD_PASSWORDS: Record<string, string> = {
-          'HODEDL_VVCE': 'HODedl@00055',
-          'HODECE_VVCE': 'HODece@00055',
-          'HODEEE_VVCE': 'HODeee@00055',
-          'HODCIVIL_VVCE': 'HODcivil@00055',
-          'HODMECH_VVCE': 'HODmech@00055'
-        };
+        if (isAdminUSN || isHodUSN) {
+          // Derive department and roleType from the typed USN
+          // Admin format: ADMIN_EDL  → dept=EDL, roleType='admin'
+          // HOD format:   HODEDL_VVCE or HODEDL → dept=EDL, roleType='hod'
+          let department: string;
+          let roleType: 'admin' | 'hod';
 
-        if (ADMIN_PASSWORDS[formattedUSN]) {
-          if (password !== ADMIN_PASSWORDS[formattedUSN]) {
-            throw new Error("Incorrect password. Please try again.");
+          if (isAdminUSN) {
+            department = formattedUSN.replace('ADMIN_', '').trim();
+            roleType = 'admin';
+          } else {
+            // Strip leading "HOD" and optional trailing "_VVCE"
+            department = formattedUSN.replace(/^HOD/, '').replace(/_VVCE$/, '').trim();
+            roleType = 'hod';
           }
 
-          // Set department context for Admin dashboard
-          const dept = formattedUSN.replace('ADMIN_', '');
-          localStorage.setItem('admin_dept', dept);
+          const loginRes = await fetch('/api/auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ department, password, roleType }),
+          });
 
-          document.cookie = "admin_access=true; path=/; max-age=86400";
+          const loginData = await loginRes.json().catch(() => ({}));
 
-          setMessage(" Entering Lab Admin Portal..⚡");
-          setTimeout(() => {
-            window.location.href = '/admin';
-          }, 500);
-          return;
-        }
-
-        if (HOD_PASSWORDS[formattedUSN]) {
-          if (password !== HOD_PASSWORDS[formattedUSN]) {
-            throw new Error("Incorrect password. Please try again.");
+          if (!loginRes.ok) {
+            throw new Error('Invalid department or password.');
           }
 
-          // Set department context for HOD dashboard
-          const dept = formattedUSN.replace('HOD', '').replace('_VVCE', '');
-          localStorage.setItem('hod_dept', dept);
-
-          document.cookie = "hod_access=true; path=/; max-age=86400";
-          setMessage(" Entering HOD Workspace..⚡");
-          setTimeout(() => {
-            window.location.href = '/hod';
-          }, 500);
+          // Store department for UI context only — auth is enforced server-side
+          if (roleType === 'admin') {
+            localStorage.setItem('admin_dept', loginData.user?.department ?? department);
+            setMessage('Entering Lab Admin Portal.. ⚡');
+            setTimeout(() => { window.location.href = '/admin'; }, 500);
+          } else {
+            localStorage.setItem('hod_dept', loginData.user?.department ?? department);
+            setMessage('Entering HOD Workspace.. ⚡');
+            setTimeout(() => { window.location.href = '/hod'; }, 500);
+          }
           return;
         }
-        // --- END ADMIN & HOD BYPASS LOGIC ---
+        // --- END ADMIN & HOD LOGIN ---
+
 
         const { data: userData, error: fetchError } = await supabase
           .from('users')

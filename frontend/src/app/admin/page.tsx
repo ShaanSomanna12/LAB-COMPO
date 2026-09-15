@@ -72,7 +72,7 @@ const calculatePenalty = (requestDateStr: string, durationDays: number, componen
   const duration = parseInt(String(durationDays), 10) || 7;
 
   const dueDate = new Date(reqDate.getTime() + duration * 24 * 60 * 60 * 1000);
-  const currentDate = new Date("2026-06-05"); // Simulated current date aligning with project lifecycle
+  const currentDate = new Date(); // Always use the real current date
 
   const dueDateStr = dueDate.toISOString().split('T')[0];
   if (currentDate.getTime() <= dueDate.getTime()) {
@@ -242,6 +242,8 @@ export default function AdminDashboard() {
     const storedCollege = localStorage.getItem('collegeName');
     if (storedCollege) setCollegeName(storedCollege.toUpperCase());
 
+    // Department context is still read from localStorage for UI state only.
+    // Auth enforcement is handled server-side (layout.tsx + middleware.ts).
     const storedAdminDept = localStorage.getItem('admin_dept');
     if (storedAdminDept) {
       setAdminDept(storedAdminDept);

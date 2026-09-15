@@ -16,6 +16,7 @@
     "framer-motion": "^12.40.0",
     "html2canvas": "^1.4.1",
     "ioredis": "^5.10.1",
+    "jose": "^6.2.12",
     "jsonwebtoken": "^9.0.3",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.18.0",

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase as anonClient } from '@/lib/supabase';
 import { sendNotificationEmail } from '@/lib/email';
+import { verifySession, ROLES } from '@/lib/auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -59,13 +60,26 @@ export async function GET() {
     }));
 
     return NextResponse.json(formattedData);
-  } catch (error: any) {
-    console.error('Error fetching reservations:', error.message);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  } catch (err) {
+    console.error('[requests GET]', err);
+    return NextResponse.json({ error: 'Failed to fetch requests' }, { status: 500 });
   }
 }
 
 export async function PATCH(request: Request) {
+  // Requires Admin (roleId 3) or HOD (roleId 4) or SuperAdmin (roleId 5)
+  const payload = await verifySession(request);
+  if (!payload) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  }
+  const canMutate =
+    payload.roleId === ROLES.ADMIN ||
+    payload.roleId === ROLES.HOD ||
+    payload.roleId === ROLES.SUPER_ADMIN;
+  if (!canMutate) {
+    return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+  }
+
   try {
     const body = await request.json();
     const { id, status, images, geotag, is_damaged, return_condition, returnCondition, quantity, collectionTime, dueDate } = body;
@@ -161,13 +175,19 @@ export async function PATCH(request: Request) {
     }
 
     return NextResponse.json({ success: true, item: data });
-  } catch (error: any) {
-    console.error('Error updating reservation:', error.message);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  } catch (err) {
+    console.error('[requests PATCH]', err);
+    return NextResponse.json({ error: 'Failed to update reservation' }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
+  // Any authenticated user can create a reservation
+  const payload = await verifySession(request);
+  if (!payload) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
     const { studentName, usn, section, studentDepartment, items, date, time, duration, images } = body;
@@ -253,13 +273,22 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ success: true, items: newReservations });
-  } catch (error: any) {
-    console.error('Error creating reservation:', error.message);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  } catch (err) {
+    console.error('[requests POST]', err);
+    return NextResponse.json({ error: 'Failed to create reservation' }, { status: 500 });
   }
 }
 
 export async function DELETE(request: Request) {
+  // Requires Admin or SuperAdmin
+  const payload = await verifySession(request);
+  if (!payload) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  }
+  if (payload.roleId !== ROLES.ADMIN && payload.roleId !== ROLES.SUPER_ADMIN) {
+    return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
@@ -276,8 +305,8 @@ export async function DELETE(request: Request) {
     if (error) throw error;
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    console.error('Error deleting reservation:', error.message);
-    return NextResponse.json({ error: 'Internal Server Error', details: error.message }, { status: 500 });
+  } catch (err) {
+    console.error('[requests DELETE]', err);
+    return NextResponse.json({ error: 'Failed to delete reservation' }, { status: 500 });
   }
 }

@@ -58,6 +58,8 @@ export default function HodDashboard() {
     const storedCollege = localStorage.getItem('collegeName');
     if (storedCollege) setCollegeName(storedCollege.toUpperCase());
 
+    // Department context read from localStorage for UI state only.
+    // Auth enforcement is handled server-side (layout.tsx + middleware.ts).
     const hodDept = localStorage.getItem('hod_dept');
     if (hodDept) {
       setActiveDept(hodDept);
