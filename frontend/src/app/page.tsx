@@ -35,40 +35,16 @@ export default function StudentAuth() {
         // FORGOT PASSWORD FLOW
         // =========================================================
         if (!isOtpStep) {
-          // STEP 1: Verify USN and send OTP
-          const { data: userData, error: fetchError } = await supabase
-            .from('users')
-            .select('email, role_id')
-            .eq('usn', formattedUSN)
-            .maybeSingle();
-
-          if (fetchError || !userData) {
-            throw new Error("USN not found. Please register first.");
-          }
-
-          if (userData.role_id >= 3) {
-            throw new Error("Admins cannot reset passwords via OTP. Please contact Super Admin.");
-          }
-
-          const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-          const expiryTime = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-
-          const { error: dbError } = await supabase
-            .from('users')
-            .update({ otp_code: otpCode, otp_expiry: expiryTime })
-            .eq('usn', formattedUSN);
-
-          if (dbError) throw new Error("Failed to generate OTP.");
-
+          // STEP 1: Verify USN and send OTP via server API (bypasses RLS)
           const emailRes = await fetch('/api/send-otp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: userData.email, otpCode })
+            body: JSON.stringify({ usn: formattedUSN, type: 'forgot_password' })
           });
 
-          if (!emailRes.ok) {
-            const errData = await emailRes.json().catch(() => ({}));
-            throw new Error(errData.error || "Failed to send the email via Gmail.");
+          const resData = await emailRes.json().catch(() => ({}));
+          if (!emailRes.ok || !resData.success) {
+            throw new Error(resData.error || "Failed to send OTP.");
           }
 
           setIsOtpStep(true);
@@ -85,28 +61,18 @@ export default function StudentAuth() {
             body: JSON.stringify({ usn: formattedUSN, otpCode: otp, newPassword: password })
           });
 
-          if (!resetRes.ok) {
-            const errData = await resetRes.json().catch(() => ({}));
-            throw new Error(errData.error || "Failed to reset password.");
+          const resetData = await resetRes.json().catch(() => ({}));
+          if (!resetRes.ok || !resetData.success) {
+            throw new Error(resetData.error || "Failed to reset password.");
           }
 
-          setMessage("Password reset successful! 🎉 Logging you in...");
-
-          // Log them in automatically
-          const { data: userData } = await supabase.from('users').select('email').eq('usn', formattedUSN).single();
-          if (userData) {
-            await supabase.auth.signInWithPassword({ email: userData.email, password });
-            setTimeout(() => {
-              window.location.href = '/student/dashboard';
-            }, 500);
-          } else {
-            setIsForgotPassword(false);
-            setIsOtpStep(false);
-          }
+          setMessage("Password reset successful! 🎉 Please log in with your new password.");
+          setIsForgotPassword(false);
+          setIsOtpStep(false);
         }
       } else if (isRegistering) {
         // =========================================================
-        // REGISTRATION - STEP 1: GENERATE & SEND CUSTOM OTP
+        // REGISTRATION - STEP 1: GENERATE & SEND CUSTOM OTP VIA API
         // =========================================================
         if (!isOtpStep) {
           const collegeDomain = "@vvce.ac.in";
@@ -115,34 +81,15 @@ export default function StudentAuth() {
             return;
           }
 
-          const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-          const expiryTime = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-
-          const { error: dbError } = await supabase
-            .from('users')
-            .upsert({
-              usn: formattedUSN,
-              email: email,
-              otp_code: otpCode,
-              otp_expiry: expiryTime,
-              name: name,
-              role_id: 1
-            }, { onConflict: 'usn' });
-
-          if (dbError) {
-            console.error("RAW DB ERROR:", dbError);
-            throw new Error(`Supabase Error -> Code: ${dbError.code || 'None'}, Msg: ${dbError.message || 'Blank'}`);
-          }
-
           const emailRes = await fetch('/api/send-otp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email, otpCode })
+            body: JSON.stringify({ usn: formattedUSN, type: 'register', email, name })
           });
 
-          if (!emailRes.ok) {
-            const errData = await emailRes.json().catch(() => ({}));
-            throw new Error(errData.error || "Failed to send the email via Gmail.");
+          const resData = await emailRes.json().catch(() => ({}));
+          if (!emailRes.ok || !resData.success) {
+            throw new Error(resData.error || "Failed to send OTP.");
           }
 
           setIsOtpStep(true);
@@ -153,24 +100,31 @@ export default function StudentAuth() {
           // =========================================================
           setMessage('Verifying OTP...');
 
-          const { data: userData, error: fetchError } = await supabase
-            .from('users')
-            .select('otp_code, otp_expiry')
-            .eq('usn', formattedUSN)
-            .maybeSingle();
+          const verifyRes = await fetch('/api/verify-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ usn: formattedUSN, otpCode: otp })
+          });
 
-          if (fetchError || !userData) throw new Error("User not found. Please refresh and try again.");
-          if (userData.otp_code !== otp) throw new Error("Invalid OTP code. Please try again.");
-          if (new Date(userData.otp_expiry) < new Date()) throw new Error("The OTP code has expired.");
+          const verifyData = await verifyRes.json().catch(() => ({}));
+          if (!verifyRes.ok || !verifyData.success) {
+            throw new Error(verifyData.error || "Invalid OTP code. Please try again.");
+          }
 
-          const { error: authError } = await supabase.auth.signUp({
+          const { data: authData, error: authError } = await supabase.auth.signUp({
             email: email,
             password: password,
           });
 
           if (authError) throw authError;
 
-          await supabase.from('users').update({ otp_code: null, otp_expiry: null }).eq('usn', formattedUSN);
+          if (authData.user) {
+            await fetch('/api/complete-signup', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ usn: formattedUSN, email, userId: authData.user.id })
+            });
+          }
 
           setMessage("You're in! 🎉 Booting up the dashboard...");
           setTimeout(() => {

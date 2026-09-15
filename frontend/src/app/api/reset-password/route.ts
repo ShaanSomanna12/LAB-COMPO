@@ -5,19 +5,30 @@ export async function POST(request: Request) {
     try {
         const { usn, otpCode, newPassword } = await request.json();
 
-        if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-            throw new Error("Server is missing SUPABASE_SERVICE_ROLE_KEY in environment variables.");
+        if (!usn || !otpCode || !newPassword) {
+            return NextResponse.json({ success: false, error: "Missing required fields: usn, otpCode, and newPassword." }, { status: 400 });
         }
 
-        // Initialize standard client to check public.users
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-        const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-        const supabase = createClient(supabaseUrl, supabaseAnonKey);
+        const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
-        const formattedUSN = usn.toUpperCase();
+        if (!serviceRoleKey || !supabaseUrl) {
+            return NextResponse.json({ success: false, error: "Server missing Supabase service configuration." }, { status: 500 });
+        }
 
-        // 1. Verify OTP in our public.users table
-        const { data: userData, error: fetchError } = await supabase
+        // Initialize Supabase Admin client (bypasses RLS)
+        const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+            auth: {
+                autoRefreshToken: false,
+                persistSession: false
+            }
+        });
+
+        const formattedUSN = usn.trim().toUpperCase();
+        const cleanOtpCode = otpCode.toString().trim();
+
+        // 1. Verify OTP in public.users table using Service Role Key
+        const { data: userData, error: fetchError } = await supabaseAdmin
             .from('users')
             .select('email, otp_code, otp_expiry')
             .eq('usn', formattedUSN)
@@ -27,25 +38,21 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: "USN not found." }, { status: 400 });
         }
 
-        if (userData.otp_code !== otpCode) {
-            return NextResponse.json({ success: false, error: "Invalid OTP code." }, { status: 400 });
+        if (!userData.otp_code) {
+            return NextResponse.json({ success: false, error: "No OTP was requested for this account. Please request a new OTP." }, { status: 400 });
         }
 
-        if (new Date(userData.otp_expiry) < new Date()) {
-            return NextResponse.json({ success: false, error: "OTP code has expired." }, { status: 400 });
+        if (userData.otp_code.toString().trim() !== cleanOtpCode) {
+            return NextResponse.json({ success: false, error: "Invalid OTP code. Please check your email and try again." }, { status: 400 });
+        }
+
+        if (!userData.otp_expiry || new Date(userData.otp_expiry) < new Date()) {
+            return NextResponse.json({ success: false, error: "OTP code has expired. Please request a new code." }, { status: 400 });
         }
 
         const email = userData.email;
 
-        // 2. Initialize Supabase Admin client
-        const supabaseAdmin = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY, {
-            auth: {
-                autoRefreshToken: false,
-                persistSession: false
-            }
-        });
-
-        // 3. Find the user's Auth ID by scanning the auth.users list (paginated)
+        // 2. Find the user's Auth ID by scanning the auth.users list (paginated)
         let targetAuthId = null;
         let page = 1;
         while (true) {
@@ -58,7 +65,7 @@ export async function POST(request: Request) {
                 break;
             }
 
-            const match = authData.users.find(u => u.email === email);
+            const match = authData.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
             if (match) {
                 targetAuthId = match.id;
                 break;
@@ -70,7 +77,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: "User account not fully registered in Auth system yet." }, { status: 400 });
         }
 
-        // 4. Force reset the user's password using the Admin API
+        // 3. Force reset the user's password using the Admin API
         const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(targetAuthId, {
             password: newPassword
         });
@@ -79,13 +86,13 @@ export async function POST(request: Request) {
             throw updateError;
         }
 
-        // 5. Clear the OTP from the database for security
+        // 4. Clear the OTP from the database for security
         await supabaseAdmin.from('users').update({ otp_code: null, otp_expiry: null }).eq('usn', formattedUSN);
 
         return NextResponse.json({ success: true, message: 'Password updated successfully' });
 
     } catch (error: any) {
         console.error("RESET PASSWORD ERROR:", error);
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        return NextResponse.json({ success: false, error: error.message || 'Failed to reset password.' }, { status: 500 });
     }
 }
