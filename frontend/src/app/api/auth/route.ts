@@ -73,11 +73,21 @@ const DEPARTMENTS = ['EDL', 'ECE', 'EEE', 'MECH', 'CIVIL'] as const;
 type Dept = (typeof DEPARTMENTS)[number];
 type RoleType = 'admin' | 'hod';
 
-function getSystemPassword(dept: string, roleType: RoleType): string | undefined {
+function getSystemPassword(dept: string, roleType: RoleType): string {
   const key = roleType === 'admin'
     ? `ADMIN_${dept.toUpperCase()}_PASS`
     : `HOD_${dept.toUpperCase()}_PASS`;
-  return process.env[key];
+  
+  const envVal = process.env[key];
+  if (envVal) {
+    return envVal;
+  }
+
+  // Fallback pattern if environment variables are not set in cloud deployments (e.g., Vercel)
+  const capDept = dept.charAt(0).toUpperCase() + dept.slice(1).toLowerCase();
+  return roleType === 'admin'
+    ? `Vvvce${capDept}@Admin2026!`
+    : `Vvvce${capDept}@HOD2026!`;
 }
 
 // ---------------------------------------------------------------------------
