@@ -124,39 +124,6 @@ export async function PATCH(request: Request) {
 
     if (error) throw error;
 
-    // Trust Score Calculation on Return
-    if (status === 'RETURNED' && data.users) {
-       const user = Array.isArray(data.users) ? data.users[0] : data.users;
-       if (user && user.user_id && data.due_date) {
-         let scoreChange = 0;
-         const returnedAt = new Date();
-         const dueDate = new Date(data.due_date);
-         
-         const isLate = returnedAt > dueDate;
-         const isDamaged = updates.is_damaged === true || data.is_damaged === true || (updates.return_condition && updates.return_condition !== 'WORKING') || (data.return_condition && data.return_condition !== 'WORKING');
-         
-         if (isDamaged) {
-           scoreChange -= 20;
-         }
-         if (isLate) {
-           scoreChange -= 5;
-         }
-         
-         if (!isDamaged && !isLate) {
-           scoreChange += 2;
-         }
-         
-         if (scoreChange !== 0) {
-           let newScore = (user.trust_score !== undefined && user.trust_score !== null ? user.trust_score : 100) + scoreChange;
-           if (newScore > 200) newScore = 200; // Cap score
-           
-           await supabase
-             .from('users')
-             .update({ trust_score: newScore })
-             .eq('user_id', user.user_id);
-         }
-       }
-    }
 
     // Trigger Email Notification for Status Changes
     if ((status === 'APPROVED' || status === 'PENDING_ADMIN' || status === 'REJECTED' || status === 'Ready for Collection' || status === 'RETURNED DAMAGED') && data.users) {
@@ -211,19 +178,16 @@ export async function POST(request: Request) {
 
     const formattedUsn = (usn || '').toUpperCase();
 
-    // 1. Fetch user ID and Trust Score
+    // 1. Fetch user ID
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('user_id, trust_score, department')
+      .select('user_id, department')
       .eq('usn', formattedUsn)
       .maybeSingle();
 
     if (userError || !user) {
        return NextResponse.json({ error: 'User not found for this USN' }, { status: 404 });
     }
-
-    const trustScore = user.trust_score !== undefined && user.trust_score !== null ? user.trust_score : 100;
-    const isLowTrustOverusage = trustScore < 50;
 
     const newReservations = [];
 
@@ -245,16 +209,8 @@ export async function POST(request: Request) {
       const tierUpper = (component.value_tier || 'MEDIUM').toUpperCase();
       let isLowTier = tierUpper === 'LOW';
       
-      // Trust Score Benefit: Auto-approve HIGH tier if score >= 150
-      if (trustScore >= 150 && tierUpper === 'HIGH') {
-         isLowTier = true;
-      }
-      
       let status = 'PENDING';
-      if (isLowTrustOverusage) {
-        // Credit Overusage Mode: Low trust score requests require HOD approval
-        status = 'Pending HOD';
-      } else if (isLowTier) {
+      if (isLowTier) {
         status = 'APPROVED';
       } else if (tierUpper === 'HIGH') {
         status = 'Pending HOD';

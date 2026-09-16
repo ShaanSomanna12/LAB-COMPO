@@ -15,6 +15,8 @@ export interface RequisitionLetterProps {
   requestDate: string;
   duration: number; // in days
   status: string;
+  section?: string;
+  year?: string;
 }
 
 export default function RequisitionLetter({
@@ -24,7 +26,9 @@ export default function RequisitionLetter({
   items,
   requestDate,
   duration,
-  status
+  status,
+  section,
+  year
 }: RequisitionLetterProps) {
   
   const handlePrint = () => {
@@ -79,7 +83,7 @@ export default function RequisitionLetter({
           <br/>
           <p>Respected Sir/Madam,</p>
           <p className="mt-2 text-justify">
-            I, <strong>{studentName}</strong>, bearing USN <strong>{usn}</strong>, am currently pursuing my studies in the Department of {department}. 
+            I, <strong>{studentName}</strong>, bearing USN <strong>{usn}</strong>, am currently pursuing my studies in the Department of {department}{section ? `, Section ${section}` : ''}{year ? `, in my ${year} year of engineering` : ''}. 
             I am writing to formally request the temporary issuance of the following laboratory components required for the execution of my academic project/assignment.
           </p>
         </div>
@@ -119,24 +123,11 @@ export default function RequisitionLetter({
           <p>Thanking you,</p>
         </div>
 
-        {/* Signatures */}
-        <div className="pt-16 pb-8 flex justify-between items-end">
-          <div className="text-center">
-            <div className="w-40 border-b border-black mb-2"></div>
-            <p><strong>Signature of Student</strong></p>
-            <p className="text-xs text-gray-600">({studentName})</p>
-          </div>
-          
-          <div className="text-center">
-            <div className="w-40 border-b border-black mb-2 relative">
-              {/* Optional: Add a digital stamp here if status is APPROVED */}
-              {status === 'APPROVED' || status === 'Active' || status === 'BORROWED' ? (
-                <div className="absolute -top-12 left-6 border-4 border-red-500 text-red-500 font-bold text-xl px-2 py-1 transform -rotate-12 opacity-50 rounded">
-                  APPROVED
-                </div>
-              ) : null}
-            </div>
-            <p><strong>Signature of HOD / Lab In-charge</strong></p>
+        {/* Digital Document Notice */}
+        <div className="pt-12 pb-4 text-center">
+          <div className="inline-block border-2 border-gray-400 text-gray-500 rounded px-6 py-3 bg-gray-50">
+            <p className="font-bold uppercase tracking-widest text-xs mb-1">Digital Preview Document</p>
+            <p className="text-xs">This is a system-generated document. No physical submission or manual signatures are required.</p>
           </div>
         </div>
 

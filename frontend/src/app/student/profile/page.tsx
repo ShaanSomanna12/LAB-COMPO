@@ -18,7 +18,6 @@ export default function MyProfile() {
   const [department, setDepartment] = useState('');
   const [year, setYear] = useState('1st Year');
   const [section, setSection] = useState('');
-  const [trustScore, setTrustScore] = useState(100);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -32,7 +31,7 @@ export default function MyProfile() {
 
         const { data: userData, error } = await supabase
           .from('users')
-          .select('user_id, name, usn, department, branch, section, trust_score')
+          .select('user_id, name, usn, department, branch, section')
           .eq('email', user.email)
           .maybeSingle();
 
@@ -45,7 +44,6 @@ export default function MyProfile() {
           if (userData.department) setDepartment(userData.department);
           if (userData.branch) setYear(userData.branch); // Using branch column for year
           if (userData.section) setSection(userData.section);
-          if (userData.trust_score !== undefined && userData.trust_score !== null) setTrustScore(userData.trust_score);
         }
       } catch (error: any) {
         toast.error(`Error loading profile: ${error.message}`);
@@ -123,23 +121,6 @@ export default function MyProfile() {
         ) : (
           <div className="bg-zinc-950/80 backdrop-blur-xl border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
             
-            {/* Trust Score Card */}
-            <div className="bg-gradient-to-r from-cyan-950/30 to-indigo-950/30 p-6 border-b border-zinc-800 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <svg className="w-6 h-6 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  Trust Score
-                </h2>
-                <p className="text-xs text-zinc-400 mt-1 max-w-md">Your trust score determines your borrowing limits. Return items on time and in good condition to increase it.</p>
-              </div>
-              <div className="text-right">
-                <div className={`text-4xl font-black ${trustScore < 50 ? 'text-red-500' : trustScore >= 150 ? 'text-emerald-400' : 'text-cyan-400'}`}>
-                  {trustScore}
-                </div>
-                <div className="text-xs font-mono text-zinc-500 uppercase tracking-widest mt-1">/ 200 Max</div>
-              </div>
-            </div>
-
             <div className="bg-gradient-to-r from-pink-950/30 to-rose-950/30 p-6 border-b border-zinc-800 flex flex-col gap-2">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
                 <svg className="w-6 h-6 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
