@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
+import { siteConfig } from '@/config/site';
+import RequisitionLetter from '@/components/RequisitionLetter';
 import { Skeleton } from '@/components/ui/Skeleton';
 import QRCode from 'react-qr-code';
 
@@ -33,7 +35,11 @@ export default function MyReservations() {
   const [isLoading, setIsLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [studentUsn, setStudentUsn] = useState<string | null>(null);
+  const [studentName, setStudentName] = useState<string>('');
   const [addresses, setAddresses] = useState<Record<string, string>>({});
+  const [inspectData, setInspectData] = useState<any>(null);
+  const [showInspectModal, setShowInspectModal] = useState(false);
+  const [previewFile, setPreviewFile] = useState<string | null>(null);
 
   // Tab State
   const [activeTab, setActiveTab] = useState<'CURRENT' | 'COMPLETED'>('CURRENT');
@@ -70,13 +76,14 @@ export default function MyReservations() {
       // Get user's ID and USN from public.users
       const { data: userData } = await supabase
         .from('users')
-        .select('user_id, usn')
+        .select('user_id, usn, full_name')
         .eq('email', user.email)
         .maybeSingle();
 
       if (userData) {
         setUserId(userData.user_id);
         setStudentUsn(userData.usn);
+        setStudentName(userData.full_name || 'Student');
         const { data: resData, error } = await supabase
           .from('reservations')
           .select(`
@@ -163,7 +170,7 @@ export default function MyReservations() {
               if (area && !parts.some(p => p.toLowerCase().includes(area.toLowerCase()))) parts.push(area);
               const city = a.city || a.town || a.county || '';
               if (city && !parts.some(p => p.toLowerCase().includes(city.toLowerCase()))) parts.push(city);
-              
+
               if (parts.length > 0) {
                 shortAddr = parts.join(', ');
               } else {
@@ -591,6 +598,30 @@ export default function MyReservations() {
                         {res.status}
                       </span>
                       <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => {
+                            // Calculate duration in days between created_at and due_date
+                            let duration = 1;
+                            if (res.due_date) {
+                              const diffTime = Math.abs(new Date(res.due_date).getTime() - new Date(res.created_at).getTime());
+                              duration = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                            }
+                            setInspectData({
+                              studentName: studentName,
+                              usn: studentUsn || '',
+                              department: res.components?.department || 'EDL',
+                              items: [{ name: res.components?.name || 'Component', quantity: 1 }],
+                              requestDate: res.created_at,
+                              duration: duration,
+                              status: res.status
+                            });
+                            setShowInspectModal(true);
+                          }}
+                          className="text-[10px] px-2 py-1 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 border border-indigo-500/30 rounded flex items-center gap-1 transition font-bold uppercase tracking-wider"
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                          Inspect
+                        </button>
                         <span className="text-xs text-zinc-500 font-mono font-medium">#{res.reservation_id}</span>
                       </div>
                     </div>
@@ -640,7 +671,7 @@ export default function MyReservations() {
                             </span>
                             {(res.status === 'PENDING_RETURN' || res.status === 'RETURNED') ? (
                               res.after_img_url && (
-                                <button 
+                                <button
                                   onClick={() => { setPreviewImgUrl(res.after_img_url || null); setPreviewModalOpen(true); }}
                                   className="text-cyan-400 hover:text-cyan-300 font-bold text-xs underline cursor-pointer"
                                 >
@@ -649,7 +680,7 @@ export default function MyReservations() {
                               )
                             ) : (
                               res.geotag_image_url && (
-                                <button 
+                                <button
                                   onClick={() => { setPreviewImgUrl(res.geotag_image_url); setPreviewModalOpen(true); }}
                                   className="text-cyan-400 hover:text-cyan-300 font-bold text-xs underline cursor-pointer"
                                 >
@@ -677,7 +708,7 @@ export default function MyReservations() {
                               Directly Approved
                             </div>
                             <p>
-                              Please show your <strong>Digital Pass</strong> to the admin at the desk to complete checkout. 
+                              Please show your <strong>Digital Pass</strong> to the admin at the desk to complete checkout.
                               You can take the component out of the lab once the admin has processed the checkout.
                             </p>
                           </div>
@@ -847,14 +878,14 @@ export default function MyReservations() {
                         <span className="flex items-center gap-1.5">
                           ✓ Return Proof Photo Captured
                         </span>
-                        <button 
+                        <button
                           onClick={() => { setPreviewImgUrl(uploadedReturnProof.imageUrl); setPreviewModalOpen(true); }}
                           className="underline hover:text-emerald-300 font-black cursor-pointer"
                         >
                           View Photo
                         </button>
                       </div>
-                      <button 
+                      <button
                         onClick={() => {
                           setUploadType('RETURN');
                           if (fileInputRef.current) fileInputRef.current.click();
@@ -885,8 +916,8 @@ export default function MyReservations() {
                   <button onClick={() => setReturnModalOpen(false)} className="flex-1 py-3 rounded-xl text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 transition-colors font-bold text-sm">
                     Cancel
                   </button>
-                  <button 
-                    onClick={submitReturn} 
+                  <button
+                    onClick={submitReturn}
                     disabled={!uploadedReturnProof}
                     className="flex-1 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-black transition-colors text-sm shadow-[0_0_15px_rgba(245,158,11,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
                   >

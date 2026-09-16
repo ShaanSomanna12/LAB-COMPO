@@ -8,6 +8,7 @@ import { Space_Grotesk } from 'next/font/google';
 import ParticleNetwork from '@/components/ui/ParticleNetwork';
 import { siteConfig } from '@/config/site';
 import { Skeleton } from '@/components/ui/Skeleton';
+import RequisitionLetter from '@/components/RequisitionLetter';
 
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] });
 
@@ -61,6 +62,8 @@ export default function StudentCheckout() {
   
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [showLetter, setShowLetter] = useState(false);
+  const [submittedData, setSubmittedData] = useState<any>(null);
   const [isLoadingInventory, setIsLoadingInventory] = useState(true);
   const [notices, setNotices] = useState<any[]>([]);
 
@@ -186,9 +189,17 @@ export default function StudentCheckout() {
 
       if (!res.ok) throw new Error('Failed to submit checkout request');
       
-      toast.success('Checkout request submitted successfully!');
+      setSubmittedData({
+        studentName,
+        usn,
+        department,
+        items: itemsPayload.map((item: any) => ({ name: item.component, quantity: item.quantity })),
+        requestDate: date,
+        duration: duration,
+        status: 'PENDING'
+      });
       setCart([]);
-      setTimeout(() => router.push('/student/dashboard'), 2000);
+      setShowLetter(true);
     } catch (error: any) {
       toast.error(error.message || 'An error occurred');
     } finally {
@@ -779,6 +790,25 @@ export default function StudentCheckout() {
             >
               Proceed →
             </button>
+          </div>
+        </div>
+      )}
+
+      {showLetter && submittedData && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in zoom-in-95 duration-200 overflow-y-auto">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl relative mt-10">
+            <div className="p-4 border-b border-zinc-800 flex justify-between items-center bg-zinc-900 sticky top-0 z-10 print:hidden rounded-t-2xl">
+              <h2 className="text-white font-bold tracking-wider">Requisition Generated</h2>
+              <button 
+                onClick={() => router.push('/student/reservations')}
+                className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm font-bold shadow-lg transition"
+              >
+                Close & View Reservations
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto print:p-0">
+              <RequisitionLetter {...submittedData} />
+            </div>
           </div>
         </div>
       )}

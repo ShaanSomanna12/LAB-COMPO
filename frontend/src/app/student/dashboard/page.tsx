@@ -8,7 +8,7 @@ import ParticleNetwork from '@/components/ui/ParticleNetwork';
 import { siteConfig } from '@/config/site';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, User, Microchip, Clock, ChevronRight, Bell, Menu, X, ArrowRight, QrCode, Eye } from 'lucide-react';
+import { LogOut, User, Microchip, Clock, ChevronRight, Menu, X, ArrowRight, QrCode, Eye } from 'lucide-react';
 import QRCode from 'react-qr-code';
 
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] });
@@ -16,7 +16,6 @@ const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] });
 export default function StudentDashboard() {
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [notices, setNotices] = useState<any[]>([]);
   const [showQr, setShowQr] = useState(false);
 
   // Profile States
@@ -46,12 +45,6 @@ export default function StudentDashboard() {
               section: userData.section || ''
             };
             setProfile(currentProfile);
-
-            if (userData.department) {
-               const res = await fetch(`/api/notices?department=${userData.department}`);
-               const noticesData = await res.json();
-               if (Array.isArray(noticesData)) setNotices(noticesData);
-            }
           }
         }
       } catch (err) {
@@ -216,30 +209,6 @@ export default function StudentDashboard() {
               </p>
             </div>
           </motion.div>
-
-          {/* Notices */}
-          <AnimatePresence>
-            {notices.length > 0 && (
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mb-10 grid gap-4"
-              >
-                {notices.map(notice => (
-                  <div key={notice.id} className={`p-5 rounded-2xl border flex items-start gap-4 backdrop-blur-xl ${notice.type === 'alert' ? 'bg-red-500/10 border-red-500/30' : notice.type === 'warning' ? 'bg-amber-500/10 border-amber-500/30' : 'bg-cyan-500/10 border-cyan-500/30'}`}>
-                    <Bell className={`w-6 h-6 mt-1 shrink-0 ${notice.type === 'alert' ? 'text-red-400' : notice.type === 'warning' ? 'text-amber-400' : 'text-cyan-400'}`} />
-                    <div>
-                      <h4 className={`font-bold text-sm tracking-wide uppercase mb-1 flex items-center gap-2 ${notice.type === 'alert' ? 'text-red-300' : notice.type === 'warning' ? 'text-amber-300' : 'text-cyan-300'}`}>
-                        {notice.type === 'alert' ? 'Critical Alert' : notice.type === 'warning' ? 'Warning' : 'Announcement'}
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-black/40 border border-white/10">{notice.admin_dept}</span>
-                      </h4>
-                      <p className="text-sm font-medium text-zinc-300 leading-relaxed">{notice.message}</p>
-                    </div>
-                  </div>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
 
           {/* Dashboard Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-grow">

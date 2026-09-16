@@ -6,6 +6,9 @@ import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
 import ImageCropper from './ImageCropper';
 import { siteConfig } from '@/config/site';
+import QRManagerModal from '@/components/QRManagerModal';
+import QRScannerModal from '@/components/QRScannerModal';
+import { toast } from 'sonner';
 
 const Scanner = dynamic(
   () => import('@yudiel/react-qr-scanner').then((mod) => mod.Scanner),
@@ -125,7 +128,7 @@ export default function AdminDashboard() {
   const [sectionEndDate, setSectionEndDate] = useState<string>('');
   const [showSectionFilters, setShowSectionFilters] = useState<boolean>(false);
   const [sectionTrackingTab, setSectionTrackingTab] = useState<'CURRENT' | 'COMPLETED'>('CURRENT');
-  const [workflowTab, setWorkflowTab] = useState<'CURRENT' | 'COMPLETED'>('CURRENT');
+  const [workflowTab, setWorkflowTab] = useState<'CURRENT' | 'PENDING' | 'COMPLETED'>('CURRENT');
 
   // Scanner State
   const [showScannerModal, setShowScannerModal] = useState(false);
@@ -133,10 +136,8 @@ export default function AdminDashboard() {
   const [isLocked, setIsLocked] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [editingDeviceId, setEditingDeviceId] = useState<string | number | null>(null);
-
-  const [notices, setNotices] = useState<any[]>([]);
-  const [newNoticeMsg, setNewNoticeMsg] = useState('');
-  const [newNoticeType, setNewNoticeType] = useState('info');
+  const [analyticsSearchQuery, setAnalyticsSearchQuery] = useState('');
+  const [inventoryTierFilter, setInventoryTierFilter] = useState('ALL');
 
   const [previewImgUrl, setPreviewImgUrl] = useState<string | null>(null);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
@@ -150,6 +151,12 @@ export default function AdminDashboard() {
   const [approveModal, setApproveModal] = useState<{ id: string; component: string; requestedQty: number; valueTier: string; collectionTime: string } | null>(null);
   const [approveQty, setApproveQty] = useState(1);
   const [approveTime, setApproveTime] = useState('');
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [qrComponentId, setQrComponentId] = useState<string | number>('');
+  const [qrComponentName, setQrComponentName] = useState('');
+  const [showCheckoutScanner, setShowCheckoutScanner] = useState(false);
+  const [checkoutScanExpected, setCheckoutScanExpected] = useState('');
+  const [checkoutScanReqId, setCheckoutScanReqId] = useState('');
   const [stockEditModal, setStockEditModal] = useState<{ id: string | number; name: string; currentTotal: number } | null>(null);
   const [stockEditValue, setStockEditValue] = useState('');
 
@@ -286,39 +293,6 @@ export default function AdminDashboard() {
       window.removeEventListener('focus', handleFocus);
     };
   }, []);
-
-  const fetchNotices = async (dept: string) => {
-    try {
-      const res = await fetch(`/api/notices?department=${dept}`);
-      const data = await res.json();
-      if (Array.isArray(data)) setNotices(data);
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  useEffect(() => {
-    if (adminDept) {
-      fetchNotices(adminDept);
-    }
-  }, [adminDept]);
-
-  const handlePostNotice = async () => {
-    if (!newNoticeMsg.trim() || !adminDept) return;
-    await fetch('/api/notices', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ admin_dept: adminDept, message: newNoticeMsg, type: newNoticeType })
-    });
-    setNewNoticeMsg('');
-    fetchNotices(adminDept);
-  };
-
-  const handleDeleteNotice = async (id: string) => {
-    if (!window.confirm("Delete this notice?")) return;
-    await fetch(`/api/notices?id=${id}`, { method: 'DELETE' });
-    if (adminDept) fetchNotices(adminDept);
-  };
 
   const getMonthlyStats = (monthStr: string) => {
     const targetYear = parseInt(monthStr.split('-')[0], 10);
@@ -492,6 +466,16 @@ export default function AdminDashboard() {
   };
 
   const handleCheckout = (id: string) => {
+    const req = requests.find(r => r.id === id);
+    if (!req) return;
+    
+    if (req.valueTier === 'HIGH' || req.valueTier === 'MEDIUM') {
+      setCheckoutScanReqId(id);
+      setCheckoutScanExpected(req.component);
+      setShowCheckoutScanner(true);
+      return;
+    }
+
     setConfirmModal({
       title: 'Confirm Component Checkout',
       body: 'Mark this component as checked out and collected by the student?',
@@ -502,6 +486,33 @@ export default function AdminDashboard() {
         setConfirmModal(null);
       }
     });
+  };
+
+  const handleScanSuccess = async (serialNumber: string) => {
+    setShowCheckoutScanner(false);
+    
+    try {
+      // 1. Update reservation status and attach serial number
+      const { error: reqErr } = await supabase
+        .from('reservations')
+        .update({ status: 'Active', assigned_serial_numbers: [serialNumber] })
+        .eq('reservation_id', checkoutScanReqId);
+        
+      if (reqErr) throw reqErr;
+
+      // 2. Update component instance status
+      const { error: instErr } = await supabase
+        .from('component_instances')
+        .update({ status: 'IN_USE', current_reservation_id: checkoutScanReqId })
+        .eq('serial_number', serialNumber);
+
+      if (instErr) throw instErr;
+
+      setRequests(reqs => reqs.map(r => r.id === checkoutScanReqId ? { ...r, status: 'Active' } : r));
+      toast.success(`Handover successful! ${serialNumber} securely linked.`);
+    } catch (err: any) {
+      toast.error(err.message || 'Error processing scan');
+    }
   };
 
   const handleReturn = (id: string) => {
@@ -859,6 +870,12 @@ export default function AdminDashboard() {
               Current Requests
             </button>
             <button
+              onClick={() => setWorkflowTab('PENDING')}
+              className={`px-4 py-2 font-bold text-sm rounded-lg transition-colors ${workflowTab === 'PENDING' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+            >
+              Pending Requests
+            </button>
+            <button
               onClick={() => setWorkflowTab('COMPLETED')}
               className={`px-4 py-2 font-bold text-sm rounded-lg transition-colors ${workflowTab === 'COMPLETED' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
             >
@@ -876,10 +893,15 @@ export default function AdminDashboard() {
               </thead>
               <tbody className="divide-y divide-zinc-800">
                 {(() => {
-                  const currentStatuses = ['PENDING', 'APPROVED', 'Pending HOD', 'Pending Renewal HOD', 'Approved by HOD', 'Ready for Collection', 'Active', 'BORROWED', 'PENDING_RETURN', 'PENDING_COLLECTION'];
+                  const currentStatuses = ['PENDING', 'APPROVED', 'Pending HOD', 'Pending Renewal HOD', 'Approved by HOD', 'Ready for Collection', 'PENDING_COLLECTION'];
+                  const pendingStatuses = ['Active', 'BORROWED', 'PENDING_RETURN'];
                   const groupedRequests = requests
                     .filter(r => (r.department === adminDept || r.studentDepartment === adminDept) && (!scannedUsnFilter || r.usn === scannedUsnFilter))
-                    .filter(req => workflowTab === 'CURRENT' ? currentStatuses.includes(req.status) : !currentStatuses.includes(req.status))
+                    .filter(req => {
+                      if (workflowTab === 'CURRENT') return currentStatuses.includes(req.status);
+                      if (workflowTab === 'PENDING') return pendingStatuses.includes(req.status);
+                      return !currentStatuses.includes(req.status) && !pendingStatuses.includes(req.status);
+                    })
                     .reduce((acc, req) => {
                       const key = `${req.usn}_${req.requestDate}`;
                       if (!acc[key]) {
@@ -1043,12 +1065,22 @@ export default function AdminDashboard() {
               <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Total Items</div>
               <div className="text-xl sm:text-2xl font-black mt-2 text-zinc-100">{inventory.filter(item => item.department === adminDept).length}</div>
             </div>
-            <div className="bg-zinc-900 border border-zinc-800 p-3 sm:p-4 rounded-xl flex flex-col justify-between hover:border-indigo-500/30 transition-colors">
-              <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Active Loans</div>
+            <button
+              onClick={() => {
+                setActiveTab('requests');
+                setWorkflowTab('PENDING');
+              }}
+              className="bg-zinc-900 border border-zinc-800 p-3 sm:p-4 rounded-xl flex flex-col justify-between hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all cursor-pointer group text-left"
+              title="Click to view active loans"
+            >
+              <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest group-hover:text-indigo-400 transition-colors flex items-center gap-1">
+                Active Loans
+                <svg className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+              </div>
               <div className="text-xl sm:text-2xl font-black mt-2 text-indigo-400">
                 {requests.filter(req => (req.department === adminDept || req.studentDepartment === adminDept) && ['Active', 'BORROWED', 'PENDING_RETURN'].includes(req.status)).reduce((sum, req) => sum + (req.quantity || 1), 0)}
               </div>
-            </div>
+            </button>
             <div className="bg-zinc-900 border border-zinc-800 p-3 sm:p-4 rounded-xl flex flex-col justify-between hover:border-rose-500/30 transition-colors">
               <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Under Repair</div>
               <div className="text-xl sm:text-2xl font-black mt-2 text-rose-400">{inventory.filter(item => item.department === adminDept && item.status === 'Under Repair').length}</div>
@@ -1063,7 +1095,19 @@ export default function AdminDashboard() {
           </section>
 
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold tracking-tight text-white">{adminDept} Inventory Catalog</h2>
+            <div className="flex items-center gap-4">
+              <h2 className="text-xl font-bold tracking-tight text-white">{adminDept} Inventory Catalog</h2>
+              <select
+                value={inventoryTierFilter}
+                onChange={e => setInventoryTierFilter(e.target.value)}
+                className="bg-zinc-900 border border-zinc-800 text-xs text-white px-2 py-1.5 rounded-lg focus:outline-none focus:border-cyan-500 transition-colors"
+              >
+                <option value="ALL">All Tiers</option>
+                <option value="HIGH">High Value</option>
+                <option value="MEDIUM">Medium Value</option>
+                <option value="LOW">Low Value</option>
+              </select>
+            </div>
             <button
               onClick={() => {
                 setEditingDeviceId(null);
@@ -1084,13 +1128,13 @@ export default function AdminDashboard() {
             </button>
           </div>
 
-          {inventory.filter(item => item.department === adminDept).length === 0 ? (
+          {inventory.filter(item => item.department === adminDept && (inventoryTierFilter === 'ALL' || item.value_tier === inventoryTierFilter)).length === 0 ? (
             <div className="text-center py-16 bg-zinc-900/30 border border-zinc-850 border-dashed rounded-xl">
-              <p className="text-zinc-500 text-sm font-mono uppercase tracking-wider">No cataloged hardware in this department.</p>
+              <p className="text-zinc-500 text-sm font-mono uppercase tracking-wider">No cataloged hardware found matching filters.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {inventory.filter(item => item.department === adminDept).map((item, index) => (
+              {inventory.filter(item => item.department === adminDept && (inventoryTierFilter === 'ALL' || item.value_tier === inventoryTierFilter)).map((item, index) => (
 
                 <div
 
@@ -1139,6 +1183,21 @@ export default function AdminDashboard() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                           </svg>
                         </button>
+                        {(item.value_tier === 'HIGH' || item.value_tier === 'MEDIUM') && (
+                          <button
+                            onClick={() => {
+                              setQrComponentId(item.id);
+                              setQrComponentName(item.name);
+                              setShowQrModal(true);
+                            }}
+                            className="p-1 bg-zinc-950 border border-zinc-850 rounded hover:text-indigo-400 hover:border-indigo-900 transition-colors opacity-0 group-hover:opacity-100"
+                            title="Manage Serial QRs"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                            </svg>
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDeleteDevice(item.id)}
                           className="p-1 bg-zinc-950 border border-zinc-850 rounded hover:text-rose-400 hover:border-rose-905 transition-colors opacity-0 group-hover:opacity-100"
@@ -1202,41 +1261,6 @@ export default function AdminDashboard() {
       {/* 4. ANALYTICS MONTHLY UPDATES DASHBOARD */}
       {adminDept && activeTab === 'analytics' && (
         <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-300">
-          {/* Lab Notices Component */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-6">
-            <h3 className="font-bold text-lg text-white mb-4">Lab Notices & Announcements</h3>
-
-            <div className="flex flex-col md:flex-row gap-4 mb-6">
-              <input
-                type="text"
-                placeholder="E.g. Lab is closed today, Collection time 2PM-4PM"
-                value={newNoticeMsg}
-                onChange={e => setNewNoticeMsg(e.target.value)}
-                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
-              />
-              <select value={newNoticeType} onChange={e => setNewNoticeType(e.target.value)} className="bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500">
-                <option value="info">Info</option>
-                <option value="warning">Warning</option>
-                <option value="alert">Alert</option>
-              </select>
-              <button onClick={handlePostNotice} className="px-6 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-lg text-sm transition shrink-0">
-                Publish Notice
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {notices.length === 0 ? (
-                <p className="text-zinc-500 text-sm">No active notices.</p>
-              ) : (
-                notices.map(notice => (
-                  <div key={notice.id} className={`flex justify-between items-center p-3 rounded-lg border ${notice.type === 'alert' ? 'bg-red-500/10 border-red-500/20 text-red-400' : notice.type === 'warning' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-blue-500/10 border-blue-500/20 text-blue-400'}`}>
-                    <span className="text-sm font-medium">{notice.message}</span>
-                    <button onClick={() => handleDeleteNotice(notice.id)} className="text-xs hover:underline opacity-80 hover:opacity-100 shrink-0 ml-4">Remove</button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
 
           {/* Controls */}
           <div className="flex justify-between items-center bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
@@ -1282,7 +1306,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* KPI Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-cyan-500/5 blur-xl pointer-events-none"></div>
               <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Total Monthly Updates</p>
@@ -1309,18 +1333,7 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-purple-500/5 blur-xl pointer-events-none"></div>
-              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Workspace Access Permits</p>
-              <h2 className="text-4xl font-extrabold mt-3 text-white tracking-tight">{analyticsStats.curr.labs}</h2>
-              <div className="mt-4 flex items-center gap-1.5 text-xs">
-                <span className={`font-bold px-1.5 py-0.5 rounded ${parseInt(labsChangeStr) >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
-                  }`}>
-                  {labsChangeStr}
-                </span>
-                <span className="text-zinc-500">vs previous month ({analyticsStats.prev.labs})</span>
-              </div>
-            </div>
+
 
             <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-rose-500/5 blur-xl pointer-events-none"></div>
@@ -1454,21 +1467,40 @@ export default function AdminDashboard() {
 
             {/* Recent Activity Feed */}
             <div className="lg:col-span-4 bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 flex flex-col h-[354px]">
-              <div className="mb-4">
-                <h3 className="font-bold text-lg text-white">Recent Activity</h3>
-                <p className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Latest updates in {selectedMonthLabel}</p>
+              <div className="mb-4 flex flex-col gap-3">
+                <div>
+                  <h3 className="font-bold text-lg text-white">Recent Activity</h3>
+                  <p className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Latest updates in {selectedMonthLabel}</p>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search activity..."
+                  value={analyticsSearchQuery}
+                  onChange={(e) => setAnalyticsSearchQuery(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500 transition-colors"
+                />
               </div>
 
               <div className="flex-1 overflow-y-auto pr-1 space-y-3">
-                {analyticsRecentActivity.length === 0 ? (
+                {analyticsRecentActivity.filter(activity => 
+                  activity.title.toLowerCase().includes(analyticsSearchQuery.toLowerCase()) || 
+                  activity.student.toLowerCase().includes(analyticsSearchQuery.toLowerCase()) ||
+                  activity.status.toLowerCase().includes(analyticsSearchQuery.toLowerCase())
+                ).length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-center p-4 border border-zinc-850 border-dashed rounded-xl">
                     <svg className="w-8 h-8 text-zinc-650 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <span className="text-zinc-500 text-xs">No updates tracked in this month.</span>
+                    <span className="text-zinc-500 text-xs">No updates found.</span>
                   </div>
                 ) : (
-                  analyticsRecentActivity.map((activity, idx) => (
+                  analyticsRecentActivity
+                    .filter(activity => 
+                      activity.title.toLowerCase().includes(analyticsSearchQuery.toLowerCase()) || 
+                      activity.student.toLowerCase().includes(analyticsSearchQuery.toLowerCase()) ||
+                      activity.status.toLowerCase().includes(analyticsSearchQuery.toLowerCase())
+                    )
+                    .map((activity, idx) => (
                     <div key={idx} className="bg-zinc-950/40 border border-zinc-850 p-3 rounded-xl flex flex-col gap-1.5 hover:border-zinc-805 transition">
                       <div className="flex justify-between items-start gap-2">
                         <span className="font-medium text-white text-xs leading-tight">{activity.title}</span>
@@ -2067,6 +2099,22 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* QR Manager Modal */}
+      <QRManagerModal
+        isOpen={showQrModal}
+        onClose={() => setShowQrModal(false)}
+        componentId={String(qrComponentId)}
+        componentName={qrComponentName}
+      />
+
+      {/* QR Scanner Modal for Checkout */}
+      <QRScannerModal
+        isOpen={showCheckoutScanner}
+        onClose={() => setShowCheckoutScanner(false)}
+        expectedComponentName={checkoutScanExpected}
+        onScanSuccess={handleScanSuccess}
+      />
 
     </div>
   );

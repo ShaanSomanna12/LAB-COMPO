@@ -76,7 +76,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // ══════════════════════════════════════════════════════════════════════════
   // Only privileged mutations: inventory, notices, or admin request updates (PUT/PATCH/DELETE)
   const isPrivilegedMutation =
-    (pathname.startsWith('/api/inventory') || pathname.startsWith('/api/notices')) && MUTATION_METHODS.has(requestMethod) ||
+    pathname.startsWith('/api/inventory') && MUTATION_METHODS.has(requestMethod) ||
     pathname.startsWith('/api/requests') && (requestMethod === 'PATCH' || requestMethod === 'PUT' || requestMethod === 'DELETE');
 
   if (isPrivilegedMutation) {
@@ -124,7 +124,6 @@ export const config = {
     '/admin/:path*',
     '/hod/:path*',
     '/api/inventory/:path*',
-    '/api/notices/:path*',
     '/api/requests/:path*',
   ],
 };
