@@ -166,15 +166,189 @@ export default function StudentCheckout() {
 
     try {
       const itemsPayload = cart.map(item => ({
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
+import { Space_Grotesk } from 'next/font/google';
+import ParticleNetwork from '@/components/ui/ParticleNetwork';
+import { siteConfig } from '@/config/site';
+import { Skeleton } from '@/components/ui/Skeleton';
+import RequisitionLetter from '@/components/RequisitionLetter';
+
+const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] });
+
+interface InventoryItem {
+  id: string | number;
+  name: string;
+  available: number;
+  total: number;
+  department: string;
+  status: string;
+  photo_url?: string;
+  desc?: string;
+  location?: string;
+  value_tier?: string;
+}
+
+interface CartItem extends InventoryItem {
+  requestedQty: number;
+}
+
+const DEPARTMENTS = [
+  { id: 'EDL', title: 'Engineering Development LAB', desc: 'Core components, microcontrollers, and embedded systems.', color: 'from-blue-600 to-indigo-600', icon: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z' },
+  { id: 'ECE', title: 'Electronics & Comm.', desc: 'Communication modules, signal processing tools, and RF.', color: 'from-purple-600 to-pink-600', icon: 'M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z' },
+  { id: 'EEE', title: 'Electrical Engineering', desc: 'High-voltage testing tools, multimeters, and analyzers.', color: 'from-amber-500 to-orange-600', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
+  { id: 'CIVIL', title: 'Civil Engineering', desc: 'Surveying tools, structural testing, and building models.', color: 'from-emerald-600 to-teal-600', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4' },
+  { id: 'MECH', title: 'Mechanical Engineering', desc: 'Motors, actuators, robotics chassis, and physical tools.', color: 'from-red-600 to-rose-600', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' }
+];
+
+export default function StudentCheckout() {
+  const router = useRouter();
+  
+  // Multi-step state
+  const [step, setStep] = useState<'department' | 'components' | 'form'>('department');
+  
+  // Selection state
+  const [selectedDept, setSelectedDept] = useState<string | null>(null);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Form State
+  const [studentName, setStudentName] = useState('');
+  const [usn, setUsn] = useState('');
+  const [department, setDepartment] = useState('');
+  const [section, setSection] = useState('');
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('09:00 AM');
+  const [duration, setDuration] = useState<number | ''>('');
+  const [trustScore, setTrustScore] = useState(100);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [minDate, setMinDate] = useState('');
+  
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showLetter, setShowLetter] = useState(false);
+  const [submittedData, setSubmittedData] = useState<any>(null);
+  const [isLoadingInventory, setIsLoadingInventory] = useState(true);
+  const [notices, setNotices] = useState<any[]>([]);
+
+  useEffect(() => {
+    // Fetch user details from Supabase
+    const fetchUserDetails = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && user.email) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('name, usn, trust_score, department, section')
+          .eq('email', user.email)
+          .maybeSingle();
+          
+        if (userData) {
+          if (userData.usn) setUsn(userData.usn);
+          if (userData.name) setStudentName(userData.name);
+          if (userData.department) setDepartment(userData.department);
+          if (userData.section) setSection(userData.section);
+          if (userData.trust_score !== undefined && userData.trust_score !== null) setTrustScore(userData.trust_score);
+          if (userData.department) {
+             const res = await fetch(`/api/notices?department=${userData.department}`);
+             const noticesData = await res.json();
+             if (Array.isArray(noticesData)) setNotices(noticesData);
+          }
+        }
+      }
+    };
+    fetchUserDetails();
+
+    // Fetch inventory
+    setIsLoadingInventory(true);
+    fetch('/api/inventory')
+      .then(res => res.json())
+      .then(data => {
+        setInventory(Array.isArray(data) ? data : []);
+      })
+      .catch(err => {
+        console.error("Failed to load inventory", err);
+        setInventory([]);
+      })
+      .finally(() => {
+        setIsLoadingInventory(false);
+      });
+
+    setMinDate(new Date().toLocaleDateString('en-CA'));
+  }, []);
+
+  const handleDeptSelect = (deptId: string) => {
+    setSelectedDept(deptId);
+    setStep('components');
+  };
+
+  const toggleCartItem = (item: InventoryItem) => {
+    if (item.available <= 0) return;
+    setCart(prev => {
+      const exists = prev.find(i => i.id === item.id);
+      if (exists) {
+        return prev.filter(i => i.id !== item.id);
+      }
+      return [...prev, { ...item, requestedQty: 1 }];
+    });
+  };
+
+  const updateCartItemQty = (id: string | number, newQty: number, item: CartItem) => {
+    if (newQty < 1) {
+      setCart(prev => prev.filter(i => i.id !== id));
+      return;
+    }
+    // Credit Overusage Mode: Allow requesting up to full available inventory stock
+    const maxQty = item.available;
+    
+    if (newQty > maxQty) newQty = maxQty;
+
+    setCart(prev => prev.map(i => i.id === id ? { ...i, requestedQty: newQty } : i));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    if (cart.length === 0) {
+      toast.error('Your cart is empty');
+      setIsLoading(false);
+      return;
+    }
+    
+    if (!duration || duration < 1) {
+      toast.error('Please specify a valid borrowing duration');
+      setIsLoading(false);
+      return;
+    }
+
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    if (!date || date < todayStr) {
+      toast.error('Please select a valid future date for collection');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const itemsPayload = cart.map(item => ({
         name: item.name,
         department: item.department,
         location: item.location || 'Main Lab',
         quantity: item.requestedQty
       }));
 
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const res = await fetch('/api/requests', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           studentName,
           usn,
@@ -187,7 +361,14 @@ export default function StudentCheckout() {
         })
       });
 
-      if (!res.ok) throw new Error('Failed to submit checkout request');
+      if (!res.ok) {
+        let errMsg = 'Failed to submit checkout request';
+        try {
+          const errData = await res.json();
+          if (errData.error) errMsg = errData.error;
+        } catch (e) {}
+        throw new Error(errMsg);
+      }
       
       setSubmittedData({
         studentName,

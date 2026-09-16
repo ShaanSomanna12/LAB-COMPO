@@ -183,8 +183,21 @@ export async function PATCH(request: Request) {
 
 export async function POST(request: Request) {
   // Any authenticated user can create a reservation
+  let authUser = null;
   const payload = await verifySession(request);
-  if (!payload) {
+  
+  if (payload) {
+    authUser = payload;
+  } else {
+    const authHeader = request.headers.get('authorization');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+       const token = authHeader.substring(7);
+       const { data: { user } } = await anonClient.auth.getUser(token);
+       if (user) authUser = user;
+    }
+  }
+
+  if (!authUser) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
   }
 
