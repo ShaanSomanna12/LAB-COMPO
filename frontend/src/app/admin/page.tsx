@@ -106,7 +106,7 @@ export default function AdminDashboard() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const [showCropper, setShowCropper] = useState(false);
-  const [selectedAnalyticsMonth, setSelectedAnalyticsMonth] = useState('2026-06');
+  const [selectedAnalyticsMonth, setSelectedAnalyticsMonth] = useState('2026-09');
   const [hoveredAnalyticsIdx, setHoveredAnalyticsIdx] = useState<number | null>(null);
   const [newDevice, setNewDevice] = useState({
     name: '',
@@ -440,6 +440,12 @@ export default function AdminDashboard() {
   }
 
   const monthLabels: { [key: string]: string } = {
+    '2026-12': 'December 2026',
+    '2026-11': 'November 2026',
+    '2026-10': 'October 2026',
+    '2026-09': 'September 2026',
+    '2026-08': 'August 2026',
+    '2026-07': 'July 2026',
     '2026-06': 'June 2026',
     '2026-05': 'May 2026',
     '2026-04': 'April 2026',
@@ -1260,7 +1266,13 @@ export default function AdminDashboard() {
                 onChange={e => setSelectedAnalyticsMonth(e.target.value)}
                 className="bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 cursor-pointer appearance-none"
               >
-                <option value="2026-06">June 2026 (Current)</option>
+                <option value="2026-12">December 2026</option>
+                <option value="2026-11">November 2026</option>
+                <option value="2026-10">October 2026</option>
+                <option value="2026-09">September 2026 (Current)</option>
+                <option value="2026-08">August 2026</option>
+                <option value="2026-07">July 2026</option>
+                <option value="2026-06">June 2026</option>
                 <option value="2026-05">May 2026</option>
                 <option value="2026-04">April 2026</option>
                 <option value="2026-03">March 2026</option>
