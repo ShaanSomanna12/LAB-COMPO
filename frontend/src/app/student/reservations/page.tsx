@@ -9,9 +9,14 @@ import { siteConfig } from '@/config/site';
 import RequisitionLetter from '@/components/RequisitionLetter';
 import { Skeleton } from '@/components/ui/Skeleton';
 import QRCode from 'react-qr-code';
+import { Space_Grotesk } from 'next/font/google';
+import ParticleNetwork from '@/components/ui/ParticleNetwork';
+import { Clock, CheckCircle2, AlertCircle, Package, ArrowLeft, ArrowRight, Eye, Camera, MapPin, QrCode, FileText, ChevronRight, X, User, Microchip } from 'lucide-react';
+
+const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] });
 
 interface Reservation {
-  reservation_id: number;
+  reservation_id: string;
   status: string;
   created_at: string;
   due_date: string | null;
@@ -26,7 +31,15 @@ interface Reservation {
     department: string;
     lab_location: string;
     value_tier?: string;
-  };
+  } | null;
+  history?: {
+    oldStatus: string | null;
+    newStatus: string;
+    changedAt: string;
+    note: string | null;
+    changedBy: string;
+  }[];
+  assignedAssetId?: string | null;
 }
 
 export default function MyReservations() {
@@ -37,21 +50,22 @@ export default function MyReservations() {
   const [studentUsn, setStudentUsn] = useState<string | null>(null);
   const [studentName, setStudentName] = useState<string>('');
   const [addresses, setAddresses] = useState<Record<string, string>>({});
+  
   const [inspectData, setInspectData] = useState<any>(null);
   const [showInspectModal, setShowInspectModal] = useState(false);
-  const [previewFile, setPreviewFile] = useState<string | null>(null);
 
   // Tab State
   const [activeTab, setActiveTab] = useState<'CURRENT' | 'COMPLETED'>('CURRENT');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [dateFilter, setDateFilter] = useState<'ALL' | 'WEEK' | 'MONTH_1' | 'MONTH_3' | 'MONTH_6' | 'MONTH_12'>('ALL');
 
   // Modal States
   const [showQRModal, setShowQRModal] = useState(false);
-  const [selectedResId, setSelectedResId] = useState<number | null>(null);
+  const [selectedResId, setSelectedResId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [returnModalOpen, setReturnModalOpen] = useState(false);
-  const [returnResId, setReturnResId] = useState<number | null>(null);
+  const [returnResId, setReturnResId] = useState<string | null>(null);
   const [returnCondition, setReturnCondition] = useState('WORKING');
-  // Image preview modal state
   const [previewImgUrl, setPreviewImgUrl] = useState<string | null>(null);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [uploadType, setUploadType] = useState<'COLLECT' | 'RETURN' | null>(null);
@@ -73,17 +87,30 @@ export default function MyReservations() {
         return;
       }
 
-      // Get user's ID and USN from public.users
-      const { data: userData } = await supabase
+      // Fix: Query 'name' instead of 'full_name'
+      let { data: userData, error: userError } = await supabase
         .from('users')
-        .select('user_id, usn, full_name')
+        .select('user_id, usn, name')
         .eq('email', user.email)
         .maybeSingle();
+
+      if (!userData) {
+        const { data: userDataById } = await supabase
+          .from('users')
+          .select('user_id, usn, name')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (userDataById) {
+          userData = userDataById;
+        }
+      }
 
       if (userData) {
         setUserId(userData.user_id);
         setStudentUsn(userData.usn);
-        setStudentName(userData.full_name || 'Student');
+        setStudentName(userData.name || 'Student');
+        
+        // Fix: Use components(...) instead of components!inner(...) to avoid query failure if relation missing
         const { data: resData, error } = await supabase
           .from('reservations')
           .select(`
@@ -97,16 +124,25 @@ export default function MyReservations() {
             latitude,
             longitude,
             borrowed_at,
-            components!inner(name, department, lab_location, value_tier)
+            components(name, department, lab_location, value_tier),
+            assigned_serial_numbers,
+            reservation_status_history(new_status, changed_at)
           `)
           .eq('user_id', userData.user_id)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
-        setReservations((resData as any[]) || []);
+        
+        const mappedData = resData?.map((r: any) => ({
+          ...r,
+          assignedAssetId: r.component_instances?.[0]?.serial_number || (r.assigned_serial_numbers && r.assigned_serial_numbers.length > 0 ? r.assigned_serial_numbers[0] : null)
+        }));
+        
+        setReservations(mappedData || []);
       }
     } catch (err: any) {
       console.error("Error fetching reservations:", err.message);
+      toast.error(`Error: ${err.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -114,7 +150,6 @@ export default function MyReservations() {
 
   useEffect(() => {
     const resolveAddresses = async () => {
-      // Load address cache from localStorage to avoid hitting API repeatedly
       let cachedAddrs: Record<string, string> = {};
       try {
         const stored = localStorage.getItem('geotag_address_cache');
@@ -142,7 +177,6 @@ export default function MyReservations() {
         return;
       }
 
-      // Resolve Nominatim queries in parallel
       const fetchPromises = reservationsToResolve.map(async (res) => {
         const lat = res.latitude!;
         const lon = res.longitude!;
@@ -150,11 +184,7 @@ export default function MyReservations() {
         try {
           const response = await fetch(
             `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`,
-            {
-              headers: {
-                'User-Agent': 'Phoenix-Lab-Portal/1.0'
-              }
-            }
+            { headers: { 'User-Agent': 'Phoenix-Lab-Portal/1.0' } }
           );
           if (response.ok) {
             const data = await response.json();
@@ -216,7 +246,7 @@ export default function MyReservations() {
     return addresses[key] || `Resolving location... (${lat.toFixed(5)}, ${lon.toFixed(5)})`;
   };
 
-  const handleCollectClick = (resId: number) => {
+  const handleCollectClick = (resId: string) => {
     setSelectedResId(resId);
     setUploadType('COLLECT');
     if (fileInputRef.current) {
@@ -224,7 +254,7 @@ export default function MyReservations() {
     }
   };
 
-  const handleReturnClick = (resId: number) => {
+  const handleReturnClick = (resId: string) => {
     setReturnResId(resId);
     setUploadedReturnProof(null);
     setUploadType(null);
@@ -245,13 +275,13 @@ export default function MyReservations() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: returnResId,
-          status: 'PENDING_RETURN',
+          status: 'RETURN_REQUESTED',
           returnCondition,
           geotag: uploadedReturnProof
         })
       });
       if (!res.ok) throw new Error("Failed to process return.");
-      toast.success("Return request submitted with geotag proof. Waiting for admin confirmation!");
+      toast.success("Return request submitted with geotag proof.");
       fetchReservations();
     } catch (err: any) {
       toast.error(err.message);
@@ -271,7 +301,6 @@ export default function MyReservations() {
         img.onload = () => {
           let width = img.width;
           let height = img.height;
-
           if (width > maxDimension || height > maxDimension) {
             if (width > height) {
               height = (height * maxDimension) / width;
@@ -281,7 +310,6 @@ export default function MyReservations() {
               height = maxDimension;
             }
           }
-
           const canvas = document.createElement('canvas');
           canvas.width = width;
           canvas.height = height;
@@ -290,19 +318,8 @@ export default function MyReservations() {
             reject(new Error('Canvas context could not be created'));
             return;
           }
-
           ctx.drawImage(img, 0, 0, width, height);
-          canvas.toBlob(
-            (blob) => {
-              if (blob) {
-                resolve(blob);
-              } else {
-                reject(new Error('Canvas toBlob failed'));
-              }
-            },
-            'image/jpeg',
-            quality
-          );
+          canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('Canvas toBlob failed')), 'image/jpeg', quality);
         };
         img.onerror = () => reject(new Error('Failed to load image resource'));
         img.src = e.target?.result as string;
@@ -318,694 +335,599 @@ export default function MyReservations() {
     if (!file || !targetId) return;
 
     setUploading(true);
-
     try {
-      // 1. Get Geolocation
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        if (!navigator.geolocation) {
-          reject(new Error("Geolocation is not supported by your browser"));
-        } else {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0
-          });
-        }
+        if (!navigator.geolocation) reject(new Error("Geolocation not supported"));
+        else navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
       });
 
       const { latitude, longitude } = position.coords;
-
-      // Compress the image before uploading to speed up process and save bandwidth
       let fileToUpload: Blob = file;
-      try {
-        fileToUpload = await compressImage(file, 600, 0.70);
-      } catch (compressErr) {
-        console.warn("Client-side image compression failed, uploading raw file instead:", compressErr);
-      }
+      try { fileToUpload = await compressImage(file, 600, 0.70); } catch (e) { console.warn(e); }
 
-      // 2. Upload Image to Supabase Storage
-      const fileExt = 'jpg';
-      const fileName = `${targetId}_${uploadType === 'RETURN' ? 'return' : 'collect'}_${Date.now()}.${fileExt}`;
-      const filePath = `${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('reservations-images')
-        .upload(filePath, fileToUpload, {
-          contentType: 'image/jpeg',
-          cacheControl: '3600',
-          upsert: false
-        });
-
+      const fileName = `${targetId}_${uploadType === 'RETURN' ? 'return' : 'collect'}_${Date.now()}.jpg`;
+      const { error: uploadError } = await supabase.storage.from('reservations-images').upload(fileName, fileToUpload, { contentType: 'image/jpeg' });
       if (uploadError) throw uploadError;
 
-      const { data: publicUrlData } = supabase.storage
-        .from('reservations-images')
-        .getPublicUrl(filePath);
-
+      const { data: publicUrlData } = supabase.storage.from('reservations-images').getPublicUrl(fileName);
       const imageUrl = publicUrlData.publicUrl;
 
       if (uploadType === 'RETURN') {
         setUploadedReturnProof({ imageUrl, latitude, longitude });
         toast.success("Return proof image captured successfully!");
       } else {
-        // 3. Update Reservation via API
         const res = await fetch('/api/requests', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: targetId,
-            status: 'PENDING_COLLECTION',
-            geotag: {
-              imageUrl,
-              latitude,
-              longitude
-            }
-          })
+          body: JSON.stringify({ id: targetId, status: 'READY_FOR_PICKUP', geotag: { imageUrl, latitude, longitude } })
         });
-
         if (!res.ok) throw new Error("Failed to update reservation status.");
-
         toast.success("Collection proof uploaded. Waiting for admin confirmation!");
         fetchReservations();
       }
-
     } catch (err: any) {
       console.error(err);
       toast.error(`Error: ${err.message}`);
     } finally {
       setUploading(false);
-      if (uploadType !== 'RETURN') {
-        setSelectedResId(null);
-      }
+      if (uploadType !== 'RETURN') setSelectedResId(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-  const getStatusStyle = (status: string) => {
-    switch (status) {
-      case 'PENDING':
-      case 'PENDING_ADMIN':
-        return 'text-orange-300 bg-orange-400/10 border-orange-400/30';
-      case 'APPROVED':
-      case 'Approved by HOD':
-        return 'text-emerald-300 bg-emerald-400/10 border-emerald-400/30';
-      case 'REJECTED':
-      case 'Rejected':
-        return 'text-rose-300 bg-rose-400/10 border-rose-400/30';
-      case 'Active':
-      case 'BORROWED':
-        return 'text-cyan-300 bg-cyan-400/10 border-cyan-400/30';
-      case 'PENDING_RETURN':
-        return 'text-amber-300 bg-amber-400/10 border-amber-400/30';
-      case 'RETURNED':
-      case 'Returned':
-        return 'text-zinc-300 bg-zinc-400/10 border-zinc-400/30';
-      case 'PENDING_COLLECTION':
-        return 'text-purple-300 bg-purple-400/10 border-purple-400/30';
-      case 'Pending HOD':
-      case 'Pending Renewal HOD':
-        return 'text-amber-300 bg-amber-400/10 border-amber-400/30';
-      case 'Ready for Collection':
-        return 'text-teal-300 bg-teal-400/10 border-teal-400/30';
-      default:
-        return 'text-zinc-300 bg-zinc-400/10 border-zinc-400/30';
+  const handleWithdraw = async (id: string) => {
+    if (!confirm('Are you sure you want to withdraw this request?')) return;
+    
+    try {
+      const res = await fetch('/api/requests', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status: 'CANCELLED' })
+      });
+      if (!res.ok) throw new Error('Failed to withdraw request');
+      toast.success('Request withdrawn successfully');
+      fetchReservations();
+    } catch (err: any) {
+      toast.error(err.message || 'An error occurred');
     }
   };
 
-  // Group Reservations
-  const currentStatuses = [
-    'PENDING',
-    'APPROVED',
-    'BORROWED',
-    'Active',
-    'PENDING_ADMIN',
-    'Ready for Collection',
-    'PENDING_RETURN',
-    'PENDING_COLLECTION',
-    'Pending HOD',
-    'Pending Renewal HOD',
-    'Approved by HOD'
-  ];
-  const currentReservations = reservations.filter(r => currentStatuses.includes(r.status));
-  const completedReservations = reservations.filter(r => !currentStatuses.includes(r.status));
+  const currentStatuses = ['PENDING_APPROVAL', 'APPROVED', 'READY_FOR_PICKUP', 'CHECKED_OUT', 'RETURN_REQUESTED'];
+  
+  const filteredReservations = reservations.filter(r => {
+    // Search Query Filter
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const matchComp = r.components?.name?.toLowerCase().includes(q) || false;
+      const matchId = r.reservation_id.toLowerCase().includes(q);
+      const matchProj = r.project_title?.toLowerCase().includes(q) || false;
+      if (!matchComp && !matchId && !matchProj) return false;
+    }
 
+    // Date Filter
+    if (dateFilter !== 'ALL') {
+      const reqDate = new Date(r.created_at);
+      const now = new Date();
+      const diffTime = Math.abs(now.getTime() - reqDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (dateFilter === 'WEEK' && diffDays > 7) return false;
+      if (dateFilter === 'MONTH_1' && diffDays > 30) return false;
+      if (dateFilter === 'MONTH_3' && diffDays > 90) return false;
+      if (dateFilter === 'MONTH_6' && diffDays > 180) return false;
+      if (dateFilter === 'MONTH_12' && diffDays > 365) return false;
+    }
+    return true;
+  });
+
+  const currentReservations = filteredReservations.filter(r => currentStatuses.includes(r.status));
+  const completedReservations = filteredReservations.filter(r => !currentStatuses.includes(r.status));
   const displayedReservations = activeTab === 'CURRENT' ? currentReservations : completedReservations;
 
-  return (
-    <div className="min-h-screen bg-[#030303] text-zinc-100 p-4 md:p-8 font-sans selection:bg-emerald-500/30">
-      <div className="absolute inset-0 cyber-grid opacity-20 pointer-events-none z-0"></div>
+  // Render Status Badge Function
+  const getStatusBadge = (status: string) => {
+    let displayText = status;
+    if (status === 'PENDING_APPROVAL') displayText = 'AWAITING APPROVAL';
+    else if (status === 'READY_FOR_PICKUP') displayText = 'READY FOR PICKUP';
+    else if (status === 'CHECKED_OUT') displayText = 'BORROWED';
+    else if (status === 'RETURN_REQUESTED') displayText = 'RETURN IN PROGRESS';
 
-      {/* Hidden file input for camera/gallery */}
-      <input
-        type="file"
-        accept="image/*"
-        capture="environment"
-        ref={fileInputRef}
-        onChange={handleFileChange}
-        className="hidden"
-      />
+    const isApproved = status === 'APPROVED' || status === 'READY_FOR_PICKUP';
+    const isActive = status === 'CHECKED_OUT';
+    const isPending = status === 'PENDING_APPROVAL' || status === 'RETURN_REQUESTED';
+    const isRejected = status === 'REJECTED' || status === 'CANCELLED';
+    const isReturned = status === 'RETURNED' || status === 'COMPLETED';
 
-      <div className="w-full max-w-5xl mx-auto relative z-10">
+    if (isApproved) return <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest shadow-[0_0_15px_rgba(16,185,129,0.2)]">{displayText}</span>;
+    if (isActive) return <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest shadow-[0_0_15px_rgba(6,182,212,0.2)]">{displayText}</span>;
+    if (isPending) return <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest shadow-[0_0_15px_rgba(245,158,11,0.2)]">{displayText}</span>;
+    if (isRejected) return <span className="bg-rose-500/10 text-rose-400 border border-rose-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest">{displayText}</span>;
+    if (isReturned) return <span className="bg-zinc-500/10 text-zinc-400 border border-zinc-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest">{displayText}</span>;
+    return <span className="bg-zinc-800 text-zinc-300 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest">{displayText}</span>;
+  };
 
-        {/* Top Header */}
-        <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-10 gap-6">
-          <div>
-            <h1 className="text-3xl md:text-5xl font-black bg-gradient-to-r from-emerald-400 to-teal-500 bg-clip-text text-transparent tracking-tight mb-2">
-              MY RESERVATIONS
-            </h1>
-            <p className="text-zinc-400 text-base font-medium tracking-wide">
-              Track requests, collect items, and manage returns.
-            </p>
-            <div className="mt-4 flex flex-col gap-2">
-              <div className="flex items-center gap-3 text-sm text-zinc-300 bg-zinc-900/50 px-3 py-2 rounded-lg border border-zinc-800/50 w-fit">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></span>
-                Show Digital Pass at admin desk for collection.
+  const renderTimeline = (res: any) => {
+    // The history is in res.reservation_status_history as an array of { new_status, changed_at }
+    const history = res.reservation_status_history || [];
+    
+    // Helper to get timestamp for a specific status
+    const getTimestamp = (status: string) => {
+      const entry = history.find((h: any) => h.new_status === status);
+      if (entry) {
+        return new Date(entry.changed_at).toLocaleString('en-US', {
+          day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true
+        });
+      }
+      return null;
+    };
+
+    // Define standard timeline sequence based on tracking type / normal flow
+    const steps = [
+      { key: 'SUBMITTED', label: 'Request Submitted', overrideStatus: 'PENDING_APPROVAL', isVirtual: true, time: new Date(res.created_at).toLocaleString('en-US', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }) },
+      { key: 'PENDING_APPROVAL', label: 'Awaiting Admin Approval', subLabel: 'Action required by Admin', time: getTimestamp('PENDING_APPROVAL') },
+      { key: 'APPROVED', label: 'Approved', time: getTimestamp('APPROVED') },
+      { key: 'READY_FOR_PICKUP', label: 'Ready for Pickup', time: getTimestamp('READY_FOR_PICKUP') },
+      { key: 'CHECKED_OUT', label: 'Checked Out', time: getTimestamp('CHECKED_OUT') },
+      { key: 'RETURN_REQUESTED', label: 'Return Requested', time: getTimestamp('RETURN_REQUESTED') },
+      { key: 'RETURNED', label: 'Returned', time: getTimestamp('RETURNED') },
+      { key: 'COMPLETED', label: 'Completed', time: getTimestamp('COMPLETED') }
+    ];
+
+    // Filter out steps that don't apply to the current request's lifecycle
+    // E.g. if it jumps straight to APPROVED, hide PENDING_APPROVAL if it was never in that state (unless it's currently APPROVED)
+    
+    // Determine the current step index based on the actual current status
+    let currentStatus = res.status;
+    if (currentStatus === 'RETURNED') currentStatus = 'COMPLETED'; // Sometimes we group these
+    
+    const currentIndex = steps.findIndex(s => s.key === currentStatus);
+    
+    // Handle Rejected/Cancelled
+    if (currentStatus === 'REJECTED') return (
+      <div className="flex flex-col gap-1 my-4 p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl">
+        <span className="text-rose-400 text-sm font-bold flex items-center gap-2"><X className="w-4 h-4"/> Request Rejected</span>
+        <span className="text-rose-500/70 text-xs font-mono">{getTimestamp('REJECTED')}</span>
+      </div>
+    );
+    if (currentStatus === 'CANCELLED') return (
+      <div className="flex flex-col gap-1 my-4 p-3 bg-zinc-800 border border-zinc-700 rounded-xl">
+        <span className="text-zinc-400 text-sm font-bold flex items-center gap-2"><X className="w-4 h-4"/> Request Cancelled</span>
+        <span className="text-zinc-500 text-xs font-mono">{getTimestamp('CANCELLED')}</span>
+      </div>
+    );
+
+    // Build the vertical timeline
+    // We only show steps up to the current state, plus one or two future states for context
+    const visibleSteps = steps.filter((step, idx) => {
+       if (idx <= (currentIndex === -1 ? 1 : currentIndex + 1)) return true;
+       // Always show Checked out as a future step if we are before it
+       if (step.key === 'CHECKED_OUT' && (currentIndex === -1 ? 1 : currentIndex) < steps.findIndex(s => s.key === 'CHECKED_OUT')) return true;
+       return false;
+    });
+
+    return (
+      <div className="flex flex-col gap-0 my-2 relative">
+        <div className="absolute left-[11px] top-4 bottom-4 w-0.5 bg-zinc-800" />
+        
+        {visibleSteps.map((step, idx) => {
+          const isCompleted = step.time && step.key !== currentStatus; // It has a time and we've moved past it, OR it's the virtual first step
+          const isCurrent = step.key === currentStatus;
+          const isFuture = !isCompleted && !isCurrent;
+          
+          // Special case for first virtual step
+          const actuallyCompleted = isCompleted || step.isVirtual;
+
+          return (
+            <div key={step.key} className="flex items-start gap-4 py-3 relative">
+              <div className="bg-black/40 relative z-10 py-1">
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border-2 transition-all ${
+                  actuallyCompleted ? 'bg-emerald-500 border-emerald-500 text-black shadow-[0_0_10px_rgba(16,185,129,0.3)]' :
+                  isCurrent ? 'border-cyan-500 bg-cyan-500/20 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.4)]' :
+                  'border-zinc-700 bg-zinc-900 text-transparent'
+                }`}>
+                  {actuallyCompleted && <CheckCircle2 className="w-3.5 h-3.5" />}
+                  {isCurrent && <div className="w-2.5 h-2.5 rounded-full bg-cyan-500 animate-pulse" />}
+                </div>
               </div>
-              <div className="flex items-center gap-3 text-sm text-zinc-300 bg-zinc-900/50 px-3 py-2 rounded-lg border border-zinc-800/50 w-fit">
-                <span className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]"></span>
-                Carry your physical College ID card.
-              </div>
-              <div className="flex items-center gap-3 text-sm text-zinc-300 bg-zinc-900/50 px-3 py-2 rounded-lg border border-zinc-800/50 w-fit">
-                <span className="w-2 h-2 rounded-full bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.8)]"></span>
-                Geotagged proof required upon collection.
+              <div className="flex flex-col pt-1">
+                <span className={`text-sm tracking-wide ${
+                  actuallyCompleted ? 'text-zinc-300 font-medium' :
+                  isCurrent ? 'text-cyan-400 font-bold' :
+                  'text-zinc-600'
+                }`}>
+                  {step.label}
+                </span>
+                {step.subLabel && isCurrent && (
+                  <span className="text-xs text-amber-500/80 font-mono mt-0.5">{step.subLabel}</span>
+                )}
+                {step.time && (
+                  <span className="text-xs text-zinc-500 font-mono mt-0.5">{step.time}</span>
+                )}
               </div>
             </div>
-          </div>
+          );
+        })}
+      </div>
+    );
+  };
 
-          <div className="flex items-center gap-4 justify-end">
+  const getActionMessage = (res: Reservation) => {
+    switch (res.status) {
+      case 'PENDING_APPROVAL': return "Your request is waiting for administrator approval.";
+      case 'APPROVED': return "Your request has been approved. Please follow instructions to pick up your component.";
+      case 'READY_FOR_PICKUP': return "Your hardware is ready for pickup.";
+      case 'CHECKED_OUT': {
+        if (!res.due_date) return "Your hardware is currently borrowed.";
+        const daysLeft = Math.ceil((new Date(res.due_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+        if (daysLeft < 0) return "This hardware is overdue! Please return it as soon as possible.";
+        if (daysLeft <= 3) return "Your hardware is due soon.";
+        return "Your hardware is currently borrowed.";
+      }
+      case 'RETURN_REQUESTED': return "Your return has been submitted and is awaiting verification.";
+      case 'COMPLETED':
+      case 'RETURNED': return "This request has been successfully completed.";
+      case 'REJECTED': return "This request was rejected.";
+      case 'CANCELLED': return "This request was cancelled.";
+      default: return "Awaiting action.";
+    }
+  };
+
+  return (
+    <>
+      <div className="min-h-screen bg-[#020617] text-zinc-100 flex flex-col items-center justify-start pt-[calc(4.5rem+env(safe-area-inset-top,0px))] pb-12 px-4 font-sans selection:bg-cyan-500/30 relative overflow-x-hidden">
+        
+        {/* Dynamic Background */}
+        <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-[#020617] to-[#020617] pointer-events-none" />
+        <div className="fixed top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-cyan-600/10 blur-[120px] pointer-events-none mix-blend-screen" />
+        <div className="fixed bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-emerald-600/10 blur-[120px] pointer-events-none mix-blend-screen" />
+        <ParticleNetwork />
+
+        <input type="file" accept="image/*" capture="environment" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+
+        <div className="w-full max-w-5xl relative z-10">
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:justify-between md:items-end mb-10 gap-6 mt-8">
+            <div>
+              <button 
+                onClick={() => router.push('/student/dashboard')}
+                className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors mb-4 text-sm font-mono tracking-wide"
+              >
+                <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+              </button>
+              <h1 className={`${spaceGrotesk.className} text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400 tracking-tighter mb-3`}>
+                My Reservations
+              </h1>
+              <p className="text-zinc-400 font-medium">Track your hardware requests, proofs, and timelines.</p>
+            </div>
+
             <button
               onClick={() => setShowQRModal(true)}
-              disabled={!studentUsn}
-              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-black uppercase tracking-wider rounded-xl transition duration-300 shadow-[0_0_20px_rgba(16,185,129,0.25)] disabled:opacity-50"
+              className="group flex items-center justify-center gap-3 px-6 py-3.5 bg-zinc-900/80 backdrop-blur-xl border border-white/10 hover:border-violet-500/50 hover:bg-violet-500/10 rounded-2xl transition-all duration-500 shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-              </svg>
-              DIGITAL PASS
-            </button>
-            <button
-              onClick={() => router.push('/student/dashboard')}
-              disabled={!studentUsn}
-              className="flex items-center justify-center w-12 h-12 border border-rose-500/20 hover:border-rose-500/50 bg-rose-500/5 hover:bg-rose-500/10 text-rose-500 rounded-xl transition-all duration-300 shadow-[0_0_15px_rgba(244,63,94,0.05)] hover:shadow-[0_0_20px_rgba(244,63,94,0.15)] disabled:opacity-50"
-              aria-label="Back to Dashboard"
-            >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="flex gap-2 mb-8 bg-zinc-900/40 p-1.5 rounded-2xl w-fit border border-zinc-800/50 backdrop-blur-md">
-          <button
-            onClick={() => setActiveTab('CURRENT')}
-            className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'CURRENT'
-              ? 'bg-zinc-800 text-white shadow-md'
-              : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
-              }`}
-          >
-            Current Requests ({currentReservations.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('COMPLETED')}
-            className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'COMPLETED'
-              ? 'bg-zinc-800 text-white shadow-md'
-              : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
-              }`}
-          >
-            Completed ({completedReservations.length})
-          </button>
-        </div>
-
-        {/* Uploading Overlay */}
-        <AnimatePresence>
-          {uploading && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
-            >
-              <div className="flex flex-col items-center">
-                <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                <p className="text-emerald-400 font-mono font-bold tracking-widest uppercase animate-pulse">Processing...</p>
+              <div className="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center border border-violet-500/30 group-hover:scale-110 transition-transform">
+                <QrCode className="w-4 h-4 text-violet-400" />
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Reservations List */}
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {[1, 2, 3, 4].map(i => (
-              <Skeleton key={i} className="h-56 rounded-2xl border border-zinc-800/50 bg-zinc-900/30" />
-            ))}
+              <div className="flex flex-col items-start">
+                <span className="text-xs font-bold uppercase tracking-widest text-zinc-500 group-hover:text-violet-300">Open Digital ID</span>
+                <span className="text-sm font-black text-white">Digital Pass</span>
+              </div>
+            </button>
           </div>
-        ) : displayedReservations.length === 0 ? (
-          <motion.div
-            key="empty-state"
-            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-            className="py-24 flex flex-col items-center justify-center border border-dashed border-zinc-800 rounded-3xl bg-zinc-950/50"
-          >
-            <div className="w-16 h-16 bg-zinc-900 rounded-full flex items-center justify-center mb-4">
-              <svg className="w-8 h-8 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+
+          {/* Tab Navigation & Filters */}
+          <div className="flex flex-col lg:flex-row gap-4 mb-8">
+            <div className="flex gap-3 bg-black/40 p-2 rounded-2xl w-fit border border-white/5 backdrop-blur-xl shadow-2xl">
+              <button
+                onClick={() => setActiveTab('CURRENT')}
+                className={`relative px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${activeTab === 'CURRENT' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+              >
+                {activeTab === 'CURRENT' && <motion.div layoutId="tab-bg" className="absolute inset-0 bg-white/10 border border-white/10 rounded-xl" />}
+                <span className="relative z-10">Active & Pending</span>
+                <span className={`relative z-10 px-2 py-0.5 rounded-md text-[10px] ${activeTab === 'CURRENT' ? 'bg-cyan-500/20 text-cyan-300' : 'bg-zinc-800 text-zinc-400'}`}>
+                  {currentReservations.length}
+                </span>
+              </button>
+              <button
+                onClick={() => setActiveTab('COMPLETED')}
+                className={`relative px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${activeTab === 'COMPLETED' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+              >
+                {activeTab === 'COMPLETED' && <motion.div layoutId="tab-bg" className="absolute inset-0 bg-white/10 border border-white/10 rounded-xl" />}
+                <span className="relative z-10">Completed</span>
+                <span className={`relative z-10 px-2 py-0.5 rounded-md text-[10px] ${activeTab === 'COMPLETED' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-zinc-800 text-zinc-400'}`}>
+                  {completedReservations.length}
+                </span>
+              </button>
             </div>
-            <p className="text-zinc-400 font-mono uppercase tracking-widest text-sm font-semibold">
-              No {activeTab === 'CURRENT' ? 'active' : 'completed'} reservations.
-            </p>
-          </motion.div>
-        ) : (
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeTab}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.3 }}
-              className="grid grid-cols-1 md:grid-cols-2 gap-6"
-            >
-              {displayedReservations.map((res, index) => (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: index * 0.05 }}
-                  key={res.reservation_id}
-                  className="bg-zinc-900/40 backdrop-blur-md border border-zinc-800/60 hover:border-emerald-500/30 rounded-2xl overflow-hidden transition-all duration-300 flex flex-col shadow-lg hover:shadow-[0_0_30px_rgba(16,185,129,0.05)] relative"
-                >
-                  <div className="p-6 flex-1 flex flex-col">
-                    {/* Card Header */}
-                    <div className="flex justify-between items-start mb-5">
-                      <span className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest border ${getStatusStyle(res.status)} shadow-sm`}>
-                        {res.status}
-                      </span>
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => {
-                            // Calculate duration in days between created_at and due_date
-                            let duration = 1;
-                            if (res.due_date) {
-                              const diffTime = Math.abs(new Date(res.due_date).getTime() - new Date(res.created_at).getTime());
-                              duration = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                            }
-                            setInspectData({
-                              studentName: studentName,
-                              usn: studentUsn || '',
-                              department: res.components?.department || 'EDL',
-                              items: [{ name: res.components?.name || 'Component', quantity: 1 }],
-                              requestDate: res.created_at,
-                              duration: duration,
-                              status: res.status
-                            });
-                            setShowInspectModal(true);
-                          }}
-                          className="text-[10px] px-2 py-1 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 border border-indigo-500/30 rounded flex items-center gap-1 transition font-bold uppercase tracking-wider"
-                        >
-                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                          Inspect
-                        </button>
-                        <span className="text-xs text-zinc-500 font-mono font-medium">#{res.reservation_id}</span>
-                      </div>
-                    </div>
 
-                    {/* Component Info */}
-                    <h3 className="text-2xl font-black text-white leading-tight mb-2 tracking-tight">{res.components?.name}</h3>
-                    <div className="flex items-center gap-2 text-xs font-mono font-medium text-zinc-400 mb-6">
-                      <span className="bg-zinc-800/50 px-2 py-1 rounded-md">{res.components?.department}</span>
-                      <span className="bg-zinc-800/50 px-2 py-1 rounded-md">{res.components?.lab_location}</span>
-                    </div>
+            <div className="flex-1 flex flex-col sm:flex-row gap-3">
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  placeholder="Search by component, project, or ID..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full h-full bg-black/40 border border-white/5 text-sm text-white px-10 py-3 rounded-2xl focus:outline-none focus:border-cyan-500/50 backdrop-blur-xl transition-all"
+                />
+                <svg className="w-4 h-4 absolute left-4 top-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <select
+                value={dateFilter}
+                onChange={e => setDateFilter(e.target.value as any)}
+                className="bg-black/40 border border-white/5 text-sm text-white px-5 py-3 rounded-2xl focus:outline-none focus:border-cyan-500/50 cursor-pointer appearance-none backdrop-blur-xl transition-all min-w-[160px]"
+              >
+                <option value="ALL" className="bg-zinc-900 text-white">All Time</option>
+                <option value="WEEK" className="bg-zinc-900 text-white">This Week</option>
+                <option value="MONTH_1" className="bg-zinc-900 text-white">Past 1 Month</option>
+                <option value="MONTH_3" className="bg-zinc-900 text-white">Past 3 Months</option>
+                <option value="MONTH_6" className="bg-zinc-900 text-white">Past 6 Months</option>
+                <option value="MONTH_12" className="bg-zinc-900 text-white">Past 12 Months</option>
+              </select>
+            </div>
+          </div>
 
-                    <div className="mt-auto space-y-2.5">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-zinc-500 flex items-center gap-2">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                          Collection Date
-                        </span>
-                        <span className="text-zinc-300 font-medium">{new Date(res.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+          {/* Loading Overlay */}
+          <AnimatePresence>
+            {uploading && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 backdrop-blur-md">
+                <div className="flex flex-col items-center">
+                  <div className="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                  <p className="text-cyan-400 font-mono font-bold tracking-widest uppercase animate-pulse">Processing...</p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Reservations Grid */}
+          {isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-64 rounded-3xl border border-white/5 bg-white/5" />)}
+            </div>
+          ) : displayedReservations.length === 0 ? (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="py-32 flex flex-col items-center justify-center border-2 border-dashed border-white/10 rounded-3xl bg-black/40 backdrop-blur-sm">
+              <Package className="w-16 h-16 text-zinc-600 mb-6" />
+              <p className="text-zinc-400 font-mono uppercase tracking-widest text-sm font-bold">
+                No {activeTab === 'CURRENT' ? 'active' : 'completed'} requests found.
+              </p>
+            </motion.div>
+          ) : (
+            <AnimatePresence mode="wait">
+              <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.3 }} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {displayedReservations.map((res, i) => (
+                  <motion.div
+                    key={res.reservation_id}
+                    initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: i * 0.05 }}
+                    className="bg-black/40 backdrop-blur-xl border border-white/10 hover:border-cyan-500/30 rounded-3xl overflow-hidden transition-all duration-300 flex flex-col shadow-[0_8px_32px_rgba(0,0,0,0.4)] group relative"
+                  >
+                    <div className="p-6 md:p-8 flex-1 flex flex-col z-10">
+                      <div className="flex justify-between items-start mb-6">
+                        {getStatusBadge(res.status)}
+                        <span className="text-xs text-zinc-500 font-mono bg-white/5 px-2 py-1 rounded-md border border-white/10">#{res.reservation_id.toString().slice(0, 8)}</span>
                       </div>
-                      {res.due_date && (
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-rose-400/80 flex items-center gap-2">
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                            Due Date
-                          </span>
-                          <span className="text-rose-400 font-medium">{new Date(res.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+
+                      <div className="flex items-center gap-4 mb-4">
+                        <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center border border-white/10 shrink-0 shadow-[inset_0_0_15px_rgba(255,255,255,0.05)]">
+                          <Microchip className="w-6 h-6 text-zinc-300" />
                         </div>
-                      )}
-                      {res.project_title && (
-                        <div className="flex items-center justify-between text-sm pt-2 border-t border-zinc-800/50 mt-2">
-                          <span className="text-cyan-400/80 flex items-center gap-2">
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                            Project
-                          </span>
-                          <span className="text-cyan-400 font-medium truncate max-w-[150px]" title={res.project_title}>{res.project_title}</span>
-                        </div>
-                      )}
-                      {res.latitude && res.longitude && (
-                        <div className="flex flex-col gap-1.5 pt-2.5 border-t border-zinc-800/50 mt-2">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-cyan-400/80 flex items-center gap-2 font-semibold">
-                              <svg className="w-3.5 h-3.5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                              </svg>
-                              {res.status === 'PENDING_RETURN' || res.status === 'RETURNED' ? 'Return Proof' : 'Collection Proof'}
-                            </span>
-                            {(res.status === 'PENDING_RETURN' || res.status === 'RETURNED') ? (
-                              res.after_img_url && (
-                                <button
-                                  onClick={() => { setPreviewImgUrl(res.after_img_url || null); setPreviewModalOpen(true); }}
-                                  className="text-cyan-400 hover:text-cyan-300 font-bold text-xs underline cursor-pointer"
-                                >
-                                  View Image
-                                </button>
-                              )
-                            ) : (
-                              res.geotag_image_url && (
-                                <button
-                                  onClick={() => { setPreviewImgUrl(res.geotag_image_url); setPreviewModalOpen(true); }}
-                                  className="text-cyan-400 hover:text-cyan-300 font-bold text-xs underline cursor-pointer"
-                                >
-                                  View Image
-                                </button>
-                              )
+                        <div>
+                          <h3 className={`${spaceGrotesk.className} text-2xl font-bold text-white leading-tight`}>{res.components?.name || 'Unknown'}</h3>
+                          <div className="flex flex-wrap items-center gap-2 text-xs font-mono font-medium text-zinc-400 mt-1">
+                            <span className="bg-white/5 px-1.5 py-0.5 rounded border border-white/10">{res.components?.department}</span>
+                            <span className="bg-white/5 px-1.5 py-0.5 rounded border border-white/10">{res.components?.lab_location}</span>
+                            {res.assignedAssetId && (
+                               <span className="bg-cyan-500/10 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/30">ID: {res.assignedAssetId}</span>
                             )}
                           </div>
-                          <p className="text-[10px] text-zinc-400 leading-normal text-left pl-5">
-                            {getAddress(res.latitude, res.longitude)}
-                          </p>
                         </div>
-                      )}
-                    </div>
-                  </div>
+                      </div>
 
-                  {/* Action Footer (Only showing actions for CURRENT tab) */}
-                  {activeTab === 'CURRENT' ? (
-                    <div className="bg-zinc-950/50 p-4 border-t border-zinc-800/50">
-                      {res.status === 'APPROVED' ? (
-                        res.components?.value_tier === 'LOW' ? (
-                          <div className="w-full p-4 bg-emerald-500/5 text-emerald-400/90 border border-emerald-500/20 rounded-xl text-xs font-medium text-left leading-relaxed flex flex-col gap-2 shadow-inner">
-                            <div className="flex items-center gap-2 font-bold uppercase tracking-wider text-[11px] text-emerald-300">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"></span>
-                              Directly Approved
+                      <div className="mt-4 space-y-3 pt-4 border-t border-white/5">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-zinc-500 flex items-center gap-2"><Clock className="w-4 h-4" /> Request Date</span>
+                          <span className="text-zinc-300 font-medium">{new Date(res.created_at).toLocaleDateString()}</span>
+                        </div>
+                        {res.due_date && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-rose-400/80 flex items-center gap-2"><AlertCircle className="w-4 h-4" /> Due Date</span>
+                            <span className="text-rose-400 font-bold">{new Date(res.due_date).toLocaleDateString()}</span>
+                          </div>
+                        )}
+                        {res.project_title && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-cyan-400/80 flex items-center gap-2"><FileText className="w-4 h-4" /> Project</span>
+                            <span className="text-cyan-300 font-medium truncate max-w-[150px]">{res.project_title}</span>
+                          </div>
+                        )}
+
+                        <div className="pt-3 mt-3 border-t border-white/5">
+                          {renderTimeline(res)}
+                        </div>
+
+                        {res.latitude && res.longitude && (
+                          <div className="pt-3 mt-3 border-t border-white/5">
+                            <div className="flex justify-between items-center mb-1.5">
+                              <span className="text-emerald-400/80 flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
+                                <MapPin className="w-3.5 h-3.5" /> Proof Geotag
+                              </span>
+                              <button onClick={() => { setPreviewImgUrl(res.status.includes('RETURN') ? (res.after_img_url || null) : res.geotag_image_url); setPreviewModalOpen(true); }} className="text-emerald-400 hover:text-emerald-300 font-bold text-xs underline">
+                                View Photo
+                              </button>
                             </div>
-                            <p>
-                              Please show your <strong>Digital Pass</strong> to the admin at the desk to complete checkout.
-                              You can take the component out of the lab once the admin has processed the checkout.
+                            <p className="text-[10px] text-zinc-500 bg-white/5 p-2 rounded-lg leading-relaxed font-mono">
+                              {getAddress(res.latitude, res.longitude)}
                             </p>
                           </div>
-                        ) : (
-                          <button
-                            onClick={() => handleCollectClick(res.reservation_id)}
-                            className="w-full py-3 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:border-emerald-500 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
-                          >
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                            Collect & Upload Proof
-                          </button>
-                        )
-                      ) : (res.status === 'BORROWED' || res.status === 'Active') ? (
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-white/5 p-4 md:p-6 border-t border-white/10 flex flex-col gap-3 relative z-10">
+                      <button
+                        onClick={() => {
+                          const diffTime = res.due_date ? Math.abs(new Date(res.due_date).getTime() - new Date(res.created_at).getTime()) : 0;
+                          setInspectData({
+                            studentName: studentName,
+                            usn: studentUsn || '',
+                            department: res.components?.department || 'EDL',
+                            items: [{ name: res.components?.name || 'Component', quantity: 1 }],
+                            requestDate: res.created_at,
+                            duration: Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24))),
+                            status: res.status
+                          });
+                          setShowInspectModal(true);
+                        }}
+                        className="w-full py-2.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/20 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
+                      >
+                        <Eye className="w-4 h-4" /> Inspect Letter
+                      </button>
+
+                      {activeTab === 'CURRENT' && (
                         <div className="flex flex-col gap-2">
-                          {res.geotag_image_url && (
-                            <button onClick={() => { setPreviewImgUrl(res.geotag_image_url); setPreviewModalOpen(true); }} className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 text-cyan-400 border border-zinc-800 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2">
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                              </svg>
-                              View Collection Proof
-                            </button>
-                          )}
-                          {res.latitude && res.longitude && (
-                            <div className="text-xs text-cyan-400 mt-1.5 flex flex-col gap-1 bg-zinc-950/40 p-2.5 rounded-lg border border-zinc-800/40 text-left">
-                              <div className="flex items-start gap-2">
-                                <svg className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                </svg>
-                                <span className="leading-tight font-medium text-[11px] text-zinc-300">
-                                  {getAddress(res.latitude, res.longitude)}
-                                </span>
-                              </div>
-                              {res.borrowed_at && (
-                                <div className="flex items-center gap-2 mt-1 pt-1 border-t border-zinc-900/60 text-[10px] text-zinc-500 font-mono">
-                                  <svg className="w-3.5 h-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                  </svg>
-                                  Collected: {new Date(res.borrowed_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                          <div className="w-full p-3 bg-white/5 text-zinc-300 rounded-xl text-xs font-medium text-center mb-2 border border-white/10">
+                            {getActionMessage(res)}
+                          </div>
+                          
+                          {res.status === 'APPROVED' && (
+                            <>
+                              {res.components?.value_tier === 'LOW' ? (
+                                <div className="w-full p-3 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl text-xs font-medium text-center">
+                                  Show Digital Pass at the desk to complete checkout.
                                 </div>
+                              ) : (
+                                <button onClick={() => handleCollectClick(res.reservation_id)} className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+                                  <Camera className="w-5 h-5" /> Collect & Geotag
+                                </button>
                               )}
+                              <button onClick={() => handleWithdraw(res.reservation_id)} className="w-full py-2.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl font-bold text-xs uppercase tracking-widest transition-colors flex justify-center items-center gap-2">
+                                Withdraw Request
+                              </button>
+                            </>
+                          )}
+                          
+                          {res.status === 'READY_FOR_PICKUP' && (
+                            <div className="w-full p-3 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl text-xs font-medium text-center">
+                              Please collect your item from the Admin desk. Show your Digital Pass.
                             </div>
                           )}
-                          {(res.status === 'BORROWED' || res.status === 'Active') && (
-                            <button
-                              onClick={() => handleReturnClick(res.reservation_id)}
-                              className="w-full py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:border-amber-500 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
-                            >
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 15v-1a4 4 0 00-4-4H8m0 0l3 3m-3-3l3-3m9 14V5a2 2 0 00-2-2H6a2 2 0 00-2 2v16l4-2 4 2 4-2 4 2z" /></svg>
+
+                          {res.status === 'CHECKED_OUT' && (
+                            <button onClick={() => handleReturnClick(res.reservation_id)} className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-black rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(245,158,11,0.3)]">
                               Return Component
                             </button>
                           )}
-                        </div>
-                      ) : res.status === 'PENDING_COLLECTION' ? (
-                        <div className="flex flex-col gap-2">
-                          <div className="w-full py-3 bg-purple-500/5 text-purple-400 border border-purple-500/20 rounded-xl font-bold text-sm text-center flex items-center justify-center gap-2 cursor-wait">
-                            <svg className="w-4 h-4 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                            Awaiting Admin Confirmation
-                          </div>
-                          {res.geotag_image_url && (
-                            <button
-                              onClick={() => { setPreviewImgUrl(res.geotag_image_url); setPreviewModalOpen(true); }}
-                              className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 text-cyan-400 border border-zinc-800 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
-                            >
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                              </svg>
-                              View Geotag Image
+
+                          {res.status === 'PENDING_APPROVAL' && (
+                            <button onClick={() => handleWithdraw(res.reservation_id)} className="w-full py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl font-bold text-sm transition-colors flex justify-center items-center gap-2">
+                              Withdraw Request
                             </button>
                           )}
-                          {res.latitude && res.longitude && (
-                            <div className="text-xs text-cyan-400 mt-1.5 flex flex-col gap-1 bg-zinc-950/40 p-2.5 rounded-lg border border-zinc-800/40 text-left">
-                              <div className="flex items-start gap-2">
-                                <svg className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                </svg>
-                                <span className="leading-tight font-medium text-[11px] text-zinc-300">
-                                  {getAddress(res.latitude, res.longitude)}
-                                </span>
-                              </div>
-                              {res.borrowed_at && (
-                                <div className="flex items-center gap-2 mt-1 pt-1 border-t border-zinc-900/60 text-[10px] text-zinc-500 font-mono">
-                                  <svg className="w-3.5 h-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                  </svg>
-                                  Collected: {new Date(res.borrowed_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ) : res.status === 'PENDING_RETURN' ? (
-                        <div className="w-full py-3 bg-amber-500/5 text-amber-500/80 border border-amber-500/20 rounded-xl font-bold text-sm text-center flex items-center justify-center gap-2 cursor-wait">
-                          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                          Awaiting Admin Confirmation
-                        </div>
-                      ) : (res.status === 'Pending HOD' || res.status === 'Pending Renewal HOD') ? (
-                        <div className="w-full py-3 bg-amber-500/5 text-amber-500 border border-amber-500/20 rounded-xl font-bold text-sm text-center flex items-center justify-center gap-2 cursor-wait">
-                          <svg className="w-4 h-4 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                          </svg>
-                          Awaiting HOD Signature
-                        </div>
-                      ) : (res.status === 'PENDING' || res.status === 'PENDING_ADMIN') ? (
-                        <div className="w-full py-3 bg-orange-500/5 text-orange-400 border border-orange-500/20 rounded-xl font-bold text-sm text-center flex items-center justify-center gap-2 cursor-wait">
-                          <svg className="w-4 h-4 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                          </svg>
-                          Awaiting Admin Approval
-                        </div>
-                      ) : (
-                        <div className="w-full py-3 bg-zinc-900/50 text-zinc-600 border border-zinc-800/30 rounded-xl font-bold text-sm text-center cursor-not-allowed">
-                          Awaiting Action
                         </div>
                       )}
                     </div>
-                  ) : (
-                    <div className="bg-zinc-950/50 p-4 border-t border-zinc-800/50">
-                      <div className="w-full py-3 bg-zinc-900/50 text-zinc-500 border border-zinc-800/30 rounded-xl font-bold text-sm text-center cursor-default">
-                        {(res.status === 'RETURNED' || res.status === 'Returned') ? 'Successfully Returned' : (res.status === 'REJECTED' || res.status === 'Rejected') ? 'Request Rejected' : 'Completed'}
-                      </div>
-                    </div>
-                  )}
-                </motion.div>
-              ))}
-            </motion.div>
-          </AnimatePresence>
-        )}
-
-        {/* Return Condition Modal */}
-        <AnimatePresence>
-          {returnModalOpen && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
-            >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-zinc-950 border border-zinc-800 p-8 rounded-3xl max-w-sm w-full shadow-2xl"
-              >
-                <h3 className="text-2xl font-black text-white mb-2">Return Component</h3>
-                <p className="text-sm text-zinc-400 mb-6">Please honestly report the current condition and capture a geotagged proof photo.</p>
-
-                <div className="space-y-3 mb-6">
-                  <label className={`flex items-center gap-4 p-4 border rounded-xl cursor-pointer transition-all ${returnCondition === 'WORKING' ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-800 hover:bg-zinc-900'}`}>
-                    <input type="radio" name="condition" value="WORKING" checked={returnCondition === 'WORKING'} onChange={() => setReturnCondition('WORKING')} className="text-emerald-500 focus:ring-emerald-500 w-4 h-4" />
-                    <span className="text-emerald-400 font-bold text-sm">Working Perfectly</span>
-                  </label>
-                  <label className={`flex items-center gap-4 p-4 border rounded-xl cursor-pointer transition-all ${returnCondition === 'DAMAGED' ? 'border-rose-500 bg-rose-500/10' : 'border-zinc-800 hover:bg-zinc-900'}`}>
-                    <input type="radio" name="condition" value="DAMAGED" checked={returnCondition === 'DAMAGED'} onChange={() => setReturnCondition('DAMAGED')} className="text-rose-500 focus:ring-rose-500 w-4 h-4" />
-                    <span className="text-rose-400 font-bold text-sm">Damaged / Not Working</span>
-                  </label>
-                  <label className={`flex items-center gap-4 p-4 border rounded-xl cursor-pointer transition-all ${returnCondition === 'MISSING_PARTS' ? 'border-amber-500 bg-amber-500/10' : 'border-zinc-800 hover:bg-zinc-900'}`}>
-                    <input type="radio" name="condition" value="MISSING_PARTS" checked={returnCondition === 'MISSING_PARTS'} onChange={() => setReturnCondition('MISSING_PARTS')} className="text-amber-500 focus:ring-amber-500 w-4 h-4" />
-                    <span className="text-amber-400 font-bold text-sm">Missing Parts</span>
-                  </label>
-                </div>
-
-                {/* Return Proof Photo Capture */}
-                <div className="mb-8">
-                  {uploadedReturnProof ? (
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-4 py-3 rounded-xl text-xs font-bold">
-                        <span className="flex items-center gap-1.5">
-                          ✓ Return Proof Photo Captured
-                        </span>
-                        <button
-                          onClick={() => { setPreviewImgUrl(uploadedReturnProof.imageUrl); setPreviewModalOpen(true); }}
-                          className="underline hover:text-emerald-300 font-black cursor-pointer"
-                        >
-                          View Photo
-                        </button>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setUploadType('RETURN');
-                          if (fileInputRef.current) fileInputRef.current.click();
-                        }}
-                        className="text-[10px] text-zinc-500 hover:text-zinc-400 font-mono text-center underline"
-                      >
-                        Retake Photo
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setUploadType('RETURN');
-                        if (fileInputRef.current) fileInputRef.current.click();
-                      }}
-                      className="w-full py-3 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:border-cyan-500 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
-                    >
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                      Capture Return Geotag Photo
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex gap-3">
-                  <button onClick={() => setReturnModalOpen(false)} className="flex-1 py-3 rounded-xl text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 transition-colors font-bold text-sm">
-                    Cancel
-                  </button>
-                  <button
-                    onClick={submitReturn}
-                    disabled={!uploadedReturnProof}
-                    className="flex-1 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-black transition-colors text-sm shadow-[0_0_15px_rgba(245,158,11,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Submit Return
-                  </button>
-                </div>
+                  </motion.div>
+                ))}
               </motion.div>
-            </motion.div>
+            </AnimatePresence>
           )}
-        </AnimatePresence>
-        {/* Image Preview Modal */}
-        <AnimatePresence>
-          {previewModalOpen && previewImgUrl && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
-              onClick={() => setPreviewModalOpen(false)}
-            >
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0, y: 20 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                onClick={(e) => e.stopPropagation()}
-                className="bg-zinc-900 p-6 rounded-2xl max-w-xl w-full shadow-[0_0_30px_rgba(16,185,129,0.4)]"
-              >
-                <button
-                  onClick={() => setPreviewModalOpen(false)}
-                  className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-                <img src={previewImgUrl} alt="Collection Proof" className="w-full rounded" />
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-
-        {/* QR Code Digital Pass Modal */}
-        <AnimatePresence>
-          {showQRModal && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4"
-              onClick={() => setShowQRModal(false)}
-            >
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0, y: 20 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                onClick={(e) => e.stopPropagation()}
-                className="bg-white p-8 rounded-[2rem] max-w-sm w-full shadow-[0_0_50px_rgba(16,185,129,0.3)] flex flex-col items-center text-center relative"
-              >
-                <button
-                  onClick={() => setShowQRModal(false)}
-                  className="absolute top-3 right-3 text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-2 rounded-full transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-
-                <h3 className="text-3xl font-black text-black mb-1 tracking-tighter">DIGITAL PASS</h3>
-                <p className="text-zinc-500 font-mono text-[10px] uppercase tracking-widest mb-8">Show this QR to Admin</p>
-
-                <div className="bg-white p-5 border-4 border-dashed border-emerald-500/30 rounded-3xl mb-8 flex justify-center items-center">
-                  {studentUsn && (
-                    <QRCode
-                      value={studentUsn}
-                      size={200}
-                      level="H"
-                      fgColor="#000000"
-                      bgColor="#ffffff"
-                    />
-                  )}
-                </div>
-
-                <div className="w-full bg-zinc-100 rounded-2xl p-5 border border-zinc-200 shadow-inner">
-                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Student USN</p>
-                  <p className="text-2xl font-mono font-black text-black tracking-tight">{studentUsn}</p>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        </div>
       </div>
-    </div>
+
+      {/* Requisition Inspection Modal */}
+      <AnimatePresence>
+        {showInspectModal && inspectData && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xl p-4 overflow-y-auto" onClick={() => setShowInspectModal(false)}>
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} onClick={(e) => e.stopPropagation()} className="relative bg-white p-2 rounded-3xl w-full max-w-4xl mx-auto my-8 shadow-2xl">
+              <button onClick={() => setShowInspectModal(false)} className="absolute -top-12 right-0 text-white hover:text-zinc-300 bg-white/10 p-2 rounded-full backdrop-blur-md">
+                <X className="w-6 h-6" />
+              </button>
+              <div className="max-h-[85vh] overflow-y-auto rounded-2xl scrollbar-hide">
+                <RequisitionLetter {...inspectData} />
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Digital Pass QR Modal */}
+      <AnimatePresence>
+        {showQRModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-xl p-4" onClick={() => setShowQRModal(false)}>
+            <motion.div initial={{ scale: 0.8, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.8, y: 20 }} onClick={(e) => e.stopPropagation()} className="relative bg-white p-8 rounded-3xl shadow-[0_0_50px_rgba(139,92,246,0.4)] flex flex-col items-center max-w-sm w-full">
+              <button onClick={() => setShowQRModal(false)} className="absolute top-4 right-4 p-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-600 hover:text-black rounded-full transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+              <h3 className={`${spaceGrotesk.className} text-3xl font-black text-black mb-1`}>DIGITAL PASS</h3>
+              <p className="text-zinc-500 font-mono text-xs uppercase tracking-widest mb-8">Scan at Admin Desk</p>
+              
+              <div className="bg-white p-4 border-4 border-dashed border-violet-500/30 rounded-3xl">
+                <QRCode value={studentUsn || 'PENDING'} size={240} level="H" className="rounded-xl" fgColor="#000000" bgColor="#ffffff" />
+              </div>
+              
+              <div className="mt-8 pt-6 border-t border-zinc-200 w-full text-center">
+                <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Student USN</p>
+                <p className="font-mono text-2xl font-bold text-violet-600">{studentUsn || 'N/A'}</p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Image Preview Modal */}
+      <AnimatePresence>
+        {previewModalOpen && previewImgUrl && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-xl p-4" onClick={() => setPreviewModalOpen(false)}>
+            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} onClick={(e) => e.stopPropagation()} className="relative bg-zinc-900 p-2 rounded-2xl max-w-2xl w-full shadow-[0_0_50px_rgba(16,185,129,0.2)] border border-white/10">
+              <button onClick={() => setPreviewModalOpen(false)} className="absolute -top-12 right-0 text-white hover:text-zinc-300 bg-white/10 p-2 rounded-full backdrop-blur-md">
+                <X className="w-6 h-6" />
+              </button>
+              <img src={previewImgUrl} alt="Geotag Proof" className="w-full rounded-xl object-contain max-h-[80vh]" />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Return Modal */}
+      <AnimatePresence>
+        {returnModalOpen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-xl p-4">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-zinc-950 border border-white/10 p-8 rounded-3xl max-w-sm w-full shadow-2xl relative">
+              <h3 className={`${spaceGrotesk.className} text-2xl font-black text-white mb-2`}>Return Component</h3>
+              <p className="text-sm text-zinc-400 mb-6">Report condition & capture proof.</p>
+
+              <div className="space-y-3 mb-6">
+                <label className={`flex items-center gap-4 p-4 border rounded-xl cursor-pointer transition-all ${returnCondition === 'WORKING' ? 'border-emerald-500 bg-emerald-500/10' : 'border-white/10 hover:bg-white/5'}`}>
+                  <input type="radio" value="WORKING" checked={returnCondition === 'WORKING'} onChange={() => setReturnCondition('WORKING')} className="text-emerald-500 w-4 h-4" />
+                  <span className="text-emerald-400 font-bold text-sm">Working Perfectly</span>
+                </label>
+                <label className={`flex items-center gap-4 p-4 border rounded-xl cursor-pointer transition-all ${returnCondition === 'DAMAGED' ? 'border-rose-500 bg-rose-500/10' : 'border-white/10 hover:bg-white/5'}`}>
+                  <input type="radio" value="DAMAGED" checked={returnCondition === 'DAMAGED'} onChange={() => setReturnCondition('DAMAGED')} className="text-rose-500 w-4 h-4" />
+                  <span className="text-rose-400 font-bold text-sm">Damaged</span>
+                </label>
+              </div>
+
+              <div className="mb-8">
+                {uploadedReturnProof ? (
+                  <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-4 rounded-xl text-center">
+                    <CheckCircle2 className="w-8 h-8 mx-auto mb-2" />
+                    <span className="text-sm font-bold">Proof Captured</span>
+                  </div>
+                ) : (
+                  <button onClick={() => { setUploadType('RETURN'); if (fileInputRef.current) fileInputRef.current.click(); }} className="w-full py-4 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors">
+                    <Camera className="w-5 h-5" /> Take Return Photo
+                  </button>
+                )}
+              </div>
+
+              <div className="flex gap-3">
+                <button onClick={() => setReturnModalOpen(false)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold text-sm transition-colors">Cancel</button>
+                <button onClick={submitReturn} disabled={!uploadedReturnProof} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-black disabled:opacity-50 transition-all text-sm">Submit</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+    </>
   );
 }

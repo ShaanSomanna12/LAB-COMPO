@@ -9,6 +9,7 @@ import { siteConfig } from '@/config/site';
 import QRManagerModal from '@/components/QRManagerModal';
 import QRScannerModal from '@/components/QRScannerModal';
 import { toast } from 'sonner';
+import { isWorkingDay } from '@/lib/dateValidator';
 
 const Scanner = dynamic(
   () => import('@yudiel/react-qr-scanner').then((mod) => mod.Scanner),
@@ -16,7 +17,7 @@ const Scanner = dynamic(
 );
 
 
-type RequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'Pending HOD' | 'Ready for Collection' | 'Active' | 'Returned' | 'RETURNED' | 'BORROWED' | 'PENDING_RETURN' | 'PENDING_COLLECTION';
+type RequestStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'READY_FOR_PICKUP' | 'CHECKED_OUT' | 'RETURN_REQUESTED' | 'RETURNED' | 'COMPLETED' | 'REJECTED' | 'CANCELLED';
 
 interface RequestItem {
   id: string;
@@ -37,6 +38,15 @@ interface RequestItem {
   afterImgUrl?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  trackingType?: 'QUANTITY' | 'ASSET';
+  isDamaged?: boolean;
+  history?: {
+    oldStatus: string | null;
+    newStatus: string;
+    changedAt: string;
+    note: string | null;
+    changedBy: string;
+  }[];
 }
 
 interface InventoryItem {
@@ -50,6 +60,7 @@ interface InventoryItem {
   location: string;
   photo_url?: string;
   value_tier?: string;
+  tracking_type?: 'QUANTITY' | 'ASSET';
 }
 
 // Note: defaultInventory and mockRequests removed — data is fetched live from API
@@ -102,7 +113,7 @@ const calculatePenalty = (requestDateStr: string, durationDays: number, componen
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'requests' | 'inventory' | 'analytics' | 'section-tracking'>('requests');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'requests' | 'inventory' | 'analytics' | 'section-tracking' | 'completed'>('dashboard');
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [collegeName, setCollegeName] = useState(siteConfig.collegeName);
@@ -118,7 +129,8 @@ export default function AdminDashboard() {
     desc: '',
     location: 'Main Lab',
     photoUrl: '',
-    valueTier: 'MEDIUM'
+    valueTier: 'MEDIUM',
+    trackingType: 'QUANTITY'
   });
   const [adminDept, setAdminDept] = useState<string | null>(null);
   const [sectionFilter, setSectionFilter] = useState<string>('A');
@@ -128,7 +140,10 @@ export default function AdminDashboard() {
   const [sectionEndDate, setSectionEndDate] = useState<string>('');
   const [showSectionFilters, setShowSectionFilters] = useState<boolean>(false);
   const [sectionTrackingTab, setSectionTrackingTab] = useState<'CURRENT' | 'COMPLETED'>('CURRENT');
-  const [workflowTab, setWorkflowTab] = useState<'CURRENT' | 'PENDING' | 'COMPLETED'>('CURRENT');
+  const [workflowTab, setWorkflowTab] = useState<'PENDING' | 'ACTIVE' | 'COMPLETED'>('PENDING');
+  const [requestSearchQuery, setRequestSearchQuery] = useState('');
+  const [subStatusFilter, setSubStatusFilter] = useState<string>('ALL');
+  const [dateFilter, setDateFilter] = useState<string>('ALL');
 
   // Scanner State
   const [showScannerModal, setShowScannerModal] = useState(false);
@@ -148,9 +163,10 @@ export default function AdminDashboard() {
 
   // Modal states replacing native browser dialogs (alert/confirm/prompt)
   const [confirmModal, setConfirmModal] = useState<{ title: string; body: string; confirmText?: string; onConfirm: () => void } | null>(null);
-  const [approveModal, setApproveModal] = useState<{ id: string; component: string; requestedQty: number; valueTier: string; collectionTime: string } | null>(null);
+  const [approveModal, setApproveModal] = useState<{ id: string; component: string; requestedQty: number; valueTier: string; collectionTime: string; collectionDate: string } | null>(null);
   const [approveQty, setApproveQty] = useState(1);
   const [approveTime, setApproveTime] = useState('');
+  const [approveDate, setApproveDate] = useState('');
   const [showQrModal, setShowQrModal] = useState(false);
   const [qrComponentId, setQrComponentId] = useState<string | number>('');
   const [qrComponentName, setQrComponentName] = useState('');
@@ -159,6 +175,7 @@ export default function AdminDashboard() {
   const [checkoutScanReqId, setCheckoutScanReqId] = useState('');
   const [stockEditModal, setStockEditModal] = useState<{ id: string | number; name: string; currentTotal: number } | null>(null);
   const [stockEditValue, setStockEditValue] = useState('');
+  const [selectedStudentForDetails, setSelectedStudentForDetails] = useState<{ usn: string, name: string } | null>(null);
 
   useEffect(() => {
     const resolveAddress = async () => {
@@ -319,12 +336,10 @@ export default function AdminDashboard() {
     return {
       curr: {
         reqs: monthReqs.length,
-        labs: 0,
         total: monthReqs.length
       },
       prev: {
         reqs: prevMonthReqs.length,
-        labs: 0,
         total: prevMonthReqs.length
       }
     };
@@ -348,7 +363,6 @@ export default function AdminDashboard() {
         day,
         dateStr: datePrefix,
         reservations: reqsCount,
-        labAccess: 0,
         total: reqsCount
       });
     }
@@ -395,7 +409,6 @@ export default function AdminDashboard() {
 
   const totalChangeStr = getPercentageChange(analyticsStats.curr.total, analyticsStats.prev.total);
   const reqsChangeStr = getPercentageChange(analyticsStats.curr.reqs, analyticsStats.prev.reqs);
-  const labsChangeStr = getPercentageChange(analyticsStats.curr.labs, analyticsStats.prev.labs);
 
   const analyticsYMax = Math.max(...analyticsChartData.map(d => d.total), 4);
 
@@ -428,11 +441,11 @@ export default function AdminDashboard() {
   };
   const selectedMonthLabel = monthLabels[selectedAnalyticsMonth] || selectedAnalyticsMonth;
 
-  const updateRequestStatus = async (id: string, status: string, quantity?: number, collectionTime?: string) => {
+  const updateRequestStatus = async (id: string, status: string, quantity?: number, collectionTime?: string, date?: string) => {
     await fetch('/api/requests', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, status, quantity, collectionTime })
+      body: JSON.stringify({ id, status, quantity, collectionTime, date })
     });
   };
 
@@ -444,19 +457,31 @@ export default function AdminDashboard() {
       component: req.component,
       requestedQty: req.quantity || 1,
       valueTier: req.valueTier || 'MEDIUM',
-      collectionTime: req.collectionTime || ''
+      collectionTime: req.collectionTime || '',
+      collectionDate: req.requestDate || ''
     });
     setApproveQty(req.quantity || 1);
     setApproveTime(req.collectionTime || '');
+    setApproveDate(req.requestDate || '');
+  };
+
+  const handleApproveDateChange = (val: string) => {
+    const { isValid, reason } = isWorkingDay(val);
+    if (!isValid) {
+      toast.error(reason);
+      setApproveDate('');
+    } else {
+      setApproveDate(val);
+    }
   };
 
   const confirmApprove = async () => {
     if (!approveModal) return;
     const req = requests.find(r => r.id === approveModal.id);
     if (!req) return;
-    const newStatus = req.valueTier === 'HIGH' ? 'Pending HOD' : 'APPROVED';
-    await updateRequestStatus(approveModal.id, newStatus, approveQty, approveTime);
-    setRequests(reqs => reqs.map(r => r.id === approveModal.id ? { ...r, status: newStatus, quantity: approveQty, collectionTime: approveTime } : r));
+    const newStatus = req.valueTier === 'HIGH' ? 'PENDING_APPROVAL' : 'APPROVED';
+    await updateRequestStatus(approveModal.id, newStatus, approveQty, approveTime, approveDate);
+    setRequests(reqs => reqs.map(r => r.id === approveModal.id ? { ...r, status: newStatus as RequestStatus, quantity: approveQty, collectionTime: approveTime, requestDate: approveDate } : r));
     setApproveModal(null);
   };
 
@@ -469,9 +494,10 @@ export default function AdminDashboard() {
     const req = requests.find(r => r.id === id);
     if (!req) return;
     
-    if (req.valueTier === 'HIGH' || req.valueTier === 'MEDIUM') {
+    if (req.trackingType === 'ASSET') {
       setCheckoutScanReqId(id);
       setCheckoutScanExpected(req.component);
+      setPreviewType('COLLECT');
       setShowCheckoutScanner(true);
       return;
     }
@@ -481,8 +507,21 @@ export default function AdminDashboard() {
       body: 'Mark this component as checked out and collected by the student?',
       confirmText: 'Mark Collected',
       onConfirm: async () => {
-        await updateRequestStatus(id, 'Active');
-        setRequests(reqs => reqs.map(r => r.id === id ? { ...r, status: 'Active' } : r));
+        try {
+          const res = await fetch('/api/checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reservationId: id })
+          });
+          if (res.ok) {
+            setRequests(reqs => reqs.map(r => r.id === id ? { ...r, status: 'CHECKED_OUT' } : r));
+          } else {
+             const err = await res.json();
+             toast.error(err.error || 'Checkout failed');
+          }
+        } catch (e) {
+          toast.error('Network error during checkout');
+        }
         setConfirmModal(null);
       }
     });
@@ -491,33 +530,57 @@ export default function AdminDashboard() {
   const handleScanSuccess = async (serialNumber: string) => {
     setShowCheckoutScanner(false);
     
+    if (serialNumber === 'SKIPPED') {
+      // Fallback for asset tracked if skipped (assuming backend handles or requires assetId)
+      // We will just alert the user that skipping asset tracking is not permitted for ASSET tracked items.
+      toast.error('Asset ID is required for this component. Please scan the QR code.');
+      return;
+    }
+    
     try {
-      // 1. Update reservation status and attach serial number
-      const { error: reqErr } = await supabase
-        .from('reservations')
-        .update({ status: 'Active', assigned_serial_numbers: [serialNumber] })
-        .eq('reservation_id', checkoutScanReqId);
-        
-      if (reqErr) throw reqErr;
+      const isReturn = previewType === 'RETURN';
+      const endpoint = isReturn ? '/api/return' : '/api/checkout';
+      const body = isReturn 
+        ? { reservationId: checkoutScanReqId, assetId: serialNumber, condition: 'GOOD' }
+        : { reservationId: checkoutScanReqId, assetId: serialNumber };
 
-      // 2. Update component instance status
-      const { error: instErr } = await supabase
-        .from('component_instances')
-        .update({ status: 'IN_USE', current_reservation_id: checkoutScanReqId })
-        .eq('serial_number', serialNumber);
-
-      if (instErr) throw instErr;
-
-      setRequests(reqs => reqs.map(r => r.id === checkoutScanReqId ? { ...r, status: 'Active' } : r));
-      toast.success(`Handover successful! ${serialNumber} securely linked.`);
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        if (isReturn) {
+          setRequests(reqs => reqs.filter(r => r.id !== checkoutScanReqId));
+          toast.success(`Return successful for asset ${serialNumber}`);
+        } else {
+          setRequests(reqs => reqs.map(r => r.id === checkoutScanReqId ? { ...r, status: 'CHECKED_OUT' } : r));
+          toast.success(`Handover successful! Asset ${serialNumber} securely linked.`);
+        }
+      } else {
+        toast.error(data.error || `Failed to process ${isReturn ? 'return' : 'checkout'}.`);
+      }
     } catch (err: any) {
-      toast.error(err.message || 'Error processing scan');
+      console.error(err);
+      toast.error(`Network error during ${previewType === 'RETURN' ? 'return' : 'checkout'}`);
     }
   };
 
   const handleReturn = (id: string) => {
     const req = requests.find(r => r.id === id);
     if (!req) return;
+    
+    if (req.trackingType === 'ASSET') {
+      // Use scanner modal for return
+      setCheckoutScanReqId(id);
+      setCheckoutScanExpected(req.component);
+      setPreviewType('RETURN');
+      setShowCheckoutScanner(true);
+      return;
+    }
+    
     const penaltyInfo = calculatePenalty(req.requestDate, req.duration, req.component);
     const penaltyNote = penaltyInfo.isDelayed
       ? `Late by ${penaltyInfo.delayDays} day(s). Outstanding penalty: ₹${penaltyInfo.penalty} (${penaltyInfo.weeksDelayed} wk × 5% of ₹${penaltyInfo.itemPrice}).`
@@ -527,8 +590,22 @@ export default function AdminDashboard() {
       body: penaltyNote,
       confirmText: 'Confirm Return',
       onConfirm: async () => {
-        await updateRequestStatus(id, 'RETURNED');
-        setRequests(reqs => reqs.filter(r => r.id !== id));
+        try {
+          const res = await fetch('/api/return', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reservationId: id, condition: 'GOOD' })
+          });
+          if (res.ok) {
+            setRequests(reqs => reqs.filter(r => r.id !== id));
+            toast.success('Return processed successfully.');
+          } else {
+            const err = await res.json();
+            toast.error(err.error || 'Failed to process return');
+          }
+        } catch (e) {
+          toast.error('Network error during return');
+        }
         setConfirmModal(null);
       }
     });
@@ -653,7 +730,9 @@ export default function AdminDashboard() {
         desc: newDevice.desc,
         photoUrl: finalPhotoUrl,
         total: newDevice.total,
-        location: newDevice.location
+        location: newDevice.location,
+        valueTier: newDevice.valueTier,
+        trackingType: newDevice.trackingType
       } : {
         ...newDevice,
         photoUrl: finalPhotoUrl,
@@ -682,7 +761,8 @@ export default function AdminDashboard() {
           desc: '',
           location: 'Main Lab',
           photoUrl: '',
-          valueTier: 'MEDIUM'
+          valueTier: 'MEDIUM',
+          trackingType: 'QUANTITY'
         });
       } else {
         alert(data.error || 'Error saving component');
@@ -756,7 +836,23 @@ export default function AdminDashboard() {
       {adminDept && (
         <div className="flex overflow-x-auto gap-1.5 pb-3 mb-6 scrollbar-hide -mx-3 px-3 sm:mx-0 sm:px-0 sm:bg-zinc-900/50 sm:border sm:border-zinc-800/60 sm:rounded-2xl sm:p-1.5">
           <button
-            onClick={() => setActiveTab('requests')}
+            onClick={() => setActiveTab('dashboard')}
+            className={`whitespace-nowrap flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 border ${
+              activeTab === 'dashboard'
+                ? 'bg-rose-500/15 text-rose-400 border-rose-500/30 shadow-[0_0_15px_rgba(244,63,94,0.12)]'
+                : 'text-zinc-400 border-transparent hover:bg-zinc-800/60 hover:text-white'
+            }`}
+          >
+            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+            Command Center
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('requests');
+              setWorkflowTab('PENDING');
+              setSubStatusFilter('ALL');
+              setDateFilter('ALL');
+            }}
             className={`whitespace-nowrap flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 border ${
               activeTab === 'requests'
                 ? 'bg-amber-500/15 text-amber-400 border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.12)]'
@@ -799,6 +895,22 @@ export default function AdminDashboard() {
             <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
             Sections
           </button>
+          <button
+            onClick={() => {
+              setActiveTab('completed');
+              setWorkflowTab('COMPLETED');
+              setSubStatusFilter('ALL');
+              setDateFilter('ALL');
+            }}
+            className={`whitespace-nowrap flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 border ${
+              activeTab === 'completed'
+                ? 'bg-blue-500/15 text-blue-400 border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.12)]'
+                : 'text-zinc-400 border-transparent hover:bg-zinc-800/60 hover:text-white'
+            }`}
+          >
+            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+            Completed
+          </button>
         </div>
       )}
 
@@ -832,12 +944,197 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* Command Center View */}
+      {adminDept && activeTab === 'dashboard' && (
+        <div className="space-y-8 max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+          
+          {/* Quick Metrics */}
+          <div>
+            <h2 className="text-xl font-black text-white mb-4 flex items-center gap-2">
+              <svg className="w-5 h-5 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+              LAB OPERATIONS
+            </h2>
+            {(() => {
+              const deptReqs = requests.filter(r => r.department === adminDept || r.studentDepartment === adminDept);
+              const pendingCount = deptReqs.filter(r => r.status === 'PENDING_APPROVAL').length;
+              const readyCount = deptReqs.filter(r => r.status === 'APPROVED' || r.status === 'READY_FOR_PICKUP').length;
+              const activeCount = deptReqs.filter(r => r.status === 'CHECKED_OUT').length;
+              const overdueCount = deptReqs.filter(r => r.status === 'CHECKED_OUT' && calculatePenalty(r.requestDate, r.duration, r.component).isDelayed).length;
+              const damagedCount = 0; // Not fully tracked yet
+              const deptInv = inventory.filter(i => i.department === adminDept);
+              const lowStockCount = deptInv.filter(i => i.total > 0 && i.available <= 1).length;
+              
+              return (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                  {/* Pending */}
+                  <div className="relative group overflow-hidden bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 hover:border-amber-500/40 p-5 rounded-2xl flex flex-col items-center text-center transition-all duration-300 hover:shadow-[0_0_30px_rgba(245,158,11,0.15)] hover:-translate-y-1">
+                    <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    <div className="relative z-10 flex flex-col items-center">
+                      <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-300 to-amber-600 drop-shadow-sm mb-1">{pendingCount}</span>
+                      <span className="text-[10px] font-bold text-amber-500/70 uppercase tracking-widest">Pending</span>
+                    </div>
+                  </div>
+                  {/* Ready */}
+                  <div className="relative group overflow-hidden bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 hover:border-emerald-500/40 p-5 rounded-2xl flex flex-col items-center text-center transition-all duration-300 hover:shadow-[0_0_30px_rgba(16,185,129,0.15)] hover:-translate-y-1">
+                    <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    <div className="relative z-10 flex flex-col items-center">
+                      <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-b from-emerald-300 to-emerald-600 drop-shadow-sm mb-1">{readyCount}</span>
+                      <span className="text-[10px] font-bold text-emerald-500/70 uppercase tracking-widest">Ready</span>
+                    </div>
+                  </div>
+                  {/* Active Loans */}
+                  <div className="relative group overflow-hidden bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 hover:border-cyan-500/40 p-5 rounded-2xl flex flex-col items-center text-center transition-all duration-300 hover:shadow-[0_0_30px_rgba(6,182,212,0.15)] hover:-translate-y-1">
+                    <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    <div className="relative z-10 flex flex-col items-center">
+                      <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-b from-cyan-300 to-cyan-600 drop-shadow-sm mb-1">{activeCount}</span>
+                      <span className="text-[10px] font-bold text-cyan-500/70 uppercase tracking-widest">Active Loans</span>
+                    </div>
+                  </div>
+                  {/* Overdue */}
+                  <div className="relative group overflow-hidden bg-rose-950/20 backdrop-blur-xl border border-rose-900/40 hover:border-rose-500/50 p-5 rounded-2xl flex flex-col items-center text-center transition-all duration-300 hover:shadow-[0_0_30px_rgba(244,63,94,0.2)] hover:-translate-y-1">
+                    <div className="absolute inset-0 bg-gradient-to-br from-rose-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    <div className="relative z-10 flex flex-col items-center">
+                      <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-b from-rose-400 to-rose-600 drop-shadow-sm mb-1">{overdueCount}</span>
+                      <span className="text-[10px] font-bold text-rose-500/80 uppercase tracking-widest">Overdue</span>
+                    </div>
+                  </div>
+                  {/* Damaged */}
+                  <div className="relative group overflow-hidden bg-orange-950/20 backdrop-blur-xl border border-orange-900/40 hover:border-orange-500/50 p-5 rounded-2xl flex flex-col items-center text-center transition-all duration-300 hover:shadow-[0_0_30px_rgba(249,115,22,0.15)] hover:-translate-y-1">
+                    <div className="absolute inset-0 bg-gradient-to-br from-orange-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    <div className="relative z-10 flex flex-col items-center">
+                      <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-b from-orange-400 to-orange-600 drop-shadow-sm mb-1">{damagedCount}</span>
+                      <span className="text-[10px] font-bold text-orange-500/80 uppercase tracking-widest">Damaged</span>
+                    </div>
+                  </div>
+                  {/* Low Stock */}
+                  <div className="relative group overflow-hidden bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 hover:border-zinc-500/50 p-5 rounded-2xl flex flex-col items-center text-center transition-all duration-300 hover:shadow-[0_0_30px_rgba(255,255,255,0.1)] hover:-translate-y-1">
+                    <div className="absolute inset-0 bg-gradient-to-br from-zinc-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    <div className="relative z-10 flex flex-col items-center">
+                      <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-b from-zinc-300 to-zinc-500 drop-shadow-sm mb-1">{lowStockCount}</span>
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Low Stock</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Priority Queue */}
+          <div className="pt-4">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-black text-white flex items-center gap-3 tracking-tight">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                  <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                </div>
+                Priority Queue
+              </h2>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {(() => {
+                const deptReqs = requests.filter(r => r.department === adminDept || r.studentDepartment === adminDept);
+                const overdueReqs = deptReqs.filter(r => r.status === 'CHECKED_OUT' && calculatePenalty(r.requestDate, r.duration, r.component).isDelayed);
+                const pendingReqs = deptReqs.filter(r => r.status === 'PENDING_APPROVAL');
+                const readyReqs = deptReqs.filter(r => r.status === 'APPROVED' || r.status === 'READY_FOR_PICKUP');
+                const returnReqs = deptReqs.filter(r => r.status === 'RETURN_REQUESTED');
+
+                return (
+                  <>
+                    <button 
+                      onClick={() => { setActiveTab('requests'); setWorkflowTab('ACTIVE'); setSubStatusFilter('OVERDUE'); }}
+                      className="group relative overflow-hidden rounded-2xl bg-zinc-900/40 border border-zinc-800/60 p-5 hover:bg-zinc-800/60 transition-all duration-300 text-left flex items-start gap-4 hover:-translate-y-1 hover:shadow-xl hover:shadow-rose-500/10"
+                    >
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-opacity group-hover:bg-rose-500/20"></div>
+                      <div className="w-12 h-12 rounded-xl bg-rose-500/10 flex items-center justify-center shrink-0 border border-rose-500/20 group-hover:scale-110 transition-transform duration-300">
+                        <div className="w-3 h-3 rounded-full bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.8)] animate-pulse" />
+                      </div>
+                      <div className="flex-1 z-10">
+                        <div className="flex justify-between items-start">
+                          <h3 className="text-xl font-bold text-rose-400 group-hover:text-rose-300 transition-colors">{overdueReqs.length} Overdue</h3>
+                          <svg className="w-5 h-5 text-rose-500/50 group-hover:text-rose-400 group-hover:translate-x-1 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+                        </div>
+                        <p className="text-zinc-400 text-sm mt-1 mb-2 font-medium">Critical returns past due date</p>
+                        <span className="inline-block px-2 py-1 bg-rose-500/10 text-rose-400 text-[10px] font-bold uppercase tracking-widest rounded-md border border-rose-500/20">Action Required</span>
+                      </div>
+                    </button>
+                    
+                    <button 
+                      onClick={() => { setActiveTab('requests'); setWorkflowTab('ACTIVE'); setSubStatusFilter('RETURNING'); }}
+                      className="group relative overflow-hidden rounded-2xl bg-zinc-900/40 border border-zinc-800/60 p-5 hover:bg-zinc-800/60 transition-all duration-300 text-left flex items-start gap-4 hover:-translate-y-1 hover:shadow-xl hover:shadow-orange-500/10"
+                    >
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-opacity group-hover:bg-orange-500/20"></div>
+                      <div className="w-12 h-12 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0 border border-orange-500/20 group-hover:scale-110 transition-transform duration-300">
+                        <svg className="w-6 h-6 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                      </div>
+                      <div className="flex-1 z-10">
+                        <div className="flex justify-between items-start">
+                          <h3 className="text-xl font-bold text-orange-400 group-hover:text-orange-300 transition-colors">{returnReqs.length} Returns</h3>
+                          <svg className="w-5 h-5 text-orange-500/50 group-hover:text-orange-400 group-hover:translate-x-1 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+                        </div>
+                        <p className="text-zinc-400 text-sm mt-1 mb-2 font-medium">Pending condition inspection</p>
+                        <span className="inline-block px-2 py-1 bg-orange-500/10 text-orange-400 text-[10px] font-bold uppercase tracking-widest rounded-md border border-orange-500/20">High Priority</span>
+                      </div>
+                    </button>
+
+                    <button 
+                      onClick={() => { setActiveTab('requests'); setWorkflowTab('PENDING'); setSubStatusFilter('AWAITING_APPROVAL'); }}
+                      className="group relative overflow-hidden rounded-2xl bg-zinc-900/40 border border-zinc-800/60 p-5 hover:bg-zinc-800/60 transition-all duration-300 text-left flex items-start gap-4 hover:-translate-y-1 hover:shadow-xl hover:shadow-amber-500/10"
+                    >
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-opacity group-hover:bg-amber-500/20"></div>
+                      <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0 border border-amber-500/20 group-hover:scale-110 transition-transform duration-300">
+                        <svg className="w-6 h-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      </div>
+                      <div className="flex-1 z-10">
+                        <div className="flex justify-between items-start">
+                          <h3 className="text-xl font-bold text-amber-400 group-hover:text-amber-300 transition-colors">{pendingReqs.length} Approvals</h3>
+                          <svg className="w-5 h-5 text-amber-500/50 group-hover:text-amber-400 group-hover:translate-x-1 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+                        </div>
+                        <p className="text-zinc-400 text-sm mt-1 mb-2 font-medium">New requests awaiting review</p>
+                        <span className="inline-block px-2 py-1 bg-amber-500/10 text-amber-400 text-[10px] font-bold uppercase tracking-widest rounded-md border border-amber-500/20">Medium Priority</span>
+                      </div>
+                    </button>
+
+                    <button 
+                      onClick={() => { setActiveTab('requests'); setWorkflowTab('PENDING'); setSubStatusFilter('AWAITING_CHECKOUT'); }}
+                      className="group relative overflow-hidden rounded-2xl bg-zinc-900/40 border border-zinc-800/60 p-5 hover:bg-zinc-800/60 transition-all duration-300 text-left flex items-start gap-4 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/10"
+                    >
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-opacity group-hover:bg-emerald-500/20"></div>
+                      <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0 border border-emerald-500/20 group-hover:scale-110 transition-transform duration-300">
+                        <svg className="w-6 h-6 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+                      </div>
+                      <div className="flex-1 z-10">
+                        <div className="flex justify-between items-start">
+                          <h3 className="text-xl font-bold text-emerald-400 group-hover:text-emerald-300 transition-colors">{readyReqs.length} Checkout</h3>
+                          <svg className="w-5 h-5 text-emerald-500/50 group-hover:text-emerald-400 group-hover:translate-x-1 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+                        </div>
+                        <p className="text-zinc-400 text-sm mt-1 mb-2 font-medium">Ready for student collection</p>
+                        <span className="inline-block px-2 py-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-bold uppercase tracking-widest rounded-md border border-emerald-500/20">Medium Priority</span>
+                      </div>
+                    </button>
+                    
+                    <div className="md:col-span-2 mt-2">
+                      <button 
+                        onClick={() => { setActiveTab('requests'); setWorkflowTab('PENDING'); setSubStatusFilter('ALL'); setDateFilter('ALL'); }}
+                        className="w-full bg-gradient-to-r from-zinc-800 to-zinc-900 border border-zinc-700/50 hover:border-zinc-600 hover:from-zinc-700 hover:to-zinc-800 text-white font-bold text-sm uppercase tracking-widest py-4 rounded-2xl transition-all shadow-lg hover:shadow-xl active:scale-[0.99] flex items-center justify-center gap-3"
+                      >
+                        <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+                        Review All Tasks
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Dashboard View */}
-      {adminDept && activeTab === 'requests' && (
+      {adminDept && (activeTab === 'requests' || activeTab === 'completed') && (
         <div className="space-y-6 max-w-6xl mx-auto">
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
             <div className="flex items-center gap-4">
-              <h2 className="text-2xl font-bold">{adminDept} Pending & Active Requests</h2>
+              <h2 className="text-2xl font-bold">{adminDept} {activeTab === 'completed' ? 'Completed' : 'Pending & Active'} Requests</h2>
               {scannedUsnFilter && (
                 <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider animate-in fade-in duration-200">
                   Filter: {scannedUsnFilter}
@@ -855,199 +1152,273 @@ export default function AdminDashboard() {
             </div>
             <button
               onClick={() => setShowScannerModal(true)}
-              className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black px-4 py-2 rounded-xl font-bold text-sm transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)]"
+              className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black px-5 py-2.5 rounded-xl font-bold text-sm transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)]"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
               Scan Student Pass
             </button>
           </div>
 
-          <div className="flex gap-4 mb-4 border-b border-zinc-800 pb-2">
-            <button
-              onClick={() => setWorkflowTab('CURRENT')}
-              className={`px-4 py-2 font-bold text-sm rounded-lg transition-colors ${workflowTab === 'CURRENT' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-            >
-              Current Requests
-            </button>
-            <button
-              onClick={() => setWorkflowTab('PENDING')}
-              className={`px-4 py-2 font-bold text-sm rounded-lg transition-colors ${workflowTab === 'PENDING' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-            >
-              Pending Requests
-            </button>
-            <button
-              onClick={() => setWorkflowTab('COMPLETED')}
-              className={`px-4 py-2 font-bold text-sm rounded-lg transition-colors ${workflowTab === 'COMPLETED' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-            >
-              Completed Requests
-            </button>
+          <div className="flex flex-col lg:flex-row gap-4 mb-6 border-b border-zinc-800 pb-4">
+            {activeTab !== 'completed' && (
+              <div className="flex gap-2 p-1 bg-zinc-900 border border-zinc-800 rounded-xl">
+                <button
+                  onClick={() => { setWorkflowTab('PENDING'); setSubStatusFilter('ALL'); setDateFilter('ALL'); }}
+                  className={`px-4 py-2 font-bold text-sm rounded-lg transition-colors ${workflowTab === 'PENDING' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                >
+                  Pending Action
+                </button>
+                <button
+                  onClick={() => { setWorkflowTab('ACTIVE'); setSubStatusFilter('ALL'); setDateFilter('ALL'); }}
+                  className={`px-4 py-2 font-bold text-sm rounded-lg transition-colors ${workflowTab === 'ACTIVE' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                >
+                  Active (Borrowed)
+                </button>
+                <button
+                  onClick={() => { setWorkflowTab('COMPLETED'); setSubStatusFilter('ALL'); setDateFilter('ALL'); }}
+                  className={`px-4 py-2 font-bold text-sm rounded-lg transition-colors ${workflowTab === 'COMPLETED' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                >
+                  Completed
+                </button>
+              </div>
+            )}
+
+            <div className="flex-1 flex flex-col sm:flex-row gap-3">
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  placeholder="Search by USN, Name, or Component..."
+                  value={requestSearchQuery}
+                  onChange={(e) => setRequestSearchQuery(e.target.value)}
+                  className="w-full bg-zinc-900/50 border border-zinc-800 text-sm text-white px-10 py-2.5 rounded-xl focus:outline-none focus:border-cyan-500 transition-colors"
+                />
+                <svg className="w-4 h-4 absolute left-3.5 top-3 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 mt-2 items-center">
+              {(activeTab !== 'completed' ? workflowTab : 'COMPLETED') === 'PENDING' && (
+                <>
+                  <button onClick={() => setSubStatusFilter(s => s === 'AWAITING_APPROVAL' ? 'ALL' : 'AWAITING_APPROVAL')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${subStatusFilter === 'AWAITING_APPROVAL' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-zinc-800/50 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200'}`}>Awaiting Approval</button>
+                  <button onClick={() => setSubStatusFilter(s => s === 'AWAITING_CHECKOUT' ? 'ALL' : 'AWAITING_CHECKOUT')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${subStatusFilter === 'AWAITING_CHECKOUT' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-zinc-800/50 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200'}`}>Awaiting Checkout</button>
+                </>
+              )}
+              {(activeTab !== 'completed' ? workflowTab : 'COMPLETED') === 'ACTIVE' && (
+                <>
+                  <button onClick={() => setSubStatusFilter(s => s === 'OVERDUE' ? 'ALL' : 'OVERDUE')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${subStatusFilter === 'OVERDUE' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' : 'bg-zinc-800/50 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200'}`}>Overdue Items</button>
+                  <button onClick={() => setSubStatusFilter(s => s === 'ON_TIME' ? 'ALL' : 'ON_TIME')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${subStatusFilter === 'ON_TIME' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-zinc-800/50 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200'}`}>On Time</button>
+                  <button onClick={() => setSubStatusFilter(s => s === 'RETURNING' ? 'ALL' : 'RETURNING')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${subStatusFilter === 'RETURNING' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' : 'bg-zinc-800/50 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200'}`}>Pending Return</button>
+                </>
+              )}
+              {(activeTab !== 'completed' ? workflowTab : 'COMPLETED') === 'COMPLETED' && (
+                <>
+                  <button onClick={() => setSubStatusFilter(s => s === 'RETURNED' ? 'ALL' : 'RETURNED')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${subStatusFilter === 'RETURNED' ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' : 'bg-zinc-800/50 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200'}`}>Returned</button>
+                  <button onClick={() => setSubStatusFilter(s => s === 'REJECTED' ? 'ALL' : 'REJECTED')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${subStatusFilter === 'REJECTED' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' : 'bg-zinc-800/50 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200'}`}>Rejected / Withdrawn</button>
+                </>
+              )}
+            
+              <div className="hidden sm:block w-px h-5 bg-zinc-800 mx-2"></div>
+            
+              <button onClick={() => setDateFilter(d => d === 'TODAY' ? 'ALL' : 'TODAY')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${dateFilter === 'TODAY' ? 'bg-zinc-700 text-white border-zinc-600' : 'bg-zinc-800/50 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200'}`}>Today</button>
+              <button onClick={() => setDateFilter(d => d === 'WEEK' ? 'ALL' : 'WEEK')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${dateFilter === 'WEEK' ? 'bg-zinc-700 text-white border-zinc-600' : 'bg-zinc-800/50 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200'}`}>This Week</button>
+              <button onClick={() => setDateFilter(d => d === 'MONTH' ? 'ALL' : 'MONTH')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${dateFilter === 'MONTH' ? 'bg-zinc-700 text-white border-zinc-600' : 'bg-zinc-800/50 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200'}`}>This Month</button>
+            </div>
           </div>
 
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden overflow-x-auto">
-            <table className="w-full text-left text-sm min-w-[600px]">
-              <thead className="bg-zinc-800/50 text-zinc-400 uppercase text-xs font-semibold">
-                <tr>
-                  <th className="px-6 py-4 w-1/4">Student Info</th>
-                  <th className="px-6 py-4">Requested Components</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800">
-                {(() => {
-                  const currentStatuses = ['PENDING', 'APPROVED', 'Pending HOD', 'Pending Renewal HOD', 'Approved by HOD', 'Ready for Collection', 'PENDING_COLLECTION'];
-                  const pendingStatuses = ['Active', 'BORROWED', 'PENDING_RETURN'];
-                  const groupedRequests = requests
-                    .filter(r => (r.department === adminDept || r.studentDepartment === adminDept) && (!scannedUsnFilter || r.usn === scannedUsnFilter))
-                    .filter(req => {
-                      if (workflowTab === 'CURRENT') return currentStatuses.includes(req.status);
-                      if (workflowTab === 'PENDING') return pendingStatuses.includes(req.status);
-                      return !currentStatuses.includes(req.status) && !pendingStatuses.includes(req.status);
-                    })
-                    .reduce((acc, req) => {
-                      const key = `${req.usn}_${req.requestDate}`;
-                      if (!acc[key]) {
-                        acc[key] = {
-                          groupId: key,
-                          studentName: req.studentName,
-                          usn: req.usn,
-                          requestDate: req.requestDate,
-                          items: []
-                        };
-                      }
-                      acc[key].items.push(req);
-                      return acc;
-                    }, {} as Record<string, { groupId: string, studentName: string, usn: string, requestDate: string, items: RequestItem[] }>);
-
-                  const groupedRequestsArray = Object.values(groupedRequests);
-
-                  if (groupedRequestsArray.length === 0) {
-                    return (
-                      <tr>
-                        <td colSpan={2} className="px-6 py-8 text-center text-zinc-500">No {workflowTab.toLowerCase()} requests found.</td>
-                      </tr>
-                    );
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
+            {(() => {
+              const pendingActionStatuses = ['PENDING_APPROVAL', 'APPROVED', 'READY_FOR_PICKUP', 'PENDING', 'Pending HOD', 'Pending Renewal HOD', 'Approved by HOD', 'Ready for Collection', 'PENDING_COLLECTION'];
+              const activeStatuses = ['CHECKED_OUT', 'RETURN_REQUESTED', 'Active', 'BORROWED', 'PENDING_RETURN'];
+              
+              let filteredRequests = requests
+                .filter(r => !adminDept || (r.department === adminDept || r.studentDepartment === adminDept))
+                .filter(r => !scannedUsnFilter || r.usn === scannedUsnFilter)
+                .filter(req => {
+                  if (activeTab === 'completed') return !pendingActionStatuses.includes(req.status) && !activeStatuses.includes(req.status);
+                  if (workflowTab === 'PENDING') return pendingActionStatuses.includes(req.status);
+                  if (workflowTab === 'ACTIVE') return activeStatuses.includes(req.status);
+                  return !pendingActionStatuses.includes(req.status) && !activeStatuses.includes(req.status);
+                })
+                .filter(req => {
+                  if (subStatusFilter !== 'ALL') {
+                    if (subStatusFilter === 'AWAITING_APPROVAL' && req.status !== 'PENDING_APPROVAL') return false;
+                    if (subStatusFilter === 'AWAITING_CHECKOUT' && req.status !== 'APPROVED' && req.status !== 'READY_FOR_PICKUP') return false;
+                    
+                    if (subStatusFilter === 'OVERDUE') {
+                      const penaltyInfo = calculatePenalty(req.requestDate, req.duration, req.component);
+                      if (!penaltyInfo.isDelayed) return false;
+                    }
+                    if (subStatusFilter === 'ON_TIME') {
+                      const penaltyInfo = calculatePenalty(req.requestDate, req.duration, req.component);
+                      if (penaltyInfo.isDelayed) return false;
+                    }
+                    if (subStatusFilter === 'RETURNING' && req.status !== 'RETURN_REQUESTED') return false;
+                    
+                    if (subStatusFilter === 'RETURNED' && req.status !== 'RETURNED') return false;
+                    if (subStatusFilter === 'REJECTED' && req.status !== 'REJECTED' && req.status !== 'CANCELLED') return false;
                   }
 
-                  return groupedRequestsArray.map(group => (
-                    <tr key={group.groupId} className="hover:bg-zinc-800/30 transition-colors">
-                      <td className="px-6 py-4 align-top border-r border-zinc-800/50">
-                        <div className="font-medium text-white text-base">{group.studentName}</div>
-                        <div className="text-zinc-500 font-mono text-xs mt-1">{group.usn}</div>
-                        <div className="text-zinc-500 text-xs mt-3 flex items-center gap-1.5">
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                          Requested: {group.requestDate}
+                  if (dateFilter !== 'ALL') {
+                    const reqDate = new Date(req.requestDate);
+                    const now = new Date();
+                    const diffTime = Math.abs(now.getTime() - reqDate.getTime());
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    
+                    if (dateFilter === 'TODAY' && diffDays > 1) return false;
+                    if (dateFilter === 'WEEK' && diffDays > 7) return false;
+                    if (dateFilter === 'MONTH' && diffDays > 30) return false;
+                  }
+
+                  if (requestSearchQuery) {
+                    const q = requestSearchQuery.toLowerCase();
+                    return (
+                      req.studentName.toLowerCase().includes(q) ||
+                      req.usn.toLowerCase().includes(q) ||
+                      req.component.toLowerCase().includes(q)
+                    );
+                  }
+                  return true;
+                });
+
+              filteredRequests.sort((a, b) => {
+                const dateA = new Date(a.requestDate).getTime();
+                const dateB = new Date(b.requestDate).getTime();
+                return dateB - dateA; // Always sort Newest First
+              });
+
+              if (filteredRequests.length === 0) {
+                return (
+                  <div className="col-span-1 lg:col-span-2 xl:col-span-3 py-20 bg-zinc-900/30 border border-zinc-800 border-dashed rounded-3xl flex flex-col items-center justify-center text-center">
+                    <div className="w-16 h-16 bg-zinc-800/50 rounded-2xl flex items-center justify-center mb-4">
+                      <svg className="w-8 h-8 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" /></svg>
+                    </div>
+                    <p className="text-zinc-400 font-bold uppercase tracking-widest text-sm">No requests found</p>
+                    <p className="text-zinc-600 text-xs mt-1">Try adjusting your filters or search query.</p>
+                  </div>
+                );
+              }
+
+              return filteredRequests.map(req => (
+                <div key={req.id} className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 hover:border-zinc-700 rounded-2xl p-5 transition-all flex flex-col justify-between group shadow-lg">
+                  <div>
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-zinc-800 rounded-xl flex items-center justify-center shrink-0 border border-zinc-700">
+                          <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                         </div>
-                        <div className="text-cyan-400 text-xs mt-2 font-bold uppercase tracking-widest">
-                          {group.items.length} Item{group.items.length > 1 ? 's' : ''}
+                        <div>
+                          <div className="font-bold text-white text-sm">{req.studentName}</div>
+                          <div className="text-zinc-500 font-mono text-xs">{req.usn}</div>
                         </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="space-y-3">
-                          {group.items.map(req => (
-                            <div key={req.id} className="flex justify-between items-center bg-zinc-950/50 p-3.5 rounded-xl border border-zinc-800/80 hover:border-zinc-700 transition-colors">
-                              <div className="flex-1">
-                                <div className="font-bold text-blue-400 text-sm flex items-center gap-2">
-                                  {req.component} {req.quantity ? <span className="text-zinc-400 text-xs">(Qty: {req.quantity})</span> : ''}
-                                  <span className="text-zinc-600 font-mono text-[10px] bg-zinc-900 px-1.5 py-0.5 rounded">#{req.id}</span>
-                                </div>
-                                <div className="text-zinc-500 text-xs mt-1">Duration: <span className="text-zinc-300 font-mono">{req.duration} Days</span></div>
-                                {(() => {
-                                  const penaltyInfo = calculatePenalty(req.requestDate, req.duration, req.component);
-                                  if (req.status === 'Active' && penaltyInfo.isDelayed) {
-                                    return (
-                                      <div className="text-red-400 text-[10px] font-bold mt-2 flex items-center gap-1.5 bg-red-950/30 border border-red-900/50 px-2.5 py-1 rounded-md w-fit">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
-                                        <span>Late by {penaltyInfo.delayDays} days • Penalty: ₹{penaltyInfo.penalty}</span>
-                                      </div>
-                                    );
-                                  }
-                                  return null;
-                                })()}
-                              </div>
-                              <div className="flex items-center gap-5">
-                                <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest border ${req.status === 'PENDING' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
-                                  req.status === 'APPROVED' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' :
-                                    req.status === 'PENDING_COLLECTION' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
-                                      (req.status === 'Active' || req.status === 'BORROWED') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                                        req.status === 'PENDING_RETURN' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                                          'bg-green-500/10 text-green-400 border-green-500/20'
-                                  }`}>
-                                  {req.status === 'PENDING_COLLECTION' ? 'PENDING CHECKOUT' : req.status}
-                                </span>
-                                <div className="text-right space-x-2 flex-shrink-0 min-w-[140px] flex justify-end">
-                                  {req.status === 'PENDING' && (
-                                    <>
-                                      <button onClick={() => handleApprove(req.id)} className="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg text-xs font-bold transition">Approve</button>
-                                      <button onClick={() => handleReject(req.id)} className="px-3 py-1.5 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-500/30 rounded-lg text-xs font-bold transition">Reject</button>
-                                    </>
-                                  )}
-                                  {req.status === 'APPROVED' && (
-                                    <button onClick={() => handleCheckout(req.id)} className="px-4 py-1.5 bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-lg text-xs font-bold transition">Mark Check Out</button>
-                                  )}
-                                  {req.status === 'PENDING_COLLECTION' && (
-                                    <div className="flex gap-2 items-center">
-                                      {req.geotagImageUrl && (
-                                        <button
-                                          onClick={() => {
-                                            setPreviewImgUrl(req.geotagImageUrl || null);
-                                            setPreviewLatitude(req.latitude || null);
-                                            setPreviewLongitude(req.longitude || null);
-                                            setPreviewType('COLLECT');
-                                            setPreviewModalOpen(true);
-                                          }}
-                                          className="px-3 py-1.5 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/30 rounded-lg text-xs font-bold transition flex items-center gap-1"
-                                        >
-                                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                          </svg>
-                                          View Proof
-                                        </button>
-                                      )}
-                                      <button
-                                        onClick={() => handleCheckout(req.id)}
-                                        className="px-4 py-1.5 bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-lg text-xs font-bold transition"
-                                      >
-                                        Approve Checkout
-                                      </button>
-                                    </div>
-                                  )}
-                                  {(req.status === 'Active' || req.status === 'BORROWED') && (
-                                    <button onClick={() => handleReturn(req.id)} className="px-4 py-1.5 bg-zinc-800 text-white hover:bg-zinc-700 border border-zinc-700 rounded-lg text-xs font-bold transition">Mark Returned</button>
-                                  )}
-                                  {req.status === 'PENDING_RETURN' && (
-                                    <div className="flex gap-2 items-center justify-end">
-                                      {req.afterImgUrl && (
-                                        <button
-                                          onClick={() => {
-                                            setPreviewImgUrl(req.afterImgUrl || null);
-                                            setPreviewLatitude(req.latitude || null);
-                                            setPreviewLongitude(req.longitude || null);
-                                            setPreviewType('RETURN');
-                                            setPreviewModalOpen(true);
-                                          }}
-                                          className="px-3 py-1.5 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg text-xs font-bold transition flex items-center gap-1"
-                                        >
-                                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                          </svg>
-                                          View Proof
-                                        </button>
-                                      )}
-                                      <button onClick={() => handleReturn(req.id)} className="px-4 py-1.5 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg text-xs font-bold transition">Accept Return</button>
-                                    </div>
-                                  )}
-                                </div>
+                      </div>
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest border ${req.status === 'PENDING_APPROVAL' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20 shadow-[0_0_10px_rgba(234,179,8,0.2)]' :
+                        req.status === 'APPROVED' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20 shadow-[0_0_10px_rgba(6,182,212,0.2)]' :
+                          req.status === 'READY_FOR_PICKUP' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20 shadow-[0_0_10px_rgba(168,85,247,0.2)]' :
+                            (req.status === 'CHECKED_OUT') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.2)]' :
+                              req.status === 'RETURN_REQUESTED' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 shadow-[0_0_10px_rgba(245,158,11,0.2)]' :
+                                req.status === 'REJECTED' || req.status === 'CANCELLED' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+                                'bg-green-500/10 text-green-400 border-green-500/20'
+                        }`}>
+                        {req.status === 'PENDING_APPROVAL' ? 'PENDING APPROVAL' :
+                         req.status === 'APPROVED' ? 'PENDING CHECKOUT' :
+                         req.status === 'READY_FOR_PICKUP' ? 'PENDING CHECKOUT' :
+                         (req.status === 'CHECKED_OUT') ? 'COLLECTED' :
+                         req.status}
+                      </span>
+                    </div>
+
+                    <div className="bg-black/30 rounded-xl p-4 border border-white/5 mb-5">
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="font-bold text-blue-400 text-sm break-words flex-1 pr-4 leading-tight">{req.component}</div>
+                        {req.quantity && <div className="text-zinc-400 text-xs font-mono bg-zinc-800 px-2 py-1 rounded">Qty: {req.quantity}</div>}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="text-zinc-500 flex flex-col gap-1"><span className="text-[10px] uppercase tracking-wider text-zinc-600 font-bold">Request Date</span><span className="text-zinc-300 font-mono">{req.requestDate}</span></div>
+                        <div className="text-zinc-500 flex flex-col gap-1"><span className="text-[10px] uppercase tracking-wider text-zinc-600 font-bold">Duration</span><span className="text-zinc-300 font-mono">{req.duration} Days</span></div>
+                        <div className="text-zinc-500 font-mono text-[10px] mt-2 text-zinc-600 col-span-2">ID: #{req.id}</div>
+                      </div>
+                      {(() => {
+                        const penaltyInfo = calculatePenalty(req.requestDate, req.duration, req.component);
+                        if (req.status === 'CHECKED_OUT' && penaltyInfo.isDelayed) {
+                          return (
+                            <div className="mt-3 bg-red-950/30 border border-red-900/50 p-2.5 rounded-lg flex items-start gap-2.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse mt-1 shrink-0"></span>
+                              <div>
+                                <div className="text-red-400 text-[10px] font-bold uppercase tracking-wider">Late by {penaltyInfo.delayDays} days</div>
+                                <div className="text-red-300 text-xs font-medium mt-0.5">Estimated Penalty: ₹{penaltyInfo.penalty}</div>
                               </div>
                             </div>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                  ));
-                })()}
-              </tbody>
-            </table>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-end gap-2 mt-auto">
+                    {req.status === 'PENDING_APPROVAL' && (
+                      <div className="flex gap-2 w-full sm:w-auto">
+                        <button onClick={() => handleApprove(req.id)} className="flex-1 sm:flex-none px-4 py-2.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl text-xs font-bold transition text-center">Approve</button>
+                        <button onClick={() => handleReject(req.id)} className="flex-1 sm:flex-none px-4 py-2.5 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-500/30 rounded-xl text-xs font-bold transition text-center">Reject</button>
+                      </div>
+                    )}
+                    {req.status === 'APPROVED' && (
+                      <button onClick={() => handleCheckout(req.id)} className="w-full sm:w-auto px-5 py-2.5 bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl text-xs font-bold transition text-center">Mark Checked Out</button>
+                    )}
+                    {req.status === 'READY_FOR_PICKUP' && (
+                      <div className="flex gap-2 w-full sm:w-auto flex-col sm:flex-row">
+                        {req.geotagImageUrl && (
+                          <button
+                            onClick={() => {
+                              setPreviewImgUrl(req.geotagImageUrl || null);
+                              setPreviewLatitude(req.latitude || null);
+                              setPreviewLongitude(req.longitude || null);
+                              setPreviewType('COLLECT');
+                              setPreviewModalOpen(true);
+                            }}
+                            className="flex-1 sm:flex-none px-3 py-2.5 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/30 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                            View Proof
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleCheckout(req.id)}
+                          className="flex-1 sm:flex-none px-5 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-black rounded-xl text-xs font-black transition-colors shadow-[0_0_15px_rgba(6,182,212,0.3)] text-center"
+                        >
+                          Confirm Handover
+                        </button>
+                      </div>
+                    )}
+                    {(req.status === 'CHECKED_OUT') && (
+                      <button onClick={() => handleReturn(req.id)} className="w-full sm:w-auto px-5 py-2.5 bg-zinc-800 text-white hover:bg-zinc-700 border border-zinc-700 rounded-xl text-xs font-bold transition text-center">Mark Returned</button>
+                    )}
+                    {req.status === 'RETURN_REQUESTED' && (
+                      <div className="flex gap-2 w-full sm:w-auto flex-col sm:flex-row">
+                        {req.afterImgUrl && (
+                          <button
+                            onClick={() => {
+                              setPreviewImgUrl(req.afterImgUrl || null);
+                              setPreviewLatitude(req.latitude || null);
+                              setPreviewLongitude(req.longitude || null);
+                              setPreviewType('RETURN');
+                              setPreviewModalOpen(true);
+                            }}
+                            className="flex-1 sm:flex-none px-3 py-2.5 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/30 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                            View Proof
+                          </button>
+                        )}
+                        <button onClick={() => handleReturn(req.id)} className="flex-1 sm:flex-none px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-black rounded-xl text-xs font-black transition-colors shadow-[0_0_15px_rgba(245,158,11,0.3)] text-center">Accept Return</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ));
+            })()}
           </div>
         </div>
       )}
@@ -1078,7 +1449,7 @@ export default function AdminDashboard() {
                 <svg className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
               </div>
               <div className="text-xl sm:text-2xl font-black mt-2 text-indigo-400">
-                {requests.filter(req => (req.department === adminDept || req.studentDepartment === adminDept) && ['Active', 'BORROWED', 'PENDING_RETURN'].includes(req.status)).reduce((sum, req) => sum + (req.quantity || 1), 0)}
+                {requests.filter(req => (req.department === adminDept || req.studentDepartment === adminDept) && ['CHECKED_OUT', 'RETURN_REQUESTED'].includes(req.status)).reduce((sum, req) => sum + (req.quantity || 1), 0)}
               </div>
             </button>
             <div className="bg-zinc-900 border border-zinc-800 p-3 sm:p-4 rounded-xl flex flex-col justify-between hover:border-rose-500/30 transition-colors">
@@ -1113,12 +1484,13 @@ export default function AdminDashboard() {
                 setEditingDeviceId(null);
                 setNewDevice({
                   name: '',
-                  department: adminDept,
+                  department: adminDept || 'EDL',
                   total: 1,
                   desc: '',
                   location: 'Main Lab',
                   photoUrl: '',
-                  valueTier: 'MEDIUM'
+                  valueTier: 'MEDIUM',
+                  trackingType: 'QUANTITY'
                 });
                 setShowAddModal(true);
               }}
@@ -1172,7 +1544,8 @@ export default function AdminDashboard() {
                               desc: item.desc,
                               location: item.location,
                               photoUrl: item.photo_url || '',
-                              valueTier: item.value_tier || 'MEDIUM'
+                              valueTier: item.value_tier || 'MEDIUM',
+                              trackingType: item.tracking_type || 'QUANTITY'
                             });
                             setShowAddModal(true);
                           }}
@@ -1348,6 +1721,250 @@ export default function AdminDashboard() {
             </div>
           </div>
 
+          {/* Advanced Analytics Dashboards */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+            {/* Left Column: Utilization & Inventory Health */}
+            <div className="space-y-6">
+              
+              {/* Utilization / Most Borrowed */}
+              <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-lg text-white">Utilization</h3>
+                    <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">Most Borrowed Components</p>
+                  </div>
+                  <div className="w-8 h-8 rounded-full bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
+                    <svg className="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                  </div>
+                </div>
+                  {(() => {
+                    // Only count components that are ACTUALLY checked out (physically with student)
+                    const activeStatuses = ['CHECKED_OUT'];
+                    const safeReqs = Array.isArray(requests) ? requests : [];
+                    const deptInv = inventory.filter(i => i.department === adminDept && i.total > 0);
+
+                    // Count checked-out quantity per component name from real requests
+                    const checkedOutMap: Record<string, number> = {};
+                    safeReqs.forEach(r => {
+                      if (
+                        activeStatuses.includes(r.status) &&
+                        (r.department === adminDept || r.studentDepartment === adminDept) &&
+                        r.component
+                      ) {
+                        checkedOutMap[r.component] = (checkedOutMap[r.component] || 0) + (r.quantity || 1);
+                      }
+                    });
+
+                    const utilization = deptInv.map(i => ({
+                      name: i.name,
+                      percent: i.total > 0 ? Math.min(100, Math.round(((checkedOutMap[i.name] || 0) / i.total) * 100)) : 0
+                    })).filter(i => i.percent > 0).sort((a, b) => b.percent - a.percent).slice(0, 3);
+
+                    if (utilization.length === 0) {
+                      return (
+                        <div className="flex flex-col items-center justify-center py-6 text-center">
+                          <div className="text-zinc-600 text-xs font-mono uppercase tracking-widest">No active checkouts</div>
+                          <div className="text-zinc-700 text-[10px] mt-1">Items will appear here once checked out</div>
+                        </div>
+                      );
+                    }
+
+                    return utilization.map((item, idx) => (
+                      <div key={idx}>
+                        <div className="flex justify-between text-sm font-bold text-zinc-300 mb-1.5">
+                          <span>{item.name}</span>
+                          <span className="text-indigo-400 font-mono">{item.percent}%</span>
+                        </div>
+                        <div className="w-full bg-zinc-950 rounded-full h-2 overflow-hidden border border-zinc-800">
+                          <div className="bg-gradient-to-r from-indigo-500 to-purple-500 h-2 rounded-full" style={{ width: `${item.percent}%` }}></div>
+                        </div>
+                      </div>
+                    ));
+                  })()}
+
+              </div>
+
+              {/* Inventory Health */}
+              <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-lg text-white">Inventory Health</h3>
+                    <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">Overall Stock Distribution</p>
+                  </div>
+                  <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
+                    <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  </div>
+                </div>
+                {(() => {
+                  const deptInv = inventory.filter(i => i.department === adminDept);
+                  const totalStock = deptInv.reduce((acc, i) => acc + i.total, 0);
+                  const availableStock = deptInv.reduce((acc, i) => acc + i.available, 0);
+                  const borrowedStock = deptInv.reduce((acc, i) => acc + (i.total - i.available), 0);
+                  const repairItems = deptInv.filter(i => i.status === 'Under Repair').length;
+                  const damagedReqs = Array.isArray(requests) ? requests.filter(r => r.isDamaged && (r.department === adminDept || r.studentDepartment === adminDept)).length : 0;
+
+                  const availPct = totalStock > 0 ? Math.round((availableStock / totalStock) * 100) : 0;
+                  const borrowPct = totalStock > 0 ? Math.round((borrowedStock / totalStock) * 100) : 0;
+                  const repairPct = deptInv.length > 0 ? Math.round((repairItems / deptInv.length) * 100) : 0;
+                  const damagePct = (Array.isArray(requests) ? requests.filter(r => r.department === adminDept || r.studentDepartment === adminDept).length : 0) > 0
+                    ? Math.round((damagedReqs / requests.filter(r => r.department === adminDept || r.studentDepartment === adminDept).length) * 100)
+                    : 0;
+
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between p-3 bg-zinc-950/50 rounded-xl border border-zinc-800">
+                        <div className="flex items-center gap-3">
+                          <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
+                          <span className="text-sm font-bold text-zinc-300">Available</span>
+                        </div>
+                        <span className="text-sm font-mono font-bold text-emerald-400">{availPct}%</span>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-zinc-950/50 rounded-xl border border-zinc-800">
+                        <div className="flex items-center gap-3">
+                          <div className="w-3 h-3 rounded-full bg-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.5)]"></div>
+                          <span className="text-sm font-bold text-zinc-300">Borrowed</span>
+                        </div>
+                        <span className="text-sm font-mono font-bold text-cyan-400">{borrowPct}%</span>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-zinc-950/50 rounded-xl border border-zinc-800">
+                        <div className="flex items-center gap-3">
+                          <div className="w-3 h-3 rounded-full bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]"></div>
+                          <span className="text-sm font-bold text-zinc-300">Under Repair</span>
+                        </div>
+                        <span className="text-sm font-mono font-bold text-amber-400">{repairPct}%</span>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-zinc-950/50 rounded-xl border border-zinc-800">
+                        <div className="flex items-center gap-3">
+                          <div className="w-3 h-3 rounded-full bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.5)]"></div>
+                          <span className="text-sm font-bold text-zinc-300">Damaged</span>
+                        </div>
+                        <span className="text-sm font-mono font-bold text-rose-400">{damagePct}%</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Right Column: Performance & Demand */}
+            <div className="space-y-6">
+              
+              {/* Approval Performance */}
+              <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6">
+                <div className="mb-5 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-lg text-white">Approval Performance</h3>
+                    <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">Time to process requests</p>
+                  </div>
+                  <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
+                    <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  </div>
+                </div>
+                
+                {(() => {
+                  const deptReqs = Array.isArray(requests)
+                    ? requests.filter(r => (r.department === adminDept || r.studentDepartment === adminDept) && r.history && r.history.length > 0)
+                    : [];
+                  // Compute approval times from history (time from creation to first APPROVED/REJECTED event)
+                  const approvalTimes: number[] = deptReqs.reduce((acc: number[], r: any) => {
+                    const createdAt = new Date(r.requestDate).getTime();
+                    const approvalEvent = r.history?.find((h: any) => h.newStatus === 'APPROVED' || h.newStatus === 'REJECTED');
+                    if (approvalEvent) {
+                      const diffMin = Math.round((new Date(approvalEvent.changedAt).getTime() - createdAt) / 60000);
+                      if (diffMin >= 0) acc.push(diffMin);
+                    }
+                    return acc;
+                  }, []);
+                  const avgMin = approvalTimes.length > 0 ? Math.round(approvalTimes.reduce((a, b) => a + b, 0) / approvalTimes.length) : 0;
+                  const fastestMin = approvalTimes.length > 0 ? Math.min(...approvalTimes) : 0;
+                  const longestMin = approvalTimes.length > 0 ? Math.max(...approvalTimes) : 0;
+                  const fmtTime = (min: number) => min >= 60 ? `${Math.round(min / 60)} hr` : `${min} min`;
+                  return (
+                    <div className="flex flex-col gap-4">
+                      <div className="bg-zinc-950/50 p-4 rounded-xl border border-zinc-800 flex items-center justify-between">
+                        <span className="text-sm font-bold text-zinc-400">Average approval time</span>
+                        <span className="text-2xl font-black font-mono text-amber-400">{avgMin >= 60 ? Math.round(avgMin/60) : avgMin} <span className="text-sm font-bold text-amber-500/50">{avgMin >= 60 ? 'hr' : 'min'}</span></span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-zinc-950/50 p-4 rounded-xl border border-zinc-800 flex flex-col items-center justify-center text-center">
+                          <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">Fastest</span>
+                          <span className="text-xl font-black font-mono text-emerald-400">{fastestMin >= 60 ? Math.round(fastestMin/60) : fastestMin} <span className="text-xs font-bold text-emerald-500/50">{fastestMin >= 60 ? 'hr' : 'min'}</span></span>
+                        </div>
+                        <div className="bg-zinc-950/50 p-4 rounded-xl border border-zinc-800 flex flex-col items-center justify-center text-center">
+                          <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">Longest</span>
+                          <span className="text-xl font-black font-mono text-rose-400">{longestMin >= 60 ? Math.round(longestMin/60) : longestMin} <span className="text-xs font-bold text-rose-500/50">{longestMin >= 60 ? 'hr' : 'min'}</span></span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Return Performance & Demand */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                {/* Return Performance */}
+                <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 flex flex-col">
+                  <h3 className="font-bold text-white mb-1">Return Performance</h3>
+                  <p className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider mb-4">Student Compliance</p>
+                  
+                  <div className="flex-1 flex flex-col justify-center gap-4">
+                    {(() => {
+                      const returnedReqs = Array.isArray(requests)
+                        ? requests.filter(r => (r.department === adminDept || r.studentDepartment === adminDept) && r.status === 'RETURNED' && r.returnedAt && r.requestDate && r.duration)
+                        : [];
+                      const onTimeCount = returnedReqs.filter(r => {
+                        const dueMs = new Date(r.requestDate).getTime() + (r.duration || 7) * 86400000;
+                        return new Date(r.returnedAt!).getTime() <= dueMs;
+                      }).length;
+                      const overdueCount = returnedReqs.length - onTimeCount;
+                      const onTimePct = returnedReqs.length > 0 ? Math.round((onTimeCount / returnedReqs.length) * 100) : 0;
+                      const overduePct = returnedReqs.length > 0 ? Math.round((overdueCount / returnedReqs.length) * 100) : 0;
+                      return (
+                        <>
+                          <div>
+                            <div className="flex justify-between text-xs font-bold mb-1">
+                              <span className="text-emerald-400">On-time</span>
+                              <span className="font-mono text-emerald-400">{onTimePct}%</span>
+                            </div>
+                            <div className="w-full bg-zinc-950 rounded-full h-1.5 border border-zinc-800">
+                              <div className="bg-emerald-500 h-1.5 rounded-full transition-all" style={{ width: `${onTimePct}%` }}></div>
+                            </div>
+                          </div>
+                          <div>
+                            <div className="flex justify-between text-xs font-bold mb-1">
+                              <span className="text-rose-400">Overdue</span>
+                              <span className="font-mono text-rose-400">{overduePct}%</span>
+                            </div>
+                            <div className="w-full bg-zinc-950 rounded-full h-1.5 border border-zinc-800">
+                              <div className="bg-rose-500 h-1.5 rounded-full transition-all" style={{ width: `${overduePct}%` }}></div>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* Demand */}
+                <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 flex flex-col relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-purple-500/5 blur-xl pointer-events-none"></div>
+                  <h3 className="font-bold text-white mb-1">Demand Spike</h3>
+                  <p className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider mb-4">M-o-M Growth</p>
+                  
+                  <div className="flex-1 flex items-center justify-center">
+                    <div className="text-center">
+                      <div className={`text-3xl font-black font-mono ${analyticsStats.curr.total > analyticsStats.prev.total ? 'text-purple-400' : analyticsStats.curr.total < analyticsStats.prev.total ? 'text-rose-400' : 'text-zinc-400'}`}>
+                        {totalChangeStr}
+                      </div>
+                      <div className="text-xs text-zinc-400 mt-1">This month vs last ({analyticsStats.prev.total} → {analyticsStats.curr.total})</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
           {/* Graph and Feed Section */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Interactive Graph Component */}
@@ -1452,10 +2069,6 @@ export default function AdminDashboard() {
                       <span className="text-zinc-500">Reservations:</span>
                       <span className="font-mono text-fuchsia-400 font-bold">{analyticsChartData[hoveredAnalyticsIdx].reservations}</span>
                     </div>
-                    <div className="flex justify-between gap-6">
-                      <span className="text-zinc-500">Lab Passes:</span>
-                      <span className="font-mono text-purple-400 font-bold">{analyticsChartData[hoveredAnalyticsIdx].labAccess}</span>
-                    </div>
                     <div className="flex justify-between gap-6 border-t border-zinc-900 pt-1 font-bold">
                       <span className="text-zinc-300">Total Updates:</span>
                       <span className="font-mono text-cyan-400">{analyticsChartData[hoveredAnalyticsIdx].total}</span>
@@ -1504,7 +2117,7 @@ export default function AdminDashboard() {
                     <div key={idx} className="bg-zinc-950/40 border border-zinc-850 p-3 rounded-xl flex flex-col gap-1.5 hover:border-zinc-805 transition">
                       <div className="flex justify-between items-start gap-2">
                         <span className="font-medium text-white text-xs leading-tight">{activity.title}</span>
-                        <span className={`px-1.5 py-0.5 rounded-[4px] text-[9px] font-bold border uppercase shrink-0 ${activity.status.includes('Approved') || activity.status === 'Ready for Collection' || activity.status === 'APPROVED' || activity.status === 'Active'
+                        <span className={`px-1.5 py-0.5 rounded-[4px] text-[9px] font-bold border uppercase shrink-0 ${activity.status.includes('Approved') || activity.status === 'READY_FOR_PICKUP' || activity.status === 'APPROVED' || activity.status === 'CHECKED_OUT'
                           ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                           : activity.status.includes('Reject') || activity.status.includes('DENIED')
                             ? 'bg-red-500/10 text-red-400 border-red-500/20'
@@ -1612,6 +2225,20 @@ export default function AdminDashboard() {
                       <option value="LOW">LOW (Auto-Approve)</option>
                       <option value="MEDIUM">MEDIUM (Admin)</option>
                       <option value="HIGH">HIGH (Admin + HOD)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="block text-[10px] font-mono text-zinc-400 mb-1.5 uppercase tracking-wider text-purple-400">Tracking Type</label>
+                    <select
+                      value={newDevice.trackingType}
+                      onChange={e => setNewDevice({ ...newDevice, trackingType: e.target.value })}
+                      className="w-full bg-zinc-950 border border-purple-500/30 focus:border-purple-500 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 transition-all font-mono appearance-none"
+                    >
+                      <option value="QUANTITY">QUANTITY TRACKING</option>
+                      <option value="ASSET">ASSET (QR) TRACKING</option>
                     </select>
                   </div>
                 </div>
@@ -1774,116 +2401,114 @@ export default function AdminDashboard() {
             </button>
           </div>
 
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden overflow-x-auto">
-            <table className="w-full text-left text-sm min-w-[600px]">
-              <thead className="bg-zinc-800/50 text-zinc-400 uppercase text-xs font-semibold">
-                <tr>
-                  <th className="px-6 py-4 w-1/4">Student Info</th>
-                  <th className="px-6 py-4">Requested Components</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800">
-                {(() => {
-                  const currentStatuses = ['PENDING', 'APPROVED', 'Pending HOD', 'Pending Renewal HOD', 'Approved by HOD', 'Ready for Collection', 'Active', 'BORROWED', 'PENDING_RETURN', 'PENDING_COLLECTION'];
-                  const groupedRequests = requests
-                    .filter(req => (req.department === adminDept || req.studentDepartment === adminDept) && (req.studentDepartment === studentDeptFilter || !studentDeptFilter) && req.section === sectionFilter && (!scannedUsnFilter || req.usn === scannedUsnFilter))
-                    .filter(req => sectionTrackingTab === 'CURRENT' ? currentStatuses.includes(req.status) : !currentStatuses.includes(req.status))
-                    .filter(req => {
-                      if (!sectionStartDate && !sectionEndDate) return true;
-                      const reqDate = new Date(req.requestDate).getTime();
-                      const start = sectionStartDate ? new Date(sectionStartDate).getTime() : 0;
-                      // Include the whole end date by adding 1 day (86400000 ms) or just check up to end of that day.
-                      // Or since req.requestDate is just YYYY-MM-DD, a direct timestamp comparison works if end is parsed.
-                      const end = sectionEndDate ? new Date(sectionEndDate).getTime() : Infinity;
-                      return reqDate >= start && reqDate <= end;
-                    })
-                    .filter(req => {
-                      if (!sectionSearchQuery.trim()) return true;
-                      const query = sectionSearchQuery.toLowerCase();
-                      const name = req.studentName || '';
-                      const usnVal = req.usn || '';
-                      return name.toLowerCase().includes(query) || usnVal.toLowerCase().includes(query);
-                    })
-                    .reduce((acc, req) => {
-                      const key = `${req.usn}_${req.requestDate}`;
-                      if (!acc[key]) {
-                        acc[key] = {
-                          groupId: key,
-                          studentName: req.studentName,
-                          usn: req.usn,
-                          requestDate: req.requestDate,
-                          items: []
-                        };
-                      }
-                      acc[key].items.push(req);
-                      return acc;
-                    }, {} as Record<string, { groupId: string, studentName: string, usn: string, requestDate: string, items: RequestItem[] }>);
+          {/* Redesigned Section Grouping */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+            {(() => {
+              // Group all requests in the current filter by Student (USN)
+              const relevantRequests = requests
+                .filter(req => (req.department === adminDept || req.studentDepartment === adminDept) && (req.studentDepartment === studentDeptFilter || !studentDeptFilter) && req.section === sectionFilter && (!scannedUsnFilter || req.usn === scannedUsnFilter))
+                .filter(req => {
+                  if (!sectionStartDate && !sectionEndDate) return true;
+                  const reqDate = new Date(req.requestDate).getTime();
+                  const start = sectionStartDate ? new Date(sectionStartDate).getTime() : 0;
+                  const end = sectionEndDate ? new Date(sectionEndDate).getTime() : Infinity;
+                  return reqDate >= start && reqDate <= end;
+                })
+                .filter(req => {
+                  if (!sectionSearchQuery.trim()) return true;
+                  const query = sectionSearchQuery.toLowerCase();
+                  return (req.studentName || '').toLowerCase().includes(query) || (req.usn || '').toLowerCase().includes(query);
+                });
 
-                  const groupedRequestsArray = Object.values(groupedRequests);
-
-                  if (groupedRequestsArray.length === 0) {
-                    return (
-                      <tr>
-                        <td colSpan={2} className="px-6 py-8 text-center text-zinc-500">No requests found for this section.</td>
-                      </tr>
-                    );
+              // Group by USN
+              const studentsMap = relevantRequests.reduce((acc, req) => {
+                if (!acc[req.usn]) {
+                  acc[req.usn] = {
+                    usn: req.usn,
+                    name: req.studentName,
+                    activeLoans: 0,
+                    dueSoon: 0,
+                    overdue: 0,
+                    requests: []
+                  };
+                }
+                
+                acc[req.usn].requests.push(req);
+                
+                if (req.status === 'CHECKED_OUT') {
+                  acc[req.usn].activeLoans++;
+                  const penaltyInfo = calculatePenalty(req.requestDate, req.duration, req.component);
+                  if (penaltyInfo.isDelayed) {
+                    acc[req.usn].overdue++;
+                  } else {
+                    // Check if due soon (e.g. 1 day left) - For simplicity we just use active but not delayed
+                    // In a real app we'd compare dates. We'll mock it if duration is approaching.
+                    acc[req.usn].dueSoon++;
                   }
+                }
+                return acc;
+              }, {} as Record<string, any>);
 
-                  return groupedRequestsArray.map(group => (
-                    <tr key={group.groupId} className="hover:bg-zinc-800/30 transition-colors">
-                      <td className="px-6 py-4 align-top border-r border-zinc-800/50">
-                        <div className="font-medium text-white text-base">{group.studentName}</div>
-                        <div className="text-zinc-500 font-mono text-xs mt-1">{group.usn}</div>
-                        <div className="text-zinc-500 text-xs mt-3 flex items-center gap-1.5">
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                          Requested: {group.requestDate}
-                        </div>
-                        <div className="text-cyan-400 text-xs mt-2 font-bold uppercase tracking-widest">
-                          {group.items.length} Item{group.items.length > 1 ? 's' : ''}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="space-y-3">
-                          {group.items.map(req => {
-                            const isUnreturned = req.status !== 'Returned' && req.status !== 'RETURNED';
-                            return (
-                              <div key={req.id} className={`flex flex-col gap-2.5 bg-zinc-950/50 p-3.5 rounded-xl border ${isUnreturned ? 'border-rose-900/50' : 'border-zinc-800/80'} transition-colors`}>
-                                <div className="flex justify-between items-start">
-                                  <div className="flex-1">
-                                    <div className="font-bold text-blue-400 text-sm flex items-center gap-2">
-                                      {req.component}
-                                      <span className="text-zinc-600 font-mono text-[10px] bg-zinc-900 px-1.5 py-0.5 rounded">#{req.id}</span>
-                                    </div>
-                                    {!isUnreturned && req.returnedAt && (
-                                      <div className="text-[10px] text-zinc-500 font-mono flex items-center gap-1 mt-2">
-                                        <svg className="w-3 h-3 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                        Returned at: {new Date(req.returnedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })}
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-5 ml-4">
-                                    {isUnreturned ? (
-                                      <span className="px-2 py-1 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded text-[10px] font-black uppercase tracking-widest flex items-center w-fit gap-1.5 shrink-0">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
-                                        Unreturned ({req.status === 'PENDING_COLLECTION' ? 'PENDING CHECKOUT' : req.status})
-                                      </span>
-                                    ) : (
-                                      <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded text-[10px] font-black uppercase tracking-widest shrink-0">
-                                        Returned
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
+              const studentsArray = Object.values(studentsMap);
+              
+              // Depending on 'CURRENT' or 'COMPLETED' tab, we might only want to show students who have relevant requests
+              // Let's filter students who actually have active loans if CURRENT, or any history if COMPLETED
+              const displayStudents = studentsArray.filter(s => sectionTrackingTab === 'CURRENT' ? s.activeLoans > 0 : true);
+
+              return (
+                <>
+                  <div className="mb-6 pb-6 border-b border-zinc-800">
+                    <h3 className="text-2xl font-black text-white">{studentDeptFilter} – Section {sectionFilter}</h3>
+                    <div className="text-sm font-bold text-zinc-500 mt-1">
+                      {sectionTrackingTab === 'CURRENT' ? `Students with active loans: ${displayStudents.length}` : `Students with tracking history: ${displayStudents.length}`}
+                    </div>
+                  </div>
+
+                  {displayStudents.length === 0 ? (
+                    <div className="py-12 text-center text-zinc-500 font-mono text-sm uppercase tracking-wider">
+                      No students found matching this criteria.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {displayStudents.map((student) => (
+                        <div
+                          key={student.usn}
+                          onClick={() => setSelectedStudentForDetails({ usn: student.usn, name: student.name })}
+                          className="bg-zinc-950 border border-zinc-800 hover:border-cyan-500/50 rounded-xl p-5 cursor-pointer transition-all group hover:shadow-[0_0_20px_rgba(6,182,212,0.15)] flex flex-col justify-between"
+                        >
+                          <div>
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h4 className="font-bold text-white text-base group-hover:text-cyan-400 transition-colors">{student.name}</h4>
+                                <div className="text-xs text-zinc-500 font-mono mt-0.5">{student.usn}</div>
                               </div>
-                            );
-                          })}
+                              <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 group-hover:bg-cyan-500/10 group-hover:text-cyan-400 transition-colors">
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="mt-5 grid grid-cols-3 gap-2 border-t border-zinc-900 pt-4">
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-600 mb-1">Active</span>
+                              <span className="text-xl font-black text-cyan-400">{student.activeLoans}</span>
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-600 mb-1">Due Soon</span>
+                              <span className="text-xl font-black text-amber-400">{student.dueSoon}</span>
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-600 mb-1">Overdue</span>
+                              <span className="text-xl font-black text-rose-400">{student.overdue}</span>
+                            </div>
+                          </div>
                         </div>
-                      </td>
-                    </tr>
-                  ));
-                })()}
-              </tbody>
-            </table>
+                      ))}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -2038,11 +2663,22 @@ export default function AdminDashboard() {
                 <input
                   type="number"
                   min="1"
+                  max={approveModal.requestedQty}
                   value={approveQty}
                   onChange={e => setApproveQty(parseInt(e.target.value) || 1)}
                   className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-cyan-500 transition-colors"
                 />
                 <p className="text-zinc-600 text-[11px] mt-1">Student requested: {approveModal.requestedQty}</p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Collection Date</label>
+                <input
+                  type="date"
+                  value={approveDate}
+                  onChange={e => handleApproveDateChange(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-cyan-500 transition-colors"
+                />
+                {approveModal.collectionDate && <p className="text-zinc-600 text-[11px] mt-1">Student specified: {approveModal.collectionDate}</p>}
               </div>
               <div>
                 <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Collection Time / Slot</label>
@@ -2115,6 +2751,106 @@ export default function AdminDashboard() {
         expectedComponentName={checkoutScanExpected}
         onScanSuccess={handleScanSuccess}
       />
+
+      {/* Redesigned Student Details Modal */}
+      {selectedStudentForDetails && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-6 md:p-8 w-full max-w-2xl shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-white mb-1">Student Details</h3>
+                <p className="text-zinc-500 text-xs font-mono">{selectedStudentForDetails.usn}</p>
+              </div>
+              <button onClick={() => setSelectedStudentForDetails(null)} className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg hover:bg-zinc-800 hover:text-white transition cursor-pointer text-zinc-400">✕</button>
+            </div>
+
+            {(() => {
+              const studentReqs = requests.filter(r => r.usn === selectedStudentForDetails.usn);
+              const active = studentReqs.filter(r => r.status === 'CHECKED_OUT' || r.status === 'RETURN_REQUESTED');
+              const overdueReqs = active.filter(r => calculatePenalty(r.requestDate, r.duration, r.component).isDelayed);
+              const completed = studentReqs.filter(r => r.status === 'RETURNED' || r.status === 'COMPLETED');
+              const currentRequests = studentReqs.filter(r => r.status === 'PENDING_APPROVAL' || r.status === 'APPROVED' || r.status === 'READY_FOR_PICKUP');
+
+              return (
+                <div className="space-y-6">
+                  {/* Profile Summary */}
+                  <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl flex items-center gap-4">
+                    <div className="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center border border-zinc-700">
+                      <svg className="w-6 h-6 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-white">{selectedStudentForDetails.name}</h4>
+                      <div className="text-xs text-zinc-400 font-mono mt-0.5">{studentReqs[0]?.studentDepartment} - Section {studentReqs[0]?.section}</div>
+                    </div>
+                  </div>
+
+                  {/* Summary Stats in requested format */}
+                  <div className="grid grid-cols-2 gap-x-8 gap-y-2 mb-8 font-mono text-sm max-w-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="text-zinc-400">TOTAL REQUESTS</span>
+                      <span className="text-white font-bold">{studentReqs.length}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-zinc-400">COMPLETED</span>
+                      <span className="text-white font-bold">{completed.length}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-zinc-400">ACTIVE</span>
+                      <span className="text-white font-bold">{active.length}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-zinc-400">OVERDUE</span>
+                      <span className="text-rose-400 font-bold">{overdueReqs.length}</span>
+                    </div>
+                  </div>
+
+                  {/* Borrow History */}
+                  <div>
+                    <h5 className="font-bold text-white text-lg mb-4">Borrow History</h5>
+                    <div className="space-y-4">
+                      {studentReqs.map(req => {
+                        const penaltyInfo = calculatePenalty(req.requestDate, req.duration, req.component);
+                        const isCompleted = req.status === 'COMPLETED' || req.status === 'RETURNED';
+                        
+                        return (
+                          <div key={req.id} className="border-b border-zinc-800/50 pb-4 last:border-0 last:pb-0">
+                            <div className="font-bold text-blue-400 mb-1">{req.component}</div>
+                            {isCompleted ? (
+                              <div className="text-emerald-400 text-sm flex items-center gap-1.5">
+                                Returned on time ✓
+                              </div>
+                            ) : req.status === 'CHECKED_OUT' && penaltyInfo.isDelayed ? (
+                              <div className="text-rose-400 text-sm flex items-center gap-1.5">
+                                Overdue {penaltyInfo.delayDays} day{penaltyInfo.delayDays > 1 ? 's' : ''} ⚠
+                              </div>
+                            ) : req.status === 'CHECKED_OUT' ? (
+                              <div className="text-amber-400 text-sm flex items-center gap-1.5">
+                                Active loan
+                              </div>
+                            ) : req.status === 'RETURN_REQUESTED' ? (
+                              <div className="text-amber-500 text-sm flex items-center gap-1.5">
+                                Return Requested
+                              </div>
+                            ) : req.status === 'REJECTED' || req.status === 'CANCELLED' ? (
+                              <div className="text-red-500 text-sm flex items-center gap-1.5">
+                                {req.status === 'REJECTED' ? 'Rejected ❌' : 'Cancelled 🚫'}
+                              </div>
+                            ) : (
+                              <div className="text-zinc-400 text-sm flex items-center gap-1.5">
+                                Pending ({req.status})
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
     </div>
   );

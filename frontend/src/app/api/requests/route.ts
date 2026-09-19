@@ -26,7 +26,8 @@ export async function GET() {
       .select(`
         *,
         users(name, usn),
-        components(name, department, lab_location, value_tier)
+        components(name, department, lab_location, value_tier, tracking_type),
+        reservation_status_history(old_status, new_status, changed_at, note, changed_by, users(name))
       `)
       .order('created_at', { ascending: false });
 
@@ -50,19 +51,28 @@ export async function GET() {
       isDamaged: res.is_damaged === true,
       returnedAt: res.returned_at,
       valueTier: res.components?.value_tier,
+      trackingType: res.components?.tracking_type || 'QUANTITY',
       quantity: res.quantity || 1,
       collectionTime: res.collection_time || null,
       geotagImageUrl: res.geotag_image_url || null,
       afterImgUrl: res.after_img_url || null,
       latitude: res.latitude || null,
       longitude: res.longitude || null,
-      images: [res.geotag_image_url, res.after_img_url].filter(Boolean)
+      images: [res.geotag_image_url, res.after_img_url].filter(Boolean),
+      history: res.reservation_status_history?.map((h: any) => ({
+        oldStatus: h.old_status,
+        newStatus: h.new_status,
+        changedAt: h.changed_at,
+        note: h.note,
+        changedBy: h.users?.name || 'System'
+      })) || [],
+      assignedAssetId: res.component_instances?.[0]?.serial_number || (res.assigned_serial_numbers && res.assigned_serial_numbers.length > 0 ? res.assigned_serial_numbers[0] : null)
     }));
 
     return NextResponse.json(formattedData);
-  } catch (err) {
+  } catch (err: any) {
     console.error('[requests GET]', err);
-    return NextResponse.json({ error: 'Failed to fetch requests' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to fetch requests', details: err.message }, { status: 500 });
   }
 }
 
@@ -72,22 +82,52 @@ export async function PATCH(request: Request) {
   if (!payload) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
   }
-  const canMutate =
-    payload.roleId === ROLES.ADMIN ||
-    payload.roleId === ROLES.HOD ||
-    payload.roleId === ROLES.SUPER_ADMIN;
-  if (!canMutate) {
-    return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
-  }
-
   try {
     const body = await request.json();
-    const { id, status, images, geotag, is_damaged, return_condition, returnCondition, quantity, collectionTime, dueDate } = body;
+    const { id, status, images, geotag, is_damaged, return_condition, returnCondition, quantity, collectionTime, dueDate, date, rejectionReason } = body;
+
+    const canMutate =
+      payload.roleId === ROLES.ADMIN ||
+      payload.roleId === ROLES.HOD ||
+      payload.roleId === ROLES.SUPER_ADMIN ||
+      (payload.roleId === ROLES.STUDENT && ['CANCELLED', 'READY_FOR_PICKUP', 'RETURN_REQUESTED'].includes(status));
+      
+    if (!canMutate) {
+      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+    }
+    
+    // Fetch current state to manage inventory release and dates
+    const { data: currentReservation } = await supabase
+      .from('reservations')
+      .select('status, component_id, quantity, created_at, due_date')
+      .eq('reservation_id', id)
+      .single();
     
     const updates: any = { status };
     if (dueDate !== undefined) updates.due_date = dueDate;
-    if (quantity !== undefined) updates.quantity = quantity;
+    
+    let quantityDiff = 0;
+    if (quantity !== undefined) {
+      updates.quantity = quantity;
+      if (currentReservation && quantity < currentReservation.quantity) {
+        // Calculate how much stock to return to inventory if admin reduced the approved amount
+        quantityDiff = currentReservation.quantity - quantity;
+      }
+    }
     if (collectionTime !== undefined) updates.collection_time = collectionTime;
+
+    let noteToAppend = rejectionReason || '';
+    if (date !== undefined && currentReservation) {
+      const currentDateStr = currentReservation.created_at.split('T')[0];
+      if (date !== currentDateStr) {
+        updates.created_at = new Date(date).toISOString();
+        if (currentReservation.due_date && currentReservation.created_at) {
+          const durationTime = new Date(currentReservation.due_date).getTime() - new Date(currentReservation.created_at).getTime();
+          updates.due_date = new Date(new Date(updates.created_at).getTime() + durationTime).toISOString();
+        }
+        noteToAppend = noteToAppend ? `${noteToAppend}. Date changed to ${date}` : `Date changed to ${date}`;
+      }
+    }
     if (images && images.length > 0) {
        // Optional logic if you eventually add images to reservations
        updates.after_img_url = images[0]; 
@@ -105,7 +145,7 @@ export async function PATCH(request: Request) {
     }
     
     if (geotag) {
-      if (status === 'PENDING_RETURN') {
+      if (status === 'RETURN_REQUESTED') {
         updates.after_img_url = geotag.imageUrl;
       } else {
         updates.geotag_image_url = geotag.imageUrl;
@@ -119,14 +159,24 @@ export async function PATCH(request: Request) {
       .from('reservations')
       .update(updates)
       .eq('reservation_id', id)
-      .select('*, users(user_id, email, usn, trust_score), components(name)')
+      .select('*, users(user_id, email, usn), components(name)')
       .single();
 
     if (error) throw error;
 
+    // Insert history record if status changed or date changed
+    if (currentReservation && (status !== currentReservation.status || noteToAppend)) {
+      await supabase.from('reservation_status_history').insert([{
+        reservation_id: id,
+        old_status: currentReservation.status,
+        new_status: status || currentReservation.status,
+        changed_by: payload?.userId || null,
+        note: noteToAppend || null
+      }]);
+    }
 
     // Trigger Email Notification for Status Changes
-    if ((status === 'APPROVED' || status === 'PENDING_ADMIN' || status === 'REJECTED' || status === 'Ready for Collection' || status === 'RETURNED DAMAGED') && data.users) {
+    if ((status === 'APPROVED' || status === 'REJECTED' || status === 'READY_FOR_PICKUP' || status === 'RETURNED' || status === 'CHECKED_OUT') && data.users) {
        const userObj = Array.isArray(data.users) ? data.users[0] : data.users;
        const compObj = Array.isArray(data.components) ? data.components[0] : data.components;
        if (userObj && userObj.email) {
@@ -141,6 +191,38 @@ export async function PATCH(request: Request) {
        }
     }
 
+     // Release inventory if status changes to a terminal/cancelled state OR if admin reduced the approved quantity
+     if (currentReservation) {
+        const oldStatus = currentReservation.status;
+        const isReleasing = ['RETURNED', 'REJECTED', 'CANCELLED'].includes(status) && !['RETURNED', 'REJECTED', 'CANCELLED'].includes(oldStatus);
+        
+        let totalQuantityToRelease = 0;
+        
+        // 1. Full release if cancelled/rejected/returned
+        if (isReleasing) {
+           totalQuantityToRelease = currentReservation.quantity || 1;
+        } 
+        // 2. Partial release if admin reduced quantity during approval
+        else if (quantityDiff > 0 && status !== 'REJECTED' && status !== 'CANCELLED') {
+           totalQuantityToRelease = quantityDiff;
+        }
+        
+        if (totalQuantityToRelease > 0) {
+           const { data: comp } = await supabase
+             .from('components')
+             .select('available_quantity')
+             .eq('component_id', currentReservation.component_id)
+             .single();
+             
+           if (comp) {
+              await supabase
+                .from('components')
+                .update({ available_quantity: comp.available_quantity + totalQuantityToRelease })
+                .eq('component_id', currentReservation.component_id);
+           }
+        }
+     }
+
     return NextResponse.json({ success: true, item: data });
   } catch (err) {
     console.error('[requests PATCH]', err);
@@ -150,7 +232,7 @@ export async function PATCH(request: Request) {
 
 export async function POST(request: Request) {
   // Any authenticated user can create a reservation
-  let authUser = null;
+  let authUser: any = null;
   const payload = await verifySession(request);
   
   if (payload) {
@@ -196,7 +278,7 @@ export async function POST(request: Request) {
       // Find component ID and value_tier
       const { data: component, error: compError } = await supabase
         .from('components')
-        .select('component_id, value_tier')
+        .select('component_id, value_tier, available_quantity')
         .eq('name', item.name)
         .limit(1)
         .maybeSingle();
@@ -205,15 +287,20 @@ export async function POST(request: Request) {
         console.warn('Component not found:', item.name);
         continue;
       }
+      
+      const reqQty = item.quantity || 1;
+      if (component.available_quantity < reqQty) {
+        return NextResponse.json({ error: `Not enough stock available for ${item.name}. (Available: ${component.available_quantity})` }, { status: 400 });
+      }
 
       const tierUpper = (component.value_tier || 'MEDIUM').toUpperCase();
       let isLowTier = tierUpper === 'LOW';
       
-      let status = 'PENDING';
-      if (isLowTier) {
+      let status = 'PENDING_APPROVAL';
+      if (isLowTier && reqQty <= 10) {
         status = 'APPROVED';
       } else if (tierUpper === 'HIGH') {
-        status = 'Pending HOD';
+        status = 'PENDING_APPROVAL';
       }
       
       const collectionDate = date ? new Date(date) : new Date();
@@ -238,6 +325,21 @@ export async function POST(request: Request) {
         .single();
 
       if (resError) throw resError;
+      
+      await supabase
+        .from('components')
+        .update({ available_quantity: component.available_quantity - reqQty })
+        .eq('component_id', component.component_id);
+      
+      // Insert initial history record
+      await supabase.from('reservation_status_history').insert([{
+        reservation_id: reservation.reservation_id,
+        old_status: null,
+        new_status: status,
+        changed_by: authUser?.userId || authUser?.id || null,
+        note: 'Request created'
+      }]);
+        
       newReservations.push(reservation);
     }
 

@@ -56,6 +56,7 @@ export async function GET() {
         location:   item.lab_location,
         photo_url:  item.photo_url,
         value_tier: item.value_tier,
+        tracking_type: item.tracking_type || 'QUANTITY',
       }))
     );
   } catch (err) {
@@ -75,7 +76,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { name, department, total, desc, location, photoUrl, valueTier } = body;
+    const { name, department, total, desc, location, photoUrl, valueTier, trackingType } = body;
 
     if (!name || !department) {
       return NextResponse.json({ error: 'Name and department are required' }, { status: 400 });
@@ -92,6 +93,7 @@ export async function POST(request: Request) {
         lab_location:       location ?? 'Main Lab',
         photo_url:          photoUrl,
         value_tier:         valueTier ?? 'MEDIUM',
+        tracking_type:      trackingType ?? 'QUANTITY',
       }])
       .select();
 
@@ -115,7 +117,7 @@ export async function PATCH(request: Request) {
 
   try {
     const body = await request.json();
-    const { id, total, available, desc, photoUrl, valueTier } = body;
+    const { id, total, available, desc, photoUrl, valueTier, trackingType } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'Component ID is required' }, { status: 400 });
@@ -127,6 +129,7 @@ export async function PATCH(request: Request) {
     if (desc      !== undefined) updates.base_condition     = desc;
     if (photoUrl  !== undefined) updates.photo_url          = photoUrl;
     if (valueTier !== undefined) updates.value_tier         = valueTier;
+    if (trackingType !== undefined) updates.tracking_type      = trackingType;
 
     const { data, error } = await supabase
       .from('components')

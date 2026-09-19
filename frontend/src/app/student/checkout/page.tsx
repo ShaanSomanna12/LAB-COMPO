@@ -9,6 +9,7 @@ import ParticleNetwork from '@/components/ui/ParticleNetwork';
 import { siteConfig } from '@/config/site';
 import { Skeleton } from '@/components/ui/Skeleton';
 import RequisitionLetter from '@/components/RequisitionLetter';
+import { isWorkingDay } from '@/lib/dateValidator';
 
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] });
 
@@ -139,6 +140,16 @@ export default function StudentCheckout() {
     if (newQty > maxQty) newQty = maxQty;
 
     setCart(prev => prev.map(i => i.id === id ? { ...i, requestedQty: newQty } : i));
+  };
+
+  const handleDateChange = (val: string) => {
+    const { isValid, reason } = isWorkingDay(val);
+    if (!isValid) {
+      toast.error(reason);
+      setDate('');
+    } else {
+      setDate(val);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -622,7 +633,7 @@ export default function StudentCheckout() {
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Collection Date</label>
-                          <input required type="date" min={minDate} value={date} onChange={e => setDate(e.target.value)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 [color-scheme:dark] text-white font-medium" />
+                          <input required type="date" min={minDate} value={date} onChange={e => handleDateChange(e.target.value)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 [color-scheme:dark] text-white font-medium" />
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Collection Time</label>

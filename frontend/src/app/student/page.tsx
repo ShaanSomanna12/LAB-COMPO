@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { siteConfig } from '@/config/site';
+import ParticleNetwork from '@/components/ui/ParticleNetwork';
 
 export default function StudentAuth() {
   // Navigation & Step Tracking States
@@ -202,10 +203,10 @@ export default function StudentAuth() {
   };
 
   return (
-    <div className="relative min-h-screen bg-black flex flex-col justify-start md:justify-center pt-[calc(3rem+env(safe-area-inset-top,0px))] pb-12 md:py-12 px-4 sm:px-6 lg:px-8 selection:bg-violet-500/30 overflow-x-hidden">
-      {/* Background Glowing Ambient Orbs */}
-      <div className="absolute top-0 left-1/4 w-96 h-96 bg-violet-600/20 rounded-full mix-blend-screen filter blur-[128px] opacity-50 animate-pulse pointer-events-none" />
-      <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-fuchsia-600/10 rounded-full mix-blend-screen filter blur-[128px] opacity-50 pointer-events-none" />
+    <div className="relative min-h-screen bg-[#020617] flex flex-col justify-start md:justify-center pt-[calc(3rem+env(safe-area-inset-top,0px))] pb-12 md:py-12 px-4 sm:px-6 lg:px-8 selection:bg-cyan-500/30 overflow-x-hidden">
+      
+      {/* 3D Particle Network Background */}
+      <ParticleNetwork />
 
       {/* Header Block */}
       <div className="relative sm:mx-auto sm:w-full sm:max-w-md text-center z-10 flex flex-col items-center">

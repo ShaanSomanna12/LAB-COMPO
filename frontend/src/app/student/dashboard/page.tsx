@@ -26,8 +26,17 @@ export default function StudentDashboard() {
     section: string;
   } | null>(null);
 
+  // Dashboard Metrics
+  const [metrics, setMetrics] = useState({
+    active: 0,
+    pending: 0,
+    borrowed: 0,
+    dueSoon: 0,
+  });
+  const [urgentReturn, setUrgentReturn] = useState<any>(null);
+
   useEffect(() => {
-    const fetchProfile = async () => {
+    const fetchProfileAndData = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
@@ -45,13 +54,59 @@ export default function StudentDashboard() {
               section: userData.section || ''
             };
             setProfile(currentProfile);
+
+            // Fetch Reservations for Metrics
+            const { data: reservations } = await supabase
+              .from('reservations')
+              .select('*, components(name)')
+              .eq('usn', userData.usn);
+
+            if (reservations) {
+              let active = 0;
+              let pending = 0;
+              let borrowed = 0;
+              let dueSoon = 0;
+              let urgent: any = null;
+              
+              const now = new Date();
+
+              reservations.forEach(r => {
+                const isCompleted = ['COMPLETED', 'REJECTED', 'CANCELLED', 'RETURNED'].includes(r.status);
+                if (!isCompleted) {
+                  active++;
+                }
+                if (r.status === 'PENDING_APPROVAL') {
+                  pending++;
+                }
+                if (r.status === 'CHECKED_OUT' || r.status === 'READY_FOR_PICKUP') {
+                  if (r.status === 'CHECKED_OUT') borrowed++;
+                  
+                  const reqDate = new Date(r.request_date);
+                  const dueDate = new Date(reqDate);
+                  dueDate.setDate(dueDate.getDate() + (r.duration || 7));
+                  
+                  const diffTime = dueDate.getTime() - now.getTime();
+                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                  
+                  if (diffDays <= 2 && r.status === 'CHECKED_OUT') {
+                    dueSoon++;
+                    if (!urgent || diffDays < urgent.diffDays) {
+                      urgent = { ...r, diffDays, dueDate };
+                    }
+                  }
+                }
+              });
+
+              setMetrics({ active, pending, borrowed, dueSoon });
+              setUrgentReturn(urgent);
+            }
           }
         }
       } catch (err) {
-        console.error('Error fetching profile:', err);
+        console.error('Error fetching dashboard data:', err);
       }
     };
-    fetchProfile();
+    fetchProfileAndData();
   }, []);
 
   const handleHardwareDashboardClick = () => {
@@ -209,6 +264,69 @@ export default function StudentDashboard() {
               </p>
             </div>
           </motion.div>
+
+          {/* Quick Metrics Bar */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="mb-8 grid grid-cols-2 md:grid-cols-4 gap-4"
+          >
+            <div className="bg-zinc-900/60 backdrop-blur-xl border border-white/10 p-4 rounded-2xl flex flex-col items-center justify-center text-center transition-all hover:bg-white/5">
+              <span className="text-3xl font-black text-white">{metrics.active}</span>
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mt-1">Active Requests</span>
+            </div>
+            <div className="bg-zinc-900/60 backdrop-blur-xl border border-white/10 p-4 rounded-2xl flex flex-col items-center justify-center text-center transition-all hover:bg-white/5">
+              <span className="text-3xl font-black text-cyan-400">{metrics.pending}</span>
+              <span className="text-[10px] font-bold text-cyan-500/50 uppercase tracking-widest mt-1">Pending Approval</span>
+            </div>
+            <div className="bg-zinc-900/60 backdrop-blur-xl border border-white/10 p-4 rounded-2xl flex flex-col items-center justify-center text-center transition-all hover:bg-white/5">
+              <span className="text-3xl font-black text-violet-400">{metrics.borrowed}</span>
+              <span className="text-[10px] font-bold text-violet-500/50 uppercase tracking-widest mt-1">Items Borrowed</span>
+            </div>
+            <div className="bg-zinc-900/60 backdrop-blur-xl border border-white/10 p-4 rounded-2xl flex flex-col items-center justify-center text-center transition-all hover:bg-white/5">
+              <span className="text-3xl font-black text-rose-400">{metrics.dueSoon}</span>
+              <span className="text-[10px] font-bold text-rose-500/50 uppercase tracking-widest mt-1">Due Soon</span>
+            </div>
+          </motion.div>
+
+          {/* Urgent Return Banner */}
+          <AnimatePresence>
+            {urgentReturn && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                className="mb-8"
+              >
+                <div className="bg-rose-500/10 border border-rose-500/30 rounded-3xl p-5 md:p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-rose-500/20 blur-[100px] rounded-full pointer-events-none" />
+                  <div className="relative z-10 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0 border border-rose-500/30">
+                      <svg className="w-6 h-6 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-1 flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
+                        Return Due {urgentReturn.diffDays < 0 ? 'Overdue' : urgentReturn.diffDays === 0 ? 'Today' : urgentReturn.diffDays === 1 ? 'Tomorrow' : `In ${urgentReturn.diffDays} Days`}
+                      </div>
+                      <h3 className={`${spaceGrotesk.className} text-xl md:text-2xl font-bold text-white`}>
+                        {urgentReturn.components?.name || 'Component'}
+                      </h3>
+                      <p className="text-zinc-400 text-sm mt-1">Due: {urgentReturn.dueDate.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => router.push('/student/reservations')}
+                    className="relative z-10 px-6 py-3 bg-rose-500 hover:bg-rose-400 text-black text-sm font-bold rounded-xl transition-all shadow-[0_0_20px_rgba(244,63,94,0.3)] w-full md:w-auto text-center"
+                  >
+                    View Request
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Dashboard Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-grow">

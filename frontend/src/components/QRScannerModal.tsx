@@ -80,12 +80,19 @@ export default function QRScannerModal({ isOpen, onClose, expectedComponentName,
             </div>
           </div>
           
-          <div className="mt-5 text-center">
+          <div className="mt-5 text-center flex flex-col gap-3">
             {error ? (
               <div className="text-rose-400 text-sm font-semibold bg-rose-500/10 py-2 rounded-lg animate-pulse">{error}</div>
             ) : (
               <p className="text-zinc-500 text-sm">Align the QR code sticker within the frame to automatically verify.</p>
             )}
+            
+            <button 
+              onClick={() => onScanSuccess('SKIPPED')}
+              className="mt-2 text-xs font-bold text-zinc-400 hover:text-white underline decoration-zinc-600 hover:decoration-white transition-colors"
+            >
+              Skip Scanning & Checkout
+            </button>
           </div>
         </div>
       </div>
