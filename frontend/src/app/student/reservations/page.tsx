@@ -450,7 +450,7 @@ export default function MyReservations() {
     }
   };
 
-  const currentStatuses = ['PENDING_APPROVAL', 'APPROVED', 'READY_FOR_PICKUP', 'CHECKED_OUT', 'RETURN_REQUESTED'];
+  const currentStatuses = ['PENDING_APPROVAL', 'PENDING_HOD', 'APPROVED', 'READY_FOR_PICKUP', 'CHECKED_OUT', 'RETURN_REQUESTED'];
   
   const filteredReservations = reservations.filter(r => {
     // Search Query Filter
@@ -486,13 +486,14 @@ export default function MyReservations() {
   const getStatusBadge = (status: string) => {
     let displayText = status;
     if (status === 'PENDING_APPROVAL') displayText = 'AWAITING APPROVAL';
+    else if (status === 'PENDING_HOD') displayText = 'AWAITING HOD APPROVAL';
     else if (status === 'READY_FOR_PICKUP') displayText = 'READY FOR PICKUP';
     else if (status === 'CHECKED_OUT') displayText = 'BORROWED';
     else if (status === 'RETURN_REQUESTED') displayText = 'RETURN IN PROGRESS';
 
     const isApproved = status === 'APPROVED' || status === 'READY_FOR_PICKUP';
     const isActive = status === 'CHECKED_OUT';
-    const isPending = status === 'PENDING_APPROVAL' || status === 'RETURN_REQUESTED';
+    const isPending = status === 'PENDING_APPROVAL' || status === 'PENDING_HOD' || status === 'RETURN_REQUESTED';
     const isRejected = status === 'REJECTED' || status === 'CANCELLED';
     const isReturned = status === 'RETURNED' || status === 'COMPLETED';
 
@@ -523,6 +524,7 @@ export default function MyReservations() {
     const steps = [
       { key: 'SUBMITTED', label: 'Request Submitted', overrideStatus: 'PENDING_APPROVAL', isVirtual: true, time: new Date(res.created_at).toLocaleString('en-US', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }) },
       { key: 'PENDING_APPROVAL', label: 'Awaiting Admin Approval', subLabel: 'Action required by Admin', time: getTimestamp('PENDING_APPROVAL') },
+      { key: 'PENDING_HOD', label: 'Awaiting HOD Approval', subLabel: 'Action required by HOD', time: getTimestamp('PENDING_HOD') },
       { key: 'APPROVED', label: 'Approved', time: getTimestamp('APPROVED') },
       { key: 'READY_FOR_PICKUP', label: 'Ready for Pickup', time: getTimestamp('READY_FOR_PICKUP') },
       { key: 'CHECKED_OUT', label: 'Checked Out', time: getTimestamp('CHECKED_OUT') },
@@ -612,6 +614,7 @@ export default function MyReservations() {
   const getActionMessage = (res: Reservation) => {
     switch (res.status) {
       case 'PENDING_APPROVAL': return "Your request is waiting for administrator approval.";
+      case 'PENDING_HOD': return "Your request has been forwarded to the HOD for final approval.";
       case 'APPROVED': return "Your request has been approved. Please follow instructions to pick up your component.";
       case 'READY_FOR_PICKUP': return "Your hardware is ready for pickup.";
       case 'CHECKED_OUT': {

@@ -75,7 +75,7 @@ export default function StudentDashboard() {
                 if (!isCompleted) {
                   active++;
                 }
-                if (r.status === 'PENDING_APPROVAL') {
+                if (r.status === 'PENDING_APPROVAL' || r.status === 'PENDING_HOD') {
                   pending++;
                 }
                 if (r.status === 'CHECKED_OUT' || r.status === 'READY_FOR_PICKUP') {

@@ -18,7 +18,7 @@ const Scanner = dynamic(
 );
 
 
-type RequestStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'READY_FOR_PICKUP' | 'CHECKED_OUT' | 'RETURN_REQUESTED' | 'RETURNED' | 'COMPLETED' | 'REJECTED' | 'CANCELLED';
+type RequestStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'PENDING_HOD' | 'APPROVED' | 'READY_FOR_PICKUP' | 'CHECKED_OUT' | 'RETURN_REQUESTED' | 'RETURNED' | 'COMPLETED' | 'REJECTED' | 'CANCELLED';
 
 interface RequestItem {
   id: string;
@@ -501,7 +501,7 @@ export default function AdminDashboard() {
     if (!approveModal) return;
     const req = requests.find(r => r.id === approveModal.id);
     if (!req) return;
-    const newStatus = req.valueTier === 'HIGH' ? 'PENDING_APPROVAL' : 'APPROVED';
+    const newStatus = req.valueTier === 'HIGH' ? 'PENDING_HOD' : 'APPROVED';
     await updateRequestStatus(approveModal.id, newStatus, approveQty, approveTime, approveDate);
     setRequests(reqs => reqs.map(r => r.id === approveModal.id ? { ...r, status: newStatus as RequestStatus, quantity: approveQty, collectionTime: approveTime, requestDate: approveDate } : r));
     setApproveModal(null);
