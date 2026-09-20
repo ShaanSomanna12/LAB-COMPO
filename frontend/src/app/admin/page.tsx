@@ -104,7 +104,7 @@ const calculatePenalty = (dueDateStrRaw: string | undefined, requestDateStr: str
   if (currentDate.getTime() <= dueDate.getTime()) {
     // Not delayed, calculate how many valid working days are left
     const daysLeft = getWorkingDaysCount(currentDate, dueDate);
-    return { isDelayed: false, delayDays: 0, daysLeft, penalty: 0, dueDateStr };
+    return { isDelayed: false, delayDays: 0, daysLeft, penalty: 0, dueDateStr, weeksDelayed: 0, itemPrice: 0 };
   }
 
   // Delayed, calculate penalty using only working days
@@ -118,6 +118,7 @@ const calculatePenalty = (dueDateStrRaw: string | undefined, requestDateStr: str
   return {
     isDelayed: true,
     delayDays,
+    daysLeft: 0,
     weeksDelayed,
     penalty,
     dueDateStr,
@@ -283,6 +284,16 @@ export default function AdminDashboard() {
     { id: 'CIVIL', title: 'Civil Engineering', desc: 'Manage CIVIL requests & stock.', color: 'from-rose-500 to-red-600' }
   ];
 
+  const fetchRequestsData = async () => {
+    try {
+      const res = await fetch('/api/requests');
+      const data = await res.json();
+      setRequests(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to fetch requests:', err);
+    }
+  };
+
   useEffect(() => {
     const storedCollege = localStorage.getItem('collegeName');
     if (storedCollege) setCollegeName(storedCollege.toUpperCase());
@@ -294,16 +305,6 @@ export default function AdminDashboard() {
       setAdminDept(storedAdminDept);
       setIsLocked(true);
     }
-
-    const fetchRequestsData = async () => {
-      try {
-        const res = await fetch('/api/requests');
-        const data = await res.json();
-        setRequests(Array.isArray(data) ? data : []);
-      } catch (err) {
-        console.error('Failed to fetch requests:', err);
-      }
-    };
 
     // Fetch unified data from API
     fetch('/api/inventory')

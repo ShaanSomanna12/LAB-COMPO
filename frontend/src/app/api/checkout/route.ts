@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseServer';
 import { verifySession, ROLES } from '@/lib/auth';
-import { sendEmail } from '@/lib/emailService';
+
 import { getNextWorkingDay } from '@/lib/dateValidator';
 
 export const dynamic = 'force-dynamic';
