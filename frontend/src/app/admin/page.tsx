@@ -8,8 +8,9 @@ import ImageCropper from './ImageCropper';
 import { siteConfig } from '@/config/site';
 import QRManagerModal from '@/components/QRManagerModal';
 import QRScannerModal from '@/components/QRScannerModal';
+import OrderQRModal from '@/components/OrderQRModal';
 import { toast } from 'sonner';
-import { isWorkingDay } from '@/lib/dateValidator';
+import { isWorkingDay, getWorkingDaysCount } from '@/lib/dateValidator';
 
 const Scanner = dynamic(
   () => import('@yudiel/react-qr-scanner').then((mod) => mod.Scanner),
@@ -23,11 +24,13 @@ interface RequestItem {
   id: string;
   studentName: string;
   usn: string;
+  mobile?: string;
   component: string;
   department: string;
   duration: number;
   requestDate: string;
   status: RequestStatus;
+  dueDate?: string;
   section?: string;
   studentDepartment?: string;
   returnedAt?: string;
@@ -40,6 +43,10 @@ interface RequestItem {
   longitude?: number | null;
   trackingType?: 'QUANTITY' | 'ASSET';
   isDamaged?: boolean;
+  extensionRequested?: boolean;
+  extensionReason?: string | null;
+  extensionDays?: number | null;
+  extensionStatus?: string | null;
   history?: {
     oldStatus: string | null;
     newStatus: string;
@@ -79,22 +86,29 @@ const getComponentPrice = (componentName: string) => {
   return 1000; // default Rs. 1000
 };
 
-const calculatePenalty = (requestDateStr: string, durationDays: number, componentName: string) => {
-  if (!requestDateStr) return { isDelayed: false, delayDays: 0, penalty: 0, dueDateStr: '' };
+const calculatePenalty = (dueDateStrRaw: string | undefined, requestDateStr: string, durationDays: number, componentName: string) => {
+  if (!requestDateStr) return { isDelayed: false, delayDays: 0, daysLeft: 0, penalty: 0, dueDateStr: '' };
 
-  const reqDate = new Date(requestDateStr);
-  const duration = parseInt(String(durationDays), 10) || 7;
-
-  const dueDate = new Date(reqDate.getTime() + duration * 24 * 60 * 60 * 1000);
+  let dueDate: Date;
+  if (dueDateStrRaw) {
+    dueDate = new Date(dueDateStrRaw);
+  } else {
+    const reqDate = new Date(requestDateStr);
+    const duration = parseInt(String(durationDays), 10) || 7;
+    dueDate = new Date(reqDate.getTime() + duration * 24 * 60 * 60 * 1000);
+  }
+  
   const currentDate = new Date(); // Always use the real current date
 
   const dueDateStr = dueDate.toISOString().split('T')[0];
   if (currentDate.getTime() <= dueDate.getTime()) {
-    return { isDelayed: false, delayDays: 0, penalty: 0, dueDateStr };
+    // Not delayed, calculate how many valid working days are left
+    const daysLeft = getWorkingDaysCount(currentDate, dueDate);
+    return { isDelayed: false, delayDays: 0, daysLeft, penalty: 0, dueDateStr };
   }
 
-  const diffTime = currentDate.getTime() - dueDate.getTime();
-  const delayDays = Math.ceil(diffTime / (24 * 60 * 60 * 1000));
+  // Delayed, calculate penalty using only working days
+  const delayDays = getWorkingDaysCount(dueDate, currentDate);
 
   const price = getComponentPrice(componentName);
   const weeksDelayed = Math.ceil(delayDays / 7);
@@ -176,6 +190,13 @@ export default function AdminDashboard() {
   const [stockEditModal, setStockEditModal] = useState<{ id: string | number; name: string; currentTotal: number } | null>(null);
   const [stockEditValue, setStockEditValue] = useState('');
   const [selectedStudentForDetails, setSelectedStudentForDetails] = useState<{ usn: string, name: string } | null>(null);
+  
+  const [showOrderQrModal, setShowOrderQrModal] = useState(false);
+  const [orderQrData, setOrderQrData] = useState<{ id: string; student: string; usn: string; component: string; quantity: number } | null>(null);
+
+  const [showExtensionModal, setShowExtensionModal] = useState(false);
+  const [extensionData, setExtensionData] = useState<any>(null);
+  const [isProcessingExtension, setIsProcessingExtension] = useState(false);
 
   useEffect(() => {
     const resolveAddress = async () => {
@@ -527,23 +548,47 @@ export default function AdminDashboard() {
     });
   };
 
-  const handleScanSuccess = async (serialNumber: string) => {
+  const handleScanSuccess = async (scannedValue: string) => {
     setShowCheckoutScanner(false);
     
-    if (serialNumber === 'SKIPPED') {
-      // Fallback for asset tracked if skipped (assuming backend handles or requires assetId)
-      // We will just alert the user that skipping asset tracking is not permitted for ASSET tracked items.
-      toast.error('Asset ID is required for this component. Please scan the QR code.');
+    if (scannedValue === 'SKIPPED') {
+      toast.error('Scan skipped.');
+      setCheckoutScanReqId('');
+      setPreviewType(null);
+      return;
+    }
+    
+    let targetReservationId = checkoutScanReqId || scannedValue;
+    let endpoint = '';
+    let body = {};
+    let isReturn = false;
+
+    // Find the request locally to determine action if it's a global scan
+    const req = requests.find(r => r.id === targetReservationId);
+    
+    if (!req) {
+      toast.error(`No reservation found for ID: ${targetReservationId.substring(0, 8)}`);
+      setCheckoutScanReqId('');
+      setPreviewType(null);
+      return;
+    }
+
+    if (previewType === 'RETURN' || req.status === 'CHECKED_OUT' || req.status === 'RETURN_REQUESTED') {
+      isReturn = true;
+      endpoint = '/api/return';
+      body = { reservationId: targetReservationId, condition: 'GOOD' };
+    } else if (previewType === 'COLLECT' || req.status === 'APPROVED' || req.status === 'READY_FOR_PICKUP') {
+      isReturn = false;
+      endpoint = '/api/checkout';
+      body = { reservationId: targetReservationId };
+    } else {
+      toast.error(`Cannot process scan. Order status is: ${req.status}`);
+      setCheckoutScanReqId('');
+      setPreviewType(null);
       return;
     }
     
     try {
-      const isReturn = previewType === 'RETURN';
-      const endpoint = isReturn ? '/api/return' : '/api/checkout';
-      const body = isReturn 
-        ? { reservationId: checkoutScanReqId, assetId: serialNumber, condition: 'GOOD' }
-        : { reservationId: checkoutScanReqId, assetId: serialNumber };
-
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -553,18 +598,42 @@ export default function AdminDashboard() {
       
       if (res.ok) {
         if (isReturn) {
-          setRequests(reqs => reqs.filter(r => r.id !== checkoutScanReqId));
-          toast.success(`Return successful for asset ${serialNumber}`);
+          setRequests(reqs => reqs.filter(r => r.id !== targetReservationId));
+          toast.success(`Return successful for order ${targetReservationId.substring(0,8)}`);
         } else {
-          setRequests(reqs => reqs.map(r => r.id === checkoutScanReqId ? { ...r, status: 'CHECKED_OUT' } : r));
-          toast.success(`Handover successful! Asset ${serialNumber} securely linked.`);
+          setRequests(reqs => reqs.map(r => r.id === targetReservationId ? { ...r, status: 'CHECKED_OUT' } : r));
+          toast.success(`Checkout successful! Component handed over.`);
         }
       } else {
         toast.error(data.error || `Failed to process ${isReturn ? 'return' : 'checkout'}.`);
       }
     } catch (err: any) {
       console.error(err);
-      toast.error(`Network error during ${previewType === 'RETURN' ? 'return' : 'checkout'}`);
+      toast.error(`Network error during ${isReturn ? 'return' : 'checkout'}`);
+    }
+    setCheckoutScanReqId('');
+    setPreviewType(null);
+  };
+
+  const processExtension = async (reservationId: string, action: 'APPROVE' | 'REJECT') => {
+    setIsProcessingExtension(true);
+    try {
+      const res = await fetch('/api/requests/extend', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reservationId, action })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Failed to ${action.toLowerCase()} extension`);
+      
+      toast.success(`Extension ${action.toLowerCase()}d successfully`);
+      setShowExtensionModal(false);
+      setExtensionData(null);
+      fetchRequestsData();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setIsProcessingExtension(false);
     }
   };
 
@@ -581,7 +650,7 @@ export default function AdminDashboard() {
       return;
     }
     
-    const penaltyInfo = calculatePenalty(req.requestDate, req.duration, req.component);
+    const penaltyInfo = calculatePenalty(req.dueDate, req.requestDate, req.duration, req.component);
     const penaltyNote = penaltyInfo.isDelayed
       ? `Late by ${penaltyInfo.delayDays} day(s). Outstanding penalty: ₹${penaltyInfo.penalty} (${penaltyInfo.weeksDelayed} wk × 5% of ₹${penaltyInfo.itemPrice}).`
       : 'Returned on time — no penalty applies.';
@@ -959,7 +1028,7 @@ export default function AdminDashboard() {
               const pendingCount = deptReqs.filter(r => r.status === 'PENDING_APPROVAL').length;
               const readyCount = deptReqs.filter(r => r.status === 'APPROVED' || r.status === 'READY_FOR_PICKUP').length;
               const activeCount = deptReqs.filter(r => r.status === 'CHECKED_OUT').length;
-              const overdueCount = deptReqs.filter(r => r.status === 'CHECKED_OUT' && calculatePenalty(r.requestDate, r.duration, r.component).isDelayed).length;
+              const overdueCount = deptReqs.filter(r => r.status === 'CHECKED_OUT' && calculatePenalty(r.dueDate, r.requestDate, r.duration, r.component).isDelayed).length;
               const damagedCount = 0; // Not fully tracked yet
               const deptInv = inventory.filter(i => i.department === adminDept);
               const lowStockCount = deptInv.filter(i => i.total > 0 && i.available <= 1).length;
@@ -967,52 +1036,34 @@ export default function AdminDashboard() {
               return (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                   {/* Pending */}
-                  <div className="relative group overflow-hidden bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 hover:border-amber-500/40 p-5 rounded-2xl flex flex-col items-center text-center transition-all duration-300 hover:shadow-[0_0_30px_rgba(245,158,11,0.15)] hover:-translate-y-1">
-                    <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                    <div className="relative z-10 flex flex-col items-center">
-                      <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-300 to-amber-600 drop-shadow-sm mb-1">{pendingCount}</span>
-                      <span className="text-[10px] font-bold text-amber-500/70 uppercase tracking-widest">Pending</span>
-                    </div>
+                  <div className="group relative bg-zinc-900 border border-zinc-800 hover:border-zinc-600 p-5 rounded-2xl flex flex-col items-center text-center transition-all duration-300 shadow-sm hover:shadow-md cursor-pointer border-t-2 border-t-amber-500/50 hover:border-t-amber-400">
+                    <span className="text-3xl font-black text-white mb-1 transition-transform group-hover:scale-105">{pendingCount}</span>
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-zinc-300">Pending</span>
                   </div>
                   {/* Ready */}
-                  <div className="relative group overflow-hidden bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 hover:border-emerald-500/40 p-5 rounded-2xl flex flex-col items-center text-center transition-all duration-300 hover:shadow-[0_0_30px_rgba(16,185,129,0.15)] hover:-translate-y-1">
-                    <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                    <div className="relative z-10 flex flex-col items-center">
-                      <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-b from-emerald-300 to-emerald-600 drop-shadow-sm mb-1">{readyCount}</span>
-                      <span className="text-[10px] font-bold text-emerald-500/70 uppercase tracking-widest">Ready</span>
-                    </div>
+                  <div className="group relative bg-zinc-900 border border-zinc-800 hover:border-zinc-600 p-5 rounded-2xl flex flex-col items-center text-center transition-all duration-300 shadow-sm hover:shadow-md cursor-pointer border-t-2 border-t-emerald-500/50 hover:border-t-emerald-400">
+                    <span className="text-3xl font-black text-white mb-1 transition-transform group-hover:scale-105">{readyCount}</span>
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-zinc-300">Ready</span>
                   </div>
                   {/* Active Loans */}
-                  <div className="relative group overflow-hidden bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 hover:border-cyan-500/40 p-5 rounded-2xl flex flex-col items-center text-center transition-all duration-300 hover:shadow-[0_0_30px_rgba(6,182,212,0.15)] hover:-translate-y-1">
-                    <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                    <div className="relative z-10 flex flex-col items-center">
-                      <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-b from-cyan-300 to-cyan-600 drop-shadow-sm mb-1">{activeCount}</span>
-                      <span className="text-[10px] font-bold text-cyan-500/70 uppercase tracking-widest">Active Loans</span>
-                    </div>
+                  <div className="group relative bg-zinc-900 border border-zinc-800 hover:border-zinc-600 p-5 rounded-2xl flex flex-col items-center text-center transition-all duration-300 shadow-sm hover:shadow-md cursor-pointer border-t-2 border-t-cyan-500/50 hover:border-t-cyan-400">
+                    <span className="text-3xl font-black text-white mb-1 transition-transform group-hover:scale-105">{activeCount}</span>
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-zinc-300">Active Loans</span>
                   </div>
                   {/* Overdue */}
-                  <div className="relative group overflow-hidden bg-rose-950/20 backdrop-blur-xl border border-rose-900/40 hover:border-rose-500/50 p-5 rounded-2xl flex flex-col items-center text-center transition-all duration-300 hover:shadow-[0_0_30px_rgba(244,63,94,0.2)] hover:-translate-y-1">
-                    <div className="absolute inset-0 bg-gradient-to-br from-rose-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                    <div className="relative z-10 flex flex-col items-center">
-                      <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-b from-rose-400 to-rose-600 drop-shadow-sm mb-1">{overdueCount}</span>
-                      <span className="text-[10px] font-bold text-rose-500/80 uppercase tracking-widest">Overdue</span>
-                    </div>
+                  <div className="group relative bg-zinc-900 border border-zinc-800 hover:border-zinc-600 p-5 rounded-2xl flex flex-col items-center text-center transition-all duration-300 shadow-sm hover:shadow-md cursor-pointer border-t-2 border-t-rose-500/50 hover:border-t-rose-400">
+                    <span className="text-3xl font-black text-white mb-1 transition-transform group-hover:scale-105">{overdueCount}</span>
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-zinc-300">Overdue</span>
                   </div>
                   {/* Damaged */}
-                  <div className="relative group overflow-hidden bg-orange-950/20 backdrop-blur-xl border border-orange-900/40 hover:border-orange-500/50 p-5 rounded-2xl flex flex-col items-center text-center transition-all duration-300 hover:shadow-[0_0_30px_rgba(249,115,22,0.15)] hover:-translate-y-1">
-                    <div className="absolute inset-0 bg-gradient-to-br from-orange-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                    <div className="relative z-10 flex flex-col items-center">
-                      <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-b from-orange-400 to-orange-600 drop-shadow-sm mb-1">{damagedCount}</span>
-                      <span className="text-[10px] font-bold text-orange-500/80 uppercase tracking-widest">Damaged</span>
-                    </div>
+                  <div className="group relative bg-zinc-900 border border-zinc-800 hover:border-zinc-600 p-5 rounded-2xl flex flex-col items-center text-center transition-all duration-300 shadow-sm hover:shadow-md cursor-pointer border-t-2 border-t-orange-500/50 hover:border-t-orange-400">
+                    <span className="text-3xl font-black text-white mb-1 transition-transform group-hover:scale-105">{damagedCount}</span>
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-zinc-300">Damaged</span>
                   </div>
                   {/* Low Stock */}
-                  <div className="relative group overflow-hidden bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 hover:border-zinc-500/50 p-5 rounded-2xl flex flex-col items-center text-center transition-all duration-300 hover:shadow-[0_0_30px_rgba(255,255,255,0.1)] hover:-translate-y-1">
-                    <div className="absolute inset-0 bg-gradient-to-br from-zinc-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                    <div className="relative z-10 flex flex-col items-center">
-                      <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-b from-zinc-300 to-zinc-500 drop-shadow-sm mb-1">{lowStockCount}</span>
-                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Low Stock</span>
-                    </div>
+                  <div className="group relative bg-zinc-900 border border-zinc-800 hover:border-zinc-600 p-5 rounded-2xl flex flex-col items-center text-center transition-all duration-300 shadow-sm hover:shadow-md cursor-pointer border-t-2 border-t-zinc-500/50 hover:border-t-zinc-400">
+                    <span className="text-3xl font-black text-white mb-1 transition-transform group-hover:scale-105">{lowStockCount}</span>
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest group-hover:text-zinc-300">Low Stock</span>
                   </div>
                 </div>
               );
@@ -1033,7 +1084,7 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {(() => {
                 const deptReqs = requests.filter(r => r.department === adminDept || r.studentDepartment === adminDept);
-                const overdueReqs = deptReqs.filter(r => r.status === 'CHECKED_OUT' && calculatePenalty(r.requestDate, r.duration, r.component).isDelayed);
+                const overdueReqs = deptReqs.filter(r => r.status === 'CHECKED_OUT' && calculatePenalty(r.dueDate, r.requestDate, r.duration, r.component).isDelayed);
                 const pendingReqs = deptReqs.filter(r => r.status === 'PENDING_APPROVAL');
                 const readyReqs = deptReqs.filter(r => r.status === 'APPROVED' || r.status === 'READY_FOR_PICKUP');
                 const returnReqs = deptReqs.filter(r => r.status === 'RETURN_REQUESTED');
@@ -1042,82 +1093,78 @@ export default function AdminDashboard() {
                   <>
                     <button 
                       onClick={() => { setActiveTab('requests'); setWorkflowTab('ACTIVE'); setSubStatusFilter('OVERDUE'); }}
-                      className="group relative overflow-hidden rounded-2xl bg-zinc-900/40 border border-zinc-800/60 p-5 hover:bg-zinc-800/60 transition-all duration-300 text-left flex items-start gap-4 hover:-translate-y-1 hover:shadow-xl hover:shadow-rose-500/10"
+                      className="group bg-zinc-900 border border-zinc-800 hover:border-zinc-700 p-5 rounded-2xl text-left flex items-start gap-4 transition-all duration-300 shadow-sm hover:shadow-md cursor-pointer"
                     >
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-opacity group-hover:bg-rose-500/20"></div>
-                      <div className="w-12 h-12 rounded-xl bg-rose-500/10 flex items-center justify-center shrink-0 border border-rose-500/20 group-hover:scale-110 transition-transform duration-300">
-                        <div className="w-3 h-3 rounded-full bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.8)] animate-pulse" />
+                      <div className="w-12 h-12 rounded-xl bg-zinc-800/50 flex items-center justify-center shrink-0 border border-zinc-700/50 group-hover:bg-zinc-800 transition-colors">
+                        <svg className="w-5 h-5 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                       </div>
-                      <div className="flex-1 z-10">
+                      <div className="flex-1">
                         <div className="flex justify-between items-start">
-                          <h3 className="text-xl font-bold text-rose-400 group-hover:text-rose-300 transition-colors">{overdueReqs.length} Overdue</h3>
-                          <svg className="w-5 h-5 text-rose-500/50 group-hover:text-rose-400 group-hover:translate-x-1 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+                          <h3 className="text-xl font-bold text-white transition-colors">{overdueReqs.length} Overdue</h3>
+                          <svg className="w-5 h-5 text-zinc-600 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                         </div>
-                        <p className="text-zinc-400 text-sm mt-1 mb-2 font-medium">Critical returns past due date</p>
+                        <p className="text-zinc-500 text-sm mt-1 mb-2">Critical returns past due date</p>
                         <span className="inline-block px-2 py-1 bg-rose-500/10 text-rose-400 text-[10px] font-bold uppercase tracking-widest rounded-md border border-rose-500/20">Action Required</span>
                       </div>
                     </button>
                     
                     <button 
                       onClick={() => { setActiveTab('requests'); setWorkflowTab('ACTIVE'); setSubStatusFilter('RETURNING'); }}
-                      className="group relative overflow-hidden rounded-2xl bg-zinc-900/40 border border-zinc-800/60 p-5 hover:bg-zinc-800/60 transition-all duration-300 text-left flex items-start gap-4 hover:-translate-y-1 hover:shadow-xl hover:shadow-orange-500/10"
+                      className="group bg-zinc-900 border border-zinc-800 hover:border-zinc-700 p-5 rounded-2xl text-left flex items-start gap-4 transition-all duration-300 shadow-sm hover:shadow-md cursor-pointer"
                     >
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-opacity group-hover:bg-orange-500/20"></div>
-                      <div className="w-12 h-12 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0 border border-orange-500/20 group-hover:scale-110 transition-transform duration-300">
-                        <svg className="w-6 h-6 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                      <div className="w-12 h-12 rounded-xl bg-zinc-800/50 flex items-center justify-center shrink-0 border border-zinc-700/50 group-hover:bg-zinc-800 transition-colors">
+                        <svg className="w-5 h-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
                       </div>
-                      <div className="flex-1 z-10">
+                      <div className="flex-1">
                         <div className="flex justify-between items-start">
-                          <h3 className="text-xl font-bold text-orange-400 group-hover:text-orange-300 transition-colors">{returnReqs.length} Returns</h3>
-                          <svg className="w-5 h-5 text-orange-500/50 group-hover:text-orange-400 group-hover:translate-x-1 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+                          <h3 className="text-xl font-bold text-white transition-colors">{returnReqs.length} Returns</h3>
+                          <svg className="w-5 h-5 text-zinc-600 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                         </div>
-                        <p className="text-zinc-400 text-sm mt-1 mb-2 font-medium">Pending condition inspection</p>
-                        <span className="inline-block px-2 py-1 bg-orange-500/10 text-orange-400 text-[10px] font-bold uppercase tracking-widest rounded-md border border-orange-500/20">High Priority</span>
+                        <p className="text-zinc-500 text-sm mt-1 mb-2">Pending condition inspection</p>
+                        <span className="inline-block px-2 py-1 bg-white/5 text-zinc-400 text-[10px] font-bold uppercase tracking-widest rounded-md border border-white/10">High Priority</span>
                       </div>
                     </button>
 
                     <button 
                       onClick={() => { setActiveTab('requests'); setWorkflowTab('PENDING'); setSubStatusFilter('AWAITING_APPROVAL'); }}
-                      className="group relative overflow-hidden rounded-2xl bg-zinc-900/40 border border-zinc-800/60 p-5 hover:bg-zinc-800/60 transition-all duration-300 text-left flex items-start gap-4 hover:-translate-y-1 hover:shadow-xl hover:shadow-amber-500/10"
+                      className="group bg-zinc-900 border border-zinc-800 hover:border-zinc-700 p-5 rounded-2xl text-left flex items-start gap-4 transition-all duration-300 shadow-sm hover:shadow-md cursor-pointer"
                     >
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-opacity group-hover:bg-amber-500/20"></div>
-                      <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0 border border-amber-500/20 group-hover:scale-110 transition-transform duration-300">
-                        <svg className="w-6 h-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      <div className="w-12 h-12 rounded-xl bg-zinc-800/50 flex items-center justify-center shrink-0 border border-zinc-700/50 group-hover:bg-zinc-800 transition-colors">
+                        <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                       </div>
-                      <div className="flex-1 z-10">
+                      <div className="flex-1">
                         <div className="flex justify-between items-start">
-                          <h3 className="text-xl font-bold text-amber-400 group-hover:text-amber-300 transition-colors">{pendingReqs.length} Approvals</h3>
-                          <svg className="w-5 h-5 text-amber-500/50 group-hover:text-amber-400 group-hover:translate-x-1 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+                          <h3 className="text-xl font-bold text-white transition-colors">{pendingReqs.length} Approvals</h3>
+                          <svg className="w-5 h-5 text-zinc-600 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                         </div>
-                        <p className="text-zinc-400 text-sm mt-1 mb-2 font-medium">New requests awaiting review</p>
-                        <span className="inline-block px-2 py-1 bg-amber-500/10 text-amber-400 text-[10px] font-bold uppercase tracking-widest rounded-md border border-amber-500/20">Medium Priority</span>
+                        <p className="text-zinc-500 text-sm mt-1 mb-2">New requests awaiting review</p>
+                        <span className="inline-block px-2 py-1 bg-white/5 text-zinc-400 text-[10px] font-bold uppercase tracking-widest rounded-md border border-white/10">Medium Priority</span>
                       </div>
                     </button>
 
                     <button 
                       onClick={() => { setActiveTab('requests'); setWorkflowTab('PENDING'); setSubStatusFilter('AWAITING_CHECKOUT'); }}
-                      className="group relative overflow-hidden rounded-2xl bg-zinc-900/40 border border-zinc-800/60 p-5 hover:bg-zinc-800/60 transition-all duration-300 text-left flex items-start gap-4 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/10"
+                      className="group bg-zinc-900 border border-zinc-800 hover:border-zinc-700 p-5 rounded-2xl text-left flex items-start gap-4 transition-all duration-300 shadow-sm hover:shadow-md cursor-pointer"
                     >
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-opacity group-hover:bg-emerald-500/20"></div>
-                      <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0 border border-emerald-500/20 group-hover:scale-110 transition-transform duration-300">
-                        <svg className="w-6 h-6 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+                      <div className="w-12 h-12 rounded-xl bg-zinc-800/50 flex items-center justify-center shrink-0 border border-zinc-700/50 group-hover:bg-zinc-800 transition-colors">
+                        <svg className="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
                       </div>
-                      <div className="flex-1 z-10">
+                      <div className="flex-1">
                         <div className="flex justify-between items-start">
-                          <h3 className="text-xl font-bold text-emerald-400 group-hover:text-emerald-300 transition-colors">{readyReqs.length} Checkout</h3>
-                          <svg className="w-5 h-5 text-emerald-500/50 group-hover:text-emerald-400 group-hover:translate-x-1 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+                          <h3 className="text-xl font-bold text-white transition-colors">{readyReqs.length} Checkout</h3>
+                          <svg className="w-5 h-5 text-zinc-600 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                         </div>
-                        <p className="text-zinc-400 text-sm mt-1 mb-2 font-medium">Ready for student collection</p>
-                        <span className="inline-block px-2 py-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-bold uppercase tracking-widest rounded-md border border-emerald-500/20">Medium Priority</span>
+                        <p className="text-zinc-500 text-sm mt-1 mb-2">Ready for student collection</p>
+                        <span className="inline-block px-2 py-1 bg-white/5 text-zinc-400 text-[10px] font-bold uppercase tracking-widest rounded-md border border-white/10">Medium Priority</span>
                       </div>
                     </button>
                     
                     <div className="md:col-span-2 mt-2">
                       <button 
                         onClick={() => { setActiveTab('requests'); setWorkflowTab('PENDING'); setSubStatusFilter('ALL'); setDateFilter('ALL'); }}
-                        className="w-full bg-gradient-to-r from-zinc-800 to-zinc-900 border border-zinc-700/50 hover:border-zinc-600 hover:from-zinc-700 hover:to-zinc-800 text-white font-bold text-sm uppercase tracking-widest py-4 rounded-2xl transition-all shadow-lg hover:shadow-xl active:scale-[0.99] flex items-center justify-center gap-3"
+                        className="w-full bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white font-bold text-sm uppercase tracking-widest py-4 rounded-2xl transition-all shadow-sm flex items-center justify-center gap-3"
                       >
-                        <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
                         Review All Tasks
                       </button>
                     </div>
@@ -1150,13 +1197,27 @@ export default function AdminDashboard() {
                 </div>
               )}
             </div>
-            <button
-              onClick={() => setShowScannerModal(true)}
-              className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black px-5 py-2.5 rounded-xl font-bold text-sm transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)]"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
-              Scan Student Pass
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setCheckoutScanReqId(''); 
+                  setPreviewType(null); 
+                  setCheckoutScanExpected(''); 
+                  setShowCheckoutScanner(true);
+                }}
+                className="flex items-center gap-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all shadow-[0_0_20px_rgba(6,182,212,0.3)]"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
+                Scan Order Label
+              </button>
+              <button
+                onClick={() => setShowScannerModal(true)}
+                className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black px-5 py-2.5 rounded-xl font-bold text-sm transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
+                Scan Student Pass
+              </button>
+            </div>
           </div>
 
           <div className="flex flex-col lg:flex-row gap-4 mb-6 border-b border-zinc-800 pb-4">
@@ -1247,11 +1308,11 @@ export default function AdminDashboard() {
                     if (subStatusFilter === 'AWAITING_CHECKOUT' && req.status !== 'APPROVED' && req.status !== 'READY_FOR_PICKUP') return false;
                     
                     if (subStatusFilter === 'OVERDUE') {
-                      const penaltyInfo = calculatePenalty(req.requestDate, req.duration, req.component);
+                      const penaltyInfo = calculatePenalty(req.dueDate, req.requestDate, req.duration, req.component);
                       if (!penaltyInfo.isDelayed) return false;
                     }
                     if (subStatusFilter === 'ON_TIME') {
-                      const penaltyInfo = calculatePenalty(req.requestDate, req.duration, req.component);
+                      const penaltyInfo = calculatePenalty(req.dueDate, req.requestDate, req.duration, req.component);
                       if (penaltyInfo.isDelayed) return false;
                     }
                     if (subStatusFilter === 'RETURNING' && req.status !== 'RETURN_REQUESTED') return false;
@@ -1283,6 +1344,18 @@ export default function AdminDashboard() {
                 });
 
               filteredRequests.sort((a, b) => {
+                if (workflowTab === 'ACTIVE' && activeTab !== 'completed') {
+                  const penaltyA = calculatePenalty(a.dueDate, a.requestDate, a.duration, a.component);
+                  const penaltyB = calculatePenalty(b.dueDate, b.requestDate, b.duration, b.component);
+                  
+                  const scoreA = penaltyA.isDelayed ? -penaltyA.delayDays : penaltyA.daysLeft;
+                  const scoreB = penaltyB.isDelayed ? -penaltyB.delayDays : penaltyB.daysLeft;
+                  
+                  if (scoreA !== scoreB) {
+                    return scoreA - scoreB;
+                  }
+                }
+
                 const dateA = new Date(a.requestDate).getTime();
                 const dateB = new Date(b.requestDate).getTime();
                 return dateB - dateA; // Always sort Newest First
@@ -1310,7 +1383,8 @@ export default function AdminDashboard() {
                         </div>
                         <div>
                           <div className="font-bold text-white text-sm">{req.studentName}</div>
-                          <div className="text-zinc-500 font-mono text-xs">{req.usn}</div>
+                          <div className="text-zinc-500 font-mono text-xs mt-1">{req.usn}</div>
+                          {req.mobile && <div className="text-zinc-500 font-mono text-xs mt-0.5">Phone: {req.mobile}</div>}
                         </div>
                       </div>
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest border ${req.status === 'PENDING_APPROVAL' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20 shadow-[0_0_10px_rgba(234,179,8,0.2)]' :
@@ -1340,8 +1414,10 @@ export default function AdminDashboard() {
                         <div className="text-zinc-500 font-mono text-[10px] mt-2 text-zinc-600 col-span-2">ID: #{req.id}</div>
                       </div>
                       {(() => {
-                        const penaltyInfo = calculatePenalty(req.requestDate, req.duration, req.component);
-                        if (req.status === 'CHECKED_OUT' && penaltyInfo.isDelayed) {
+                        if (req.status !== 'CHECKED_OUT' && req.status !== 'RETURN_REQUESTED') return null;
+                        
+                        const penaltyInfo = calculatePenalty(req.dueDate, req.requestDate, req.duration, req.component);
+                        if (penaltyInfo.isDelayed) {
                           return (
                             <div className="mt-3 bg-red-950/30 border border-red-900/50 p-2.5 rounded-lg flex items-start gap-2.5">
                               <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse mt-1 shrink-0"></span>
@@ -1351,13 +1427,40 @@ export default function AdminDashboard() {
                               </div>
                             </div>
                           );
+                        } else {
+                          return (
+                            <div className="mt-3 bg-cyan-950/30 border border-cyan-900/50 p-2.5 rounded-lg flex items-center justify-between gap-2.5">
+                              <div className="flex items-center gap-2">
+                                <svg className="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                <span className="text-cyan-400 text-[10px] font-bold uppercase tracking-wider">{penaltyInfo.daysLeft} Days Left</span>
+                              </div>
+                              <div className="text-cyan-300/70 text-[10px] font-mono">Due: {penaltyInfo.dueDateStr}</div>
+                            </div>
+                          );
                         }
-                        return null;
                       })()}
                     </div>
                   </div>
 
                   <div className="flex flex-wrap items-center justify-end gap-2 mt-auto">
+                    {(req.status === 'APPROVED' || req.status === 'READY_FOR_PICKUP' || req.status === 'CHECKED_OUT') && (
+                      <button 
+                        onClick={() => {
+                          setOrderQrData({
+                            id: req.id,
+                            student: req.studentName,
+                            usn: req.usn,
+                            component: req.component,
+                            quantity: req.quantity || 1
+                          });
+                          setShowOrderQrModal(true);
+                        }} 
+                        className="w-full sm:w-auto px-4 py-2.5 bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30 border border-indigo-500/40 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+                        Print Label
+                      </button>
+                    )}
                     {req.status === 'PENDING_APPROVAL' && (
                       <div className="flex gap-2 w-full sm:w-auto">
                         <button onClick={() => handleApprove(req.id)} className="flex-1 sm:flex-none px-4 py-2.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl text-xs font-bold transition text-center">Approve</button>
@@ -1365,7 +1468,9 @@ export default function AdminDashboard() {
                       </div>
                     )}
                     {req.status === 'APPROVED' && (
-                      <button onClick={() => handleCheckout(req.id)} className="w-full sm:w-auto px-5 py-2.5 bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl text-xs font-bold transition text-center">Mark Checked Out</button>
+                      <button disabled className="w-full sm:w-auto px-5 py-2.5 bg-zinc-800/50 text-zinc-500 rounded-xl text-xs font-bold transition text-center cursor-not-allowed border border-zinc-800">
+                        Awaiting Student Photo
+                      </button>
                     )}
                     {req.status === 'READY_FOR_PICKUP' && (
                       <div className="flex gap-2 w-full sm:w-auto flex-col sm:flex-row">
@@ -1393,7 +1498,15 @@ export default function AdminDashboard() {
                       </div>
                     )}
                     {(req.status === 'CHECKED_OUT') && (
-                      <button onClick={() => handleReturn(req.id)} className="w-full sm:w-auto px-5 py-2.5 bg-zinc-800 text-white hover:bg-zinc-700 border border-zinc-700 rounded-xl text-xs font-bold transition text-center">Mark Returned</button>
+                      <div className="flex gap-2 w-full sm:w-auto flex-col sm:flex-row">
+                        <button onClick={() => handleReturn(req.id)} className="w-full sm:w-auto px-5 py-2.5 bg-zinc-800 text-white hover:bg-zinc-700 border border-zinc-700 rounded-xl text-xs font-bold transition text-center">Mark Returned</button>
+                        {req.extensionRequested && req.extensionStatus === 'PENDING' && (
+                          <button onClick={() => { setExtensionData(req); setShowExtensionModal(true); }} className="w-full sm:w-auto px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition shadow-[0_0_15px_rgba(37,99,235,0.3)] flex items-center justify-center gap-1.5 animate-pulse">
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            Extension Req
+                          </button>
+                        )}
+                      </div>
                     )}
                     {req.status === 'RETURN_REQUESTED' && (
                       <div className="flex gap-2 w-full sm:w-auto flex-col sm:flex-row">
@@ -2437,7 +2550,7 @@ export default function AdminDashboard() {
                 
                 if (req.status === 'CHECKED_OUT') {
                   acc[req.usn].activeLoans++;
-                  const penaltyInfo = calculatePenalty(req.requestDate, req.duration, req.component);
+                  const penaltyInfo = calculatePenalty(req.dueDate, req.requestDate, req.duration, req.component);
                   if (penaltyInfo.isDelayed) {
                     acc[req.usn].overdue++;
                   } else {
@@ -2744,6 +2857,19 @@ export default function AdminDashboard() {
         componentName={qrComponentName}
       />
 
+      {/* Order QR Label Modal */}
+      {orderQrData && (
+        <OrderQRModal
+          isOpen={showOrderQrModal}
+          onClose={() => setShowOrderQrModal(false)}
+          reservationId={orderQrData.id}
+          studentName={orderQrData.student}
+          usn={orderQrData.usn}
+          componentName={orderQrData.component}
+          quantity={orderQrData.quantity}
+        />
+      )}
+
       {/* QR Scanner Modal for Checkout */}
       <QRScannerModal
         isOpen={showCheckoutScanner}
@@ -2767,7 +2893,7 @@ export default function AdminDashboard() {
             {(() => {
               const studentReqs = requests.filter(r => r.usn === selectedStudentForDetails.usn);
               const active = studentReqs.filter(r => r.status === 'CHECKED_OUT' || r.status === 'RETURN_REQUESTED');
-              const overdueReqs = active.filter(r => calculatePenalty(r.requestDate, r.duration, r.component).isDelayed);
+              const overdueReqs = active.filter(r => calculatePenalty(r.dueDate, r.requestDate, r.duration, r.component).isDelayed);
               const completed = studentReqs.filter(r => r.status === 'RETURNED' || r.status === 'COMPLETED');
               const currentRequests = studentReqs.filter(r => r.status === 'PENDING_APPROVAL' || r.status === 'APPROVED' || r.status === 'READY_FOR_PICKUP');
 
@@ -2809,7 +2935,7 @@ export default function AdminDashboard() {
                     <h5 className="font-bold text-white text-lg mb-4">Borrow History</h5>
                     <div className="space-y-4">
                       {studentReqs.map(req => {
-                        const penaltyInfo = calculatePenalty(req.requestDate, req.duration, req.component);
+                        const penaltyInfo = calculatePenalty(req.dueDate, req.requestDate, req.duration, req.component);
                         const isCompleted = req.status === 'COMPLETED' || req.status === 'RETURNED';
                         
                         return (
@@ -2848,6 +2974,41 @@ export default function AdminDashboard() {
                 </div>
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* Extension Review Modal */}
+      {showExtensionModal && extensionData && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-xl p-4">
+          <div className="bg-zinc-950 border border-blue-500/30 p-8 rounded-3xl max-w-sm w-full shadow-[0_0_50px_rgba(37,99,235,0.15)] relative">
+            <h3 className="text-2xl font-black text-white mb-2">Extension Request</h3>
+            <p className="text-sm text-zinc-400 mb-6 font-mono">ID: {extensionData.id}</p>
+
+            <div className="space-y-4 mb-8">
+              <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
+                <div className="text-[10px] uppercase tracking-widest font-bold text-zinc-500 mb-1">Student</div>
+                <div className="text-white font-bold text-sm">{extensionData.studentName}</div>
+                <div className="text-zinc-400 text-xs font-mono">{extensionData.usn}</div>
+              </div>
+              
+              <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
+                <div className="text-[10px] uppercase tracking-widest font-bold text-zinc-500 mb-1">Requested Extension</div>
+                <div className="text-blue-400 font-bold text-lg">+{extensionData.extensionDays} Days</div>
+              </div>
+
+              <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
+                <div className="text-[10px] uppercase tracking-widest font-bold text-zinc-500 mb-2">Reason Provided</div>
+                <p className="text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap">{extensionData.extensionReason}</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={() => processExtension(extensionData.id, 'REJECT')} disabled={isProcessingExtension} className="flex-1 py-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold text-sm transition-colors border border-rose-500/20 disabled:opacity-50">Reject</button>
+              <button onClick={() => processExtension(extensionData.id, 'APPROVE')} disabled={isProcessingExtension} className="flex-[2] py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black transition-colors disabled:opacity-50 shadow-lg text-sm">Approve Extension</button>
+            </div>
+            
+            <button onClick={() => setShowExtensionModal(false)} className="absolute top-6 right-6 text-zinc-500 hover:text-white transition">✕</button>
           </div>
         </div>
       )}

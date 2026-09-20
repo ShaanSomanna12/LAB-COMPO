@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { getWorkingDaysCount } from '@/lib/dateValidator';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { siteConfig } from '@/config/site';
@@ -40,6 +41,10 @@ interface Reservation {
     changedBy: string;
   }[];
   assignedAssetId?: string | null;
+  extension_requested?: boolean;
+  extension_reason?: string | null;
+  extension_days?: number | null;
+  extension_status?: string | null;
 }
 
 export default function MyReservations() {
@@ -70,6 +75,13 @@ export default function MyReservations() {
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [uploadType, setUploadType] = useState<'COLLECT' | 'RETURN' | null>(null);
   const [uploadedReturnProof, setUploadedReturnProof] = useState<{ imageUrl: string; latitude: number; longitude: number } | null>(null);
+
+  // Extension Modal States
+  const [extensionModalOpen, setExtensionModalOpen] = useState(false);
+  const [extensionResId, setExtensionResId] = useState<string | null>(null);
+  const [extensionDays, setExtensionDays] = useState<number>(1);
+  const [extensionReason, setExtensionReason] = useState<string>('');
+  const [isSubmittingExtension, setIsSubmittingExtension] = useState(false);
 
   // Ref for the hidden file input
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -126,6 +138,10 @@ export default function MyReservations() {
             borrowed_at,
             components(name, department, lab_location, value_tier),
             assigned_serial_numbers,
+            extension_requested,
+            extension_reason,
+            extension_days,
+            extension_status,
             reservation_status_history(new_status, changed_at)
           `)
           .eq('user_id', userData.user_id)
@@ -135,6 +151,10 @@ export default function MyReservations() {
         
         const mappedData = resData?.map((r: any) => ({
           ...r,
+          extension_requested: r.extension_requested || false,
+          extension_reason: r.extension_reason || null,
+          extension_days: r.extension_days || null,
+          extension_status: r.extension_status || null,
           assignedAssetId: r.component_instances?.[0]?.serial_number || (r.assigned_serial_numbers && r.assigned_serial_numbers.length > 0 ? r.assigned_serial_numbers[0] : null)
         }));
         
@@ -260,6 +280,44 @@ export default function MyReservations() {
     setUploadType(null);
     setReturnCondition('WORKING');
     setReturnModalOpen(true);
+  };
+
+  const openExtensionModal = (resId: string) => {
+    setExtensionResId(resId);
+    setExtensionDays(1);
+    setExtensionReason('');
+    setExtensionModalOpen(true);
+  };
+
+  const submitExtensionRequest = async () => {
+    if (!extensionResId || !extensionReason.trim()) {
+      toast.error('Please provide a valid reason.');
+      return;
+    }
+    
+    setIsSubmittingExtension(true);
+    try {
+      const res = await fetch('/api/requests/extend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reservationId: extensionResId,
+          days: extensionDays,
+          reason: extensionReason
+        })
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to submit extension');
+      
+      toast.success('Extension request submitted successfully!');
+      setExtensionModalOpen(false);
+      fetchReservations(); // Refresh the list
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setIsSubmittingExtension(false);
+    }
   };
 
   const submitReturn = async () => {
@@ -614,6 +672,21 @@ export default function MyReservations() {
             </button>
           </div>
 
+          {/* Instructions Box */}
+          <div className="mb-8 p-5 bg-cyan-950/30 border border-cyan-500/30 rounded-2xl flex items-start gap-4 shadow-[0_0_30px_rgba(6,182,212,0.1)]">
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center shrink-0 border border-cyan-500/40">
+              <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <h4 className="text-cyan-400 font-bold uppercase tracking-widest text-xs mb-1.5">Collection Instructions</h4>
+              <p className="text-zinc-300 text-sm leading-relaxed">
+                After receiving admin approval, please proceed to the lab. Ensure you carry your physical ID card and be ready to show your Digital Pass ID. Finally, you will need to upload a geotagged image of the component to complete the collection process.
+              </p>
+            </div>
+          </div>
+
           {/* Tab Navigation & Filters */}
           <div className="flex flex-col lg:flex-row gap-4 mb-8">
             <div className="flex gap-3 bg-black/40 p-2 rounded-2xl w-fit border border-white/5 backdrop-blur-xl shadow-2xl">
@@ -765,14 +838,14 @@ export default function MyReservations() {
                     <div className="bg-white/5 p-4 md:p-6 border-t border-white/10 flex flex-col gap-3 relative z-10">
                       <button
                         onClick={() => {
-                          const diffTime = res.due_date ? Math.abs(new Date(res.due_date).getTime() - new Date(res.created_at).getTime()) : 0;
+                          const durationDays = res.due_date ? getWorkingDaysCount(res.created_at, res.due_date) : 1;
                           setInspectData({
                             studentName: studentName,
                             usn: studentUsn || '',
                             department: res.components?.department || 'EDL',
                             items: [{ name: res.components?.name || 'Component', quantity: 1 }],
                             requestDate: res.created_at,
-                            duration: Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24))),
+                            duration: durationDays,
                             status: res.status
                           });
                           setShowInspectModal(true);
@@ -812,9 +885,25 @@ export default function MyReservations() {
                           )}
 
                           {res.status === 'CHECKED_OUT' && (
-                            <button onClick={() => handleReturnClick(res.reservation_id)} className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-black rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(245,158,11,0.3)]">
-                              Return Component
-                            </button>
+                            <>
+                              <button onClick={() => handleReturnClick(res.reservation_id)} className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-black rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(245,158,11,0.3)] mb-2">
+                                Return Component
+                              </button>
+                              
+                              {!res.extension_requested ? (
+                                <button onClick={() => openExtensionModal(res.reservation_id)} className="w-full py-2.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-xl font-bold text-xs uppercase tracking-widest transition-colors flex justify-center items-center gap-2">
+                                  Request Extension
+                                </button>
+                              ) : res.extension_status === 'PENDING' ? (
+                                <div className="w-full py-2.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-xl font-bold text-xs uppercase tracking-widest text-center">
+                                  Extension Pending
+                                </div>
+                              ) : res.extension_status === 'REJECTED' ? (
+                                <div className="w-full py-2.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-xl font-bold text-xs uppercase tracking-widest text-center">
+                                  Extension Rejected
+                                </div>
+                              ) : null}
+                            </>
                           )}
 
                           {res.status === 'PENDING_APPROVAL' && (
@@ -922,6 +1011,55 @@ export default function MyReservations() {
               <div className="flex gap-3">
                 <button onClick={() => setReturnModalOpen(false)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold text-sm transition-colors">Cancel</button>
                 <button onClick={submitReturn} disabled={!uploadedReturnProof} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-black disabled:opacity-50 transition-all text-sm">Submit</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Extension Modal */}
+      <AnimatePresence>
+        {extensionModalOpen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-xl p-4">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-zinc-950 border border-white/10 p-8 rounded-3xl max-w-sm w-full shadow-2xl relative">
+              <h3 className={`${spaceGrotesk.className} text-2xl font-black text-white mb-2`}>Request Extension</h3>
+              <div className="p-3 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-xl text-xs font-bold mb-6">
+                Note: Submitting this request does not guarantee an extension. It is subject to Admin approval.
+              </div>
+
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="block text-zinc-400 text-xs font-bold uppercase tracking-widest mb-2">Days Required</label>
+                  <select 
+                    value={extensionDays} 
+                    onChange={(e) => setExtensionDays(parseInt(e.target.value, 10))}
+                    className="w-full bg-zinc-900 border border-zinc-800 text-white p-3 rounded-xl focus:border-blue-500/50 outline-none"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7].map(d => (
+                      <option key={d} value={d}>{d} Day{d > 1 ? 's' : ''}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-zinc-400 text-xs font-bold uppercase tracking-widest mb-2">Proper Reason</label>
+                  <textarea 
+                    value={extensionReason}
+                    onChange={(e) => setExtensionReason(e.target.value)}
+                    placeholder="Why do you need more time?"
+                    className="w-full bg-zinc-900 border border-zinc-800 text-white p-3 rounded-xl focus:border-blue-500/50 outline-none resize-none h-24"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button onClick={() => setExtensionModalOpen(false)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold text-sm transition-colors">Cancel</button>
+                <button 
+                  onClick={submitExtensionRequest} 
+                  disabled={!extensionReason.trim() || isSubmittingExtension} 
+                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-black disabled:opacity-50 transition-all text-sm flex justify-center items-center gap-2"
+                >
+                  {isSubmittingExtension ? 'Submitting...' : 'Submit'}
+                </button>
               </div>
             </motion.div>
           </motion.div>

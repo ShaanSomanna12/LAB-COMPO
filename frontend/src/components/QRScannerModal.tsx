@@ -11,8 +11,8 @@ const Scanner = dynamic(
 interface QRScannerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  expectedComponentName: string;
-  onScanSuccess: (serialNumber: string) => void;
+  expectedComponentName?: string;
+  onScanSuccess: (scannedValue: string) => void;
 }
 
 export default function QRScannerModal({ isOpen, onClose, expectedComponentName, onScanSuccess }: QRScannerModalProps) {
@@ -23,14 +23,8 @@ export default function QRScannerModal({ isOpen, onClose, expectedComponentName,
   const handleScan = (result: any) => {
     if (result && result.length > 0) {
       const scannedValue = result[0].rawValue;
-      // Expecting format like: ARD-1234
-      const prefix = expectedComponentName.substring(0, 3).toUpperCase();
-      if (scannedValue.startsWith(prefix)) {
-        onScanSuccess(scannedValue);
-      } else {
-        setError(`Invalid QR Code for ${expectedComponentName}. Scanned: ${scannedValue}`);
-        setTimeout(() => setError(''), 3000);
-      }
+      // Pass the scanned Order ID (UUID) up to the parent component
+      onScanSuccess(scannedValue);
     }
   };
 
@@ -43,9 +37,13 @@ export default function QRScannerModal({ isOpen, onClose, expectedComponentName,
           <div>
             <h2 className="text-lg font-bold text-white mb-0.5 flex items-center gap-2">
               <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
-              Scan Component Label
+              Scan Order Label
             </h2>
-            <p className="text-zinc-500 text-xs">Verify: <span className="text-zinc-300 font-mono">{expectedComponentName}</span></p>
+            {expectedComponentName ? (
+              <p className="text-zinc-500 text-xs">Verify: <span className="text-zinc-300 font-mono">{expectedComponentName}</span></p>
+            ) : (
+              <p className="text-zinc-500 text-xs">Scan any component order QR code</p>
+            )}
           </div>
           <button
             onClick={onClose}

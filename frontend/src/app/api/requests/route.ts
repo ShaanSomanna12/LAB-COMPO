@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabase as anonClient } from '@/lib/supabase';
 import { sendNotificationEmail } from '@/lib/email';
 import { verifySession, ROLES } from '@/lib/auth';
+import { getNextWorkingDay, getWorkingDaysCount } from '@/lib/dateValidator';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -25,7 +26,7 @@ export async function GET() {
       .from('reservations')
       .select(`
         *,
-        users(name, usn),
+        users(name, usn, mobile),
         components(name, department, lab_location, value_tier, tracking_type),
         reservation_status_history(old_status, new_status, changed_at, note, changed_by, users(name))
       `)
@@ -38,6 +39,7 @@ export async function GET() {
       id: res.reservation_id,
       studentName: res.users?.name,
       usn: res.users?.usn,
+      mobile: res.users?.mobile,
       component: res.components?.name,
       department: res.components?.department || 'EDL',
       location: res.components?.lab_location || 'Main Lab',
@@ -46,7 +48,7 @@ export async function GET() {
       studentDepartment: res.student_department,
       requestDate: res.created_at ? res.created_at.split('T')[0] : null,
       date: res.created_at ? res.created_at.split('T')[0] : null,
-      duration: res.due_date && res.created_at ? Math.max(1, Math.ceil((new Date(res.due_date).getTime() - new Date(res.created_at).getTime()) / (1000 * 60 * 60 * 24))) : 7,
+      duration: res.due_date && res.created_at ? getWorkingDaysCount(res.created_at, res.due_date) : 7,
       dueDate: res.due_date || null,
       isDamaged: res.is_damaged === true,
       returnedAt: res.returned_at,
@@ -59,6 +61,10 @@ export async function GET() {
       latitude: res.latitude || null,
       longitude: res.longitude || null,
       images: [res.geotag_image_url, res.after_img_url].filter(Boolean),
+      extensionRequested: res.extension_requested || false,
+      extensionReason: res.extension_reason || null,
+      extensionDays: res.extension_days || null,
+      extensionStatus: res.extension_status || null,
       history: res.reservation_status_history?.map((h: any) => ({
         oldStatus: h.old_status,
         newStatus: h.new_status,
@@ -123,7 +129,9 @@ export async function PATCH(request: Request) {
         updates.created_at = new Date(date).toISOString();
         if (currentReservation.due_date && currentReservation.created_at) {
           const durationTime = new Date(currentReservation.due_date).getTime() - new Date(currentReservation.created_at).getTime();
-          updates.due_date = new Date(new Date(updates.created_at).getTime() + durationTime).toISOString();
+          let newDueDate = new Date(new Date(updates.created_at).getTime() + durationTime);
+          newDueDate = getNextWorkingDay(newDueDate);
+          updates.due_date = newDueDate.toISOString();
         }
         noteToAppend = noteToAppend ? `${noteToAppend}. Date changed to ${date}` : `Date changed to ${date}`;
       }
@@ -271,6 +279,14 @@ export async function POST(request: Request) {
        return NextResponse.json({ error: 'User not found for this USN' }, { status: 404 });
     }
 
+    // Update user's mobile number if provided
+    if (body.mobile) {
+      await supabase
+        .from('users')
+        .update({ mobile: body.mobile })
+        .eq('user_id', user.user_id);
+    }
+
     const newReservations = [];
 
     // 2. Loop through requested items and create reservations
@@ -297,15 +313,16 @@ export async function POST(request: Request) {
       let isLowTier = tierUpper === 'LOW';
       
       let status = 'PENDING_APPROVAL';
-      if (isLowTier && reqQty <= 10) {
+      if (isLowTier && reqQty <= 3) {
         status = 'APPROVED';
       } else if (tierUpper === 'HIGH') {
         status = 'PENDING_APPROVAL';
       }
       
       const collectionDate = date ? new Date(date) : new Date();
-      const dueDate = new Date(collectionDate);
+      let dueDate = new Date(collectionDate);
       dueDate.setDate(dueDate.getDate() + (duration || 7));
+      dueDate = getNextWorkingDay(dueDate);
 
       const { data: reservation, error: resError } = await supabase
         .from('reservations')
@@ -318,8 +335,7 @@ export async function POST(request: Request) {
           project_title: body.projectTitle || null,
           due_date: dueDate.toISOString(),
           quantity: item.quantity || 1,
-          collection_time: time || null,
-          created_at: collectionDate.toISOString()
+          collection_time: time || null
         }])
         .select()
         .single();

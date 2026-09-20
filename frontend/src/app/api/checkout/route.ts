@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseServer';
 import { verifySession, ROLES } from '@/lib/auth';
+import { sendEmail } from '@/lib/emailService';
+import { getNextWorkingDay } from '@/lib/dateValidator';
 
 export const dynamic = 'force-dynamic';
 const supabase = getSupabaseAdmin();
@@ -32,6 +34,10 @@ export async function POST(request: Request) {
 
     if (reservation.status !== 'APPROVED' && reservation.status !== 'READY_FOR_PICKUP') {
       return NextResponse.json({ error: 'Reservation is not approved or ready for pickup' }, { status: 400 });
+    }
+
+    if (!reservation.geotag_image_url) {
+      return NextResponse.json({ error: 'Student must upload a photo of the component before checkout can be finalized.' }, { status: 400 });
     }
 
     const isAssetTracked = reservation.components?.tracking_type === 'ASSET';
@@ -71,12 +77,23 @@ export async function POST(request: Request) {
       }
     }
 
+    // Calculate new due date based on original duration from created_at to due_date
+    const originalDurationDays = reservation.due_date && reservation.created_at 
+      ? Math.max(1, Math.ceil((new Date(reservation.due_date).getTime() - new Date(reservation.created_at).getTime()) / (1000 * 60 * 60 * 24)))
+      : 7;
+      
+    const borrowedAt = new Date();
+    let newDueDate = new Date(borrowedAt);
+    newDueDate.setDate(newDueDate.getDate() + originalDurationDays);
+    newDueDate = getNextWorkingDay(newDueDate);
+
     // 5. Update reservation status to CHECKED_OUT
     const { data: updatedRes, error: updateResError } = await supabase
       .from('reservations')
       .update({
         status: 'CHECKED_OUT',
-        borrowed_at: new Date().toISOString()
+        borrowed_at: borrowedAt.toISOString(),
+        due_date: newDueDate.toISOString()
       })
       .eq('reservation_id', reservationId)
       .select()

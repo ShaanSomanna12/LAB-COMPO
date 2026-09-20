@@ -174,3 +174,11 @@ CREATE TABLE IF NOT EXISTS public.asset_history (
 ALTER TABLE public.asset_history ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow public select for Asset History" ON public.asset_history FOR SELECT USING (true);
 CREATE POLICY "Allow public insert for Asset History" ON public.asset_history FOR INSERT WITH CHECK (true);
+
+-- Extension Requests Feature
+ALTER TABLE public.reservations
+ADD COLUMN extension_requested BOOLEAN DEFAULT false,
+ADD COLUMN extension_reason TEXT,
+ADD COLUMN extension_days INTEGER,
+ADD COLUMN extension_status VARCHAR(50);
+

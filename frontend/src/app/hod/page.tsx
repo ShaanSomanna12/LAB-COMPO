@@ -405,11 +405,17 @@ export default function HodDashboard() {
                           <div className="text-zinc-500 text-[10px]">{req.studentName} ({req.usn})</div>
                         </div>
                         <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                          req.status === 'Approved by HOD' || req.status === 'APPROVED' || req.status === 'Ready for Collection' || req.status === 'Active' || req.status.includes('Approved')
+                          req.status === 'Approved by HOD' || req.status === 'APPROVED' || req.status === 'Ready for Collection' || req.status === 'Active' || req.status.includes('Approved') || req.status.toLowerCase().includes('admin')
                             ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                             : 'bg-red-500/10 text-red-400 border-red-500/20'
                         }`}>
-                          {req.status === 'Approved by HOD' || req.status === 'APPROVED' || req.status === 'Ready for Collection' || req.status === 'Active' || req.status.includes('Approved') ? 'HOD Approved' : 'Rejected'}
+                          {req.status === 'Approved by HOD' ? 'HOD Approved' : 
+                           req.status.toLowerCase().includes('admin') ? 'Admin Approved' :
+                           req.status === 'APPROVED' ? 'Approved' : 
+                           req.status === 'Ready for Collection' ? 'Ready for Collection' : 
+                           req.status === 'Active' ? 'Active' : 
+                           req.status.includes('Approved') ? req.status : 
+                           'Rejected'}
                         </span>
                       </div>
                     ))}

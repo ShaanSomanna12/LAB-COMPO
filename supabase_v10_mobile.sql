@@ -1,0 +1,1 @@
+﻿ALTER TABLE public.users ADD COLUMN IF NOT EXISTS mobile VARCHAR(20);

@@ -9,7 +9,7 @@ import ParticleNetwork from '@/components/ui/ParticleNetwork';
 import { siteConfig } from '@/config/site';
 import { Skeleton } from '@/components/ui/Skeleton';
 import RequisitionLetter from '@/components/RequisitionLetter';
-import { isWorkingDay } from '@/lib/dateValidator';
+import { isWorkingDay, getWorkingDaysCount } from '@/lib/dateValidator';
 
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] });
 
@@ -56,7 +56,8 @@ export default function StudentCheckout() {
   const [section, setSection] = useState('');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('09:00 AM');
-  const [duration, setDuration] = useState<number | ''>('');
+  const [returnDate, setReturnDate] = useState('');
+  const [mobile, setMobile] = useState('');
   const [year, setYear] = useState('');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [minDate, setMinDate] = useState('');
@@ -75,7 +76,7 @@ export default function StudentCheckout() {
       if (user && user.email) {
         const { data: userData } = await supabase
           .from('users')
-          .select('name, usn, department, branch, section')
+          .select('name, usn, department, branch, section, mobile')
           .eq('email', user.email)
           .maybeSingle();
           
@@ -85,6 +86,7 @@ export default function StudentCheckout() {
           if (userData.department) setDepartment(userData.department);
           if (userData.branch) setYear(userData.branch);
           if (userData.section) setSection(userData.section);
+          if (userData.mobile) setMobile(userData.mobile);
           if (userData.department) {
              const res = await fetch(`/api/notices?department=${userData.department}`);
              const noticesData = await res.json();
@@ -149,6 +151,22 @@ export default function StudentCheckout() {
       setDate('');
     } else {
       setDate(val);
+      if (returnDate && returnDate < val) {
+        setReturnDate(val);
+      }
+    }
+  };
+
+  const handleReturnDateChange = (val: string) => {
+    if (val < date) {
+      toast.error('Return date cannot be earlier than collection date');
+      return;
+    }
+    const check = isWorkingDay(val);
+    if (!check.isValid) {
+      toast.error(`Invalid return date: ${check.reason}`);
+    } else {
+      setReturnDate(val);
     }
   };
 
@@ -162,11 +180,25 @@ export default function StudentCheckout() {
       return;
     }
     
-    if (!duration || duration < 1) {
-      toast.error('Please specify a valid borrowing duration');
+    if (!returnDate) {
+      toast.error('Please specify a return date');
       setIsLoading(false);
       return;
     }
+    
+    if (returnDate < date) {
+      toast.error('Return date must be on or after the collection date');
+      setIsLoading(false);
+      return;
+    }
+    
+    if (!mobile || mobile.length < 10) {
+      toast.error('Please enter a valid mobile number');
+      setIsLoading(false);
+      return;
+    }
+    
+    const durationDays = getWorkingDaysCount(date, returnDate);
 
     const todayStr = new Date().toLocaleDateString('en-CA');
     if (!date || date < todayStr) {
@@ -199,7 +231,8 @@ export default function StudentCheckout() {
           section,
           date,
           time,
-          duration,
+          mobile,
+          duration: durationDays,
           items: itemsPayload
         })
       });
@@ -220,7 +253,7 @@ export default function StudentCheckout() {
         year,
         items: itemsPayload.map((item: any) => ({ name: item.name, quantity: item.quantity })),
         requestDate: date,
-        duration: duration,
+        duration: durationDays,
         status: 'PENDING'
       });
       setCart([]);
@@ -624,6 +657,11 @@ export default function StudentCheckout() {
                           </select>
                         </div>
                       </div>
+                      
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Mobile Number</label>
+                        <input required type="tel" value={mobile} onChange={e => setMobile(e.target.value.replace(/\D/g, ''))} maxLength={15} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 text-white font-medium" />
+                      </div>
                     </div>
 
                     {/* Request Info */}
@@ -636,8 +674,14 @@ export default function StudentCheckout() {
                           <input required type="date" min={minDate} value={date} onChange={e => handleDateChange(e.target.value)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 [color-scheme:dark] text-white font-medium" />
                         </div>
                         <div>
-                          <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Collection Time</label>
-                          <select required value={time} onChange={e => setTime(e.target.value)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 appearance-none text-white font-medium">
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Return Date</label>
+                          <input required type="date" min={date || minDate} value={returnDate} onChange={e => handleReturnDateChange(e.target.value)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 [color-scheme:dark] text-white font-medium" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Collection Time</label>
+                        <select required value={time} onChange={e => setTime(e.target.value)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 appearance-none text-white font-medium">
                             <option value="09:00">09:00 AM</option>
                             <option value="09:30">09:30 AM</option>
                             <option value="10:00">10:00 AM</option>
@@ -657,12 +701,6 @@ export default function StudentCheckout() {
                             <option value="17:00">05:00 PM</option>
                           </select>
                         </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Borrow Duration (Days)</label>
-                        <input required type="number" min="1" max="30" placeholder="e.g. 7" value={duration === '' ? '' : duration} onChange={e => setDuration(e.target.value === '' ? '' : parseInt(e.target.value))} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 text-white font-medium" />
-                      </div>
                     </div>
                   </div>
 

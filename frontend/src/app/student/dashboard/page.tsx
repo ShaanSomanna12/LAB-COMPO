@@ -164,21 +164,7 @@ export default function StudentDashboard() {
 
       <div className="min-h-screen bg-[#020617] text-zinc-100 flex flex-col items-center justify-start pt-[calc(4.5rem+env(safe-area-inset-top,0px))] pb-12 px-4 font-sans selection:bg-cyan-500/30 overflow-x-hidden relative">
         
-        {/* Top Banner */}
-        <motion.div 
-          initial={{ y: -50, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="absolute top-0 left-0 w-full bg-black/40 border-b border-white/5 pt-[calc(0.625rem+env(safe-area-inset-top,0px))] pb-2.5 px-4 backdrop-blur-xl z-50 text-center flex items-center justify-center gap-3"
-        >
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-          </span>
-          <p className="text-xs font-bold text-zinc-300 uppercase tracking-widest">
-            {siteConfig.collegeName} Secure Portal
-          </p>
-        </motion.div>
+
 
         {/* Dynamic Background */}
         <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-[#020617] to-[#020617] pointer-events-none" />
