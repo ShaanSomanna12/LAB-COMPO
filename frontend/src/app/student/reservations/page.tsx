@@ -297,9 +297,16 @@ export default function MyReservations() {
     
     setIsSubmittingExtension(true);
     try {
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const res = await fetch('/api/requests/extend', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           reservationId: extensionResId,
           days: extensionDays,
@@ -328,9 +335,16 @@ export default function MyReservations() {
     }
     setUploading(true);
     try {
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const res = await fetch('/api/requests', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           id: returnResId,
           status: 'RETURN_REQUESTED',
@@ -414,9 +428,16 @@ export default function MyReservations() {
         setUploadedReturnProof({ imageUrl, latitude, longitude });
         toast.success("Return proof image captured successfully!");
       } else {
-        const res = await fetch('/api/requests', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+        
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const res = await fetch('/api/requests', {
+        method: 'PATCH',
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
           body: JSON.stringify({ id: targetId, status: 'READY_FOR_PICKUP', geotag: { imageUrl, latitude, longitude } })
         });
         if (!res.ok) throw new Error("Failed to update reservation status.");
@@ -437,9 +458,16 @@ export default function MyReservations() {
     if (!confirm('Are you sure you want to withdraw this request?')) return;
     
     try {
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const res = await fetch('/api/requests', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ id, status: 'CANCELLED' })
       });
       if (!res.ok) throw new Error('Failed to withdraw request');
