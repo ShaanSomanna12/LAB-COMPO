@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { siteConfig } from '@/config/site';
-import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 
 interface RequestItem {
   id: string;
@@ -25,6 +24,7 @@ interface RequestItem {
   isDamaged?: boolean;
   dueDate?: string;
   valueTier?: string;
+  quantity?: number;
 }
 
 export default function HodDashboard() {
@@ -39,6 +39,12 @@ export default function HodDashboard() {
   // Interactive view switcher and graphing states
   const [viewMode, setViewMode] = useState<'requests' | 'analytics'>('requests');
   const [isLocked, setIsLocked] = useState(false);
+
+  const [workflowTab, setWorkflowTab] = useState<'ACTION_REQUIRED' | 'IN_PROGRESS' | 'ACTIVE' | 'HISTORY'>('ACTION_REQUIRED');
+  const [selectedAnalyticsMonth, setSelectedAnalyticsMonth] = useState('2026-09');
+  const [hoveredAnalyticsIdx, setHoveredAnalyticsIdx] = useState<number | null>(null);
+  const [analyticsSearchQuery, setAnalyticsSearchQuery] = useState('');
+
 
   const handleLogout = () => {
     localStorage.removeItem('admin_dept');
@@ -110,65 +116,98 @@ export default function HodDashboard() {
     }
   };
 
-  // Dynamic 6-month timeline aggregation utility for HOD (department scoped)
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  
-  const getAnalyticsData = () => {
-    if (!activeDept) return [];
+    const monthLabels: Record<string, string> = {
+    '2026-12': 'December 2026', '2026-11': 'November 2026', '2026-10': 'October 2026',
+    '2026-09': 'September 2026', '2026-08': 'August 2026', '2026-07': 'July 2026',
+    '2026-06': 'June 2026', '2026-05': 'May 2026', '2026-04': 'April 2026',
+    '2026-03': 'March 2026', '2026-02': 'February 2026'
+  };
+
+  const getMonthlyStats = (monthStr: string) => {
+    const targetYear = parseInt(monthStr.split('-')[0], 10);
+    const targetMonth = parseInt(monthStr.split('-')[1], 10) - 1;
     
-    // Create chronological rolling 6 months scale
-    const months: { label: string; monthNum: number; year: number; borrowed: number; stockAdded: number }[] = [];
-    const d = new Date();
-    for (let i = 5; i >= 0; i--) {
-      const m = new Date(d.getFullYear(), d.getMonth() - i, 1);
-      months.push({
-        label: monthNames[m.getMonth()],
-        monthNum: m.getMonth() + 1,
-        year: m.getFullYear(),
-        borrowed: 0,
-        stockAdded: 0
+    let prevYear = targetYear;
+    let prevDate = new Date(targetYear, targetMonth - 1, 1);
+    const prevMonth = prevDate.getMonth();
+
+    const safeRequests = Array.isArray(requests) ? requests : [];
+    const deptReqs = safeRequests.filter(r => r.department === activeDept || r.studentDepartment === activeDept);
+
+    const monthReqs = deptReqs.filter(r => {
+      if (!r.requestDate) return false;
+      const d = new Date(r.requestDate);
+      return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
+    });
+
+    const prevMonthReqs = deptReqs.filter(r => {
+      if (!r.requestDate) return false;
+      const d = new Date(r.requestDate);
+      return d.getFullYear() === prevYear && d.getMonth() === prevMonth;
+    });
+
+    return {
+      curr: { reqs: monthReqs.length, total: monthReqs.length },
+      prev: { reqs: prevMonthReqs.length, total: prevMonthReqs.length }
+    };
+  };
+
+  const getChartDataForMonth = (monthStr: string) => {
+    const targetYear = parseInt(monthStr.split('-')[0], 10);
+    const targetMonth = parseInt(monthStr.split('-')[1], 10) - 1;
+
+    const daysInMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+    const dailyData = [];
+
+    const safeRequests = Array.isArray(requests) ? requests : [];
+    const deptReqs = safeRequests.filter(r => r.department === activeDept || r.studentDepartment === activeDept);
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const datePrefix = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const reqsCount = deptReqs.filter(r => r.requestDate === datePrefix).length;
+
+      dailyData.push({
+        day,
+        dateStr: datePrefix,
+        reservations: reqsCount,
+        total: reqsCount
       });
     }
+    return dailyData;
+  };
 
-    const deptRequests = requests.filter(r => r.department === activeDept || r.studentDepartment === activeDept);
-    const deptInventory = inventory.filter(i => i.department === activeDept);
+  const getRecentActivity = (monthStr: string) => {
+    const targetYear = parseInt(monthStr.split('-')[0], 10);
+    const targetMonth = parseInt(monthStr.split('-')[1], 10) - 1;
 
-    // 1. Group real student requests by month
-    deptRequests.forEach(req => {
-      if (!req.requestDate) return;
-      const reqDate = new Date(req.requestDate);
-      if (isNaN(reqDate.getTime())) return;
-      
-      const reqMonth = reqDate.getMonth() + 1;
-      const reqYear = reqDate.getFullYear();
+    const activities: any[] = [];
+    const safeRequests = Array.isArray(requests) ? requests : [];
 
-      const match = months.find(m => m.monthNum === reqMonth && m.year === reqYear);
-      if (match) {
-        match.borrowed += 1;
+    safeRequests.forEach(r => {
+      if (!r.requestDate || (r.department !== activeDept && r.studentDepartment !== activeDept)) return;
+      const d = new Date(r.requestDate);
+      if (d.getFullYear() === targetYear && d.getMonth() === targetMonth) {
+        activities.push({
+          type: 'reservation',
+          id: r.id,
+          title: `Reservation: ${r.component}`,
+          student: `${r.studentName} (${r.usn})`,
+          date: r.requestDate,
+          status: r.status,
+          timestamp: new Date(r.requestDate).getTime()
+        });
       }
     });
 
-    // 2. Aggregate total stock and model stock additions deterministically
-    let totalStock = deptInventory.reduce((acc, i) => acc + i.total, 0);
-    
-    if (months.length === 6) {
-      months[0].stockAdded = Math.round(totalStock * 0.35);
-      months[2].stockAdded = Math.round(totalStock * 0.20);
-      months[4].stockAdded = Math.round(totalStock * 0.25);
-      
-      const baselineCurrent = Math.round(totalStock * 0.20);
-      const sessionAdded = deptInventory.filter(item => item.id > 1716000000000).reduce((acc, i) => acc + i.total, 0);
-      months[5].stockAdded = Math.max(baselineCurrent, sessionAdded);
+    return activities.sort((a, b) => b.timestamp - a.timestamp);
+  };
+
+  const getPercentageChange = (curr: number, prev: number) => {
+    if (prev === 0) {
+      return curr > 0 ? '+100%' : '0%';
     }
-
-    // Default visual population for display completeness (deterministic, index-seeded)
-    months.forEach((m, idx) => {
-      if (m.stockAdded === 0 && totalStock > 0) {
-        m.stockAdded = Math.max(1, (idx % 3) + 1);
-      }
-    });
-
-    return months;
+    const pct = ((curr - prev) / prev) * 100;
+    return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
   };
 
   const handleAction = async (id: string, approve: boolean) => {
@@ -201,20 +240,52 @@ export default function HodDashboard() {
     }
   };
 
-  // Filter requests (matching either component department or student department)
-  const deptRequests = requests.filter(r => r.department === activeDept || r.studentDepartment === activeDept);
-  const pendingRequests = deptRequests.filter(r => r.status === 'Pending HOD' || r.status === 'PENDING_HOD' || r.status === 'Pending Renewal HOD');
-  const historyRequests = deptRequests.filter(r => 
-    (r.valueTier === 'HIGH' || r.status === 'Approved by HOD' || r.status === 'APPROVED' || r.status === 'Rejected' || r.status === 'Pending Renewal HOD') && 
-    r.status !== 'Pending HOD' && 
-    r.status !== 'PENDING_HOD' &&
-    r.status !== 'Pending Renewal HOD'
-  );
+    // Analytics Derived Data
+  const analyticsStats = getMonthlyStats(selectedAnalyticsMonth);
+  const analyticsChartData = getChartDataForMonth(selectedAnalyticsMonth);
+  const analyticsRecentActivity = getRecentActivity(selectedAnalyticsMonth);
 
-  // Stats
-  const activeDeptPending = pendingRequests.length;
-  const activeDeptApproved = historyRequests.filter(r => r.status.includes('Approved') || r.status === 'APPROVED' || r.status === 'Ready for Collection' || r.status === 'Active' || r.status.includes('Renewal')).length;
-  const activeDeptRejected = historyRequests.filter(r => r.status === 'Rejected' || r.status === 'REJECTED').length;
+  const totalChangeStr = getPercentageChange(analyticsStats.curr.total, analyticsStats.prev.total);
+  const reqsChangeStr = getPercentageChange(analyticsStats.curr.reqs, analyticsStats.prev.reqs);
+
+  const analyticsYMax = Math.max(...analyticsChartData.map(d => d.total), 4);
+
+  let updatesLinePath = '';
+  let updatesAreaPath = '';
+
+  if (analyticsChartData.length > 0) {
+    const points = analyticsChartData.map((d, idx) => {
+      const x = 45 + idx * (530 / (analyticsChartData.length - 1));
+      const y = 180 - (d.total / analyticsYMax) * 140;
+      return `${x},${y}`;
+    });
+
+    updatesLinePath = `M ${points.join(' L ')}`;
+    updatesAreaPath = `M 45,180 L ${points.join(' L ')} L ${45 + (analyticsChartData.length - 1) * (530 / (analyticsChartData.length - 1))},180 Z`;
+  }
+
+  const selectedMonthLabel = monthLabels[selectedAnalyticsMonth] || selectedAnalyticsMonth;
+
+  // Filter requests (matching either component department or student department)
+  const safeRequests = Array.isArray(requests) ? requests : [];
+  const deptRequests = safeRequests.filter(r => r.department === activeDept || r.studentDepartment === activeDept);
+  
+  // Categorize for workflow tabs
+  const actionRequiredReqs = deptRequests.filter(r => r.status === 'Pending HOD' || r.status === 'PENDING_HOD' || r.status === 'Pending Renewal HOD');
+  const inProgressReqs = deptRequests.filter(r => r.status === 'PENDING_APPROVAL' || r.status === 'APPROVED' || r.status === 'READY_FOR_PICKUP');
+  const activeLoansReqs = deptRequests.filter(r => r.status === 'CHECKED_OUT' || r.status === 'Active');
+  const historyReqs = deptRequests.filter(r => r.status === 'RETURN_REQUESTED' || r.status === 'RETURNED' || r.status === 'COMPLETED' || r.status === 'REJECTED' || r.status === 'CANCELLED' || r.status === 'Approved by HOD' || r.status === 'Rejected');
+
+  let currentTabRequests: RequestItem[] = [];
+  if (workflowTab === 'ACTION_REQUIRED') currentTabRequests = actionRequiredReqs;
+  else if (workflowTab === 'IN_PROGRESS') currentTabRequests = inProgressReqs;
+  else if (workflowTab === 'ACTIVE') currentTabRequests = activeLoansReqs;
+  else if (workflowTab === 'HISTORY') currentTabRequests = historyReqs;
+
+  const activeDeptPending = actionRequiredReqs.length;
+  const activeDeptApproved = historyReqs.filter(r => r.status.includes('Approved') || r.status === 'APPROVED' || r.status === 'Ready for Collection' || r.status === 'Active' || r.status.includes('Renewal') || r.status === 'CHECKED_OUT').length;
+  const activeDeptRejected = historyReqs.filter(r => r.status === 'Rejected' || r.status === 'REJECTED').length;
+
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white p-3 sm:p-6 md:p-8 font-sans print:bg-white print:text-black">
@@ -344,30 +415,34 @@ export default function HodDashboard() {
             </div>
           </div>
 
-          {/* Main Grid: Left side inbox list, right side active preview */}
+          {/* Workflow Tabs */}
+          <div className="flex gap-2 bg-zinc-900/50 p-1 rounded-xl w-fit mb-6 border border-zinc-800">
+            <button onClick={() => { setWorkflowTab('ACTION_REQUIRED'); setSelectedReq(null); }} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${workflowTab === 'ACTION_REQUIRED' ? 'bg-amber-500 text-black shadow-md' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}>Action Required</button>
+            <button onClick={() => { setWorkflowTab('IN_PROGRESS'); setSelectedReq(null); }} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${workflowTab === 'IN_PROGRESS' ? 'bg-cyan-500 text-black shadow-md' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}>Pending Admin / Checkout</button>
+            <button onClick={() => { setWorkflowTab('ACTIVE'); setSelectedReq(null); }} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${workflowTab === 'ACTIVE' ? 'bg-emerald-500 text-black shadow-md' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}>Active Loans</button>
+            <button onClick={() => { setWorkflowTab('HISTORY'); setSelectedReq(null); }} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${workflowTab === 'HISTORY' ? 'bg-zinc-700 text-white shadow-md' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}>History</button>
+          </div>
+
+          {/* Main Grid: Left side list, right side active preview */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
             
-            {/* Inbox Queue list */}
+            {/* List */}
             <div className="lg:col-span-5 space-y-6">
               <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
                 <h2 className="text-xl font-bold tracking-tight mb-4 flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-                  Pending Approval Queue ({pendingRequests.length})
+                  <span className={`w-2.5 h-2.5 rounded-full ${workflowTab === 'ACTION_REQUIRED' ? 'bg-amber-500' : workflowTab === 'ACTIVE' ? 'bg-emerald-500' : workflowTab === 'IN_PROGRESS' ? 'bg-cyan-500' : 'bg-zinc-500'}`}></span>
+                  {workflowTab === 'ACTION_REQUIRED' ? 'Action Required' : workflowTab === 'IN_PROGRESS' ? 'Pending Admin / Checkout' : workflowTab === 'ACTIVE' ? 'Actively Borrowed' : 'History'} ({currentTabRequests.length})
                 </h2>
 
                 {loading ? (
-                  <div className="text-center py-12 text-zinc-600">Loading digital requests inbox...</div>
-                ) : pendingRequests.length === 0 ? (
+                  <div className="text-center py-12 text-zinc-600">Loading requests...</div>
+                ) : currentTabRequests.length === 0 ? (
                   <div className="text-center py-12 border border-zinc-800 border-dashed rounded-xl">
-                    <svg className="w-10 h-10 text-zinc-700 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <p className="text-zinc-500 font-medium text-sm">Inbox is completely clear!</p>
-                    <p className="text-xs text-zinc-600 mt-1">All {activeDept} student requisitions resolved.</p>
+                    <p className="text-zinc-500 font-medium text-sm">No requests found here.</p>
                   </div>
                 ) : (
                   <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
-                    {pendingRequests.map(req => (
+                    {currentTabRequests.map(req => (
                       <button
                         key={req.id}
                         onClick={() => setSelectedReq(req)}
@@ -383,41 +458,11 @@ export default function HodDashboard() {
                             <p className="text-sm font-semibold text-zinc-300">{req.studentName}</p>
                             <p className="text-[10px] text-zinc-500 font-mono">{req.usn}</p>
                           </div>
-                          <span className="text-xs text-blue-400 font-bold hover:underline">Review →</span>
+                          <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest border ${req.status === 'PENDING_HOD' || req.status === 'Pending HOD' || req.status === 'Pending Renewal HOD' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : req.status === 'PENDING_APPROVAL' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' : req.status === 'APPROVED' || req.status === 'READY_FOR_PICKUP' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' : req.status === 'CHECKED_OUT' || req.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'}`}>
+                            {req.status === 'PENDING_HOD' || req.status === 'Pending HOD' ? 'AWAITING YOU' : req.status === 'PENDING_APPROVAL' ? 'AWAITING ADMIN' : req.status === 'CHECKED_OUT' || req.status === 'Active' ? 'BORROWED' : req.status === 'APPROVED' || req.status === 'READY_FOR_PICKUP' ? 'PENDING CHECKOUT' : req.status}
+                          </span>
                         </div>
                       </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Past Decisions History Log */}
-              <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-2xl p-6">
-                <h3 className="text-lg font-bold tracking-tight mb-4 text-zinc-400">Decisions History ({historyRequests.length})</h3>
-                {historyRequests.length === 0 ? (
-                  <p className="text-zinc-600 text-xs py-4 text-center">No past digital decisions in this department yet.</p>
-                ) : (
-                  <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2">
-                    {historyRequests.map(req => (
-                      <div key={req.id} className="p-3 bg-zinc-950/40 border border-zinc-900 rounded-lg flex justify-between items-center text-xs">
-                        <div>
-                          <div className="font-semibold text-zinc-300">{req.component}</div>
-                          <div className="text-zinc-500 text-[10px]">{req.studentName} ({req.usn})</div>
-                        </div>
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                          req.status === 'Approved by HOD' || req.status === 'APPROVED' || req.status === 'Ready for Collection' || req.status === 'Active' || req.status.includes('Approved') || req.status.toLowerCase().includes('admin')
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                            : 'bg-red-500/10 text-red-400 border-red-500/20'
-                        }`}>
-                          {req.status === 'Approved by HOD' ? 'HOD Approved' : 
-                           req.status.toLowerCase().includes('admin') ? 'Admin Approved' :
-                           req.status === 'APPROVED' ? 'Approved' : 
-                           req.status === 'Ready for Collection' ? 'Ready for Collection' : 
-                           req.status === 'Active' ? 'Active' : 
-                           req.status.includes('Approved') ? req.status : 
-                           'Rejected'}
-                        </span>
-                      </div>
                     ))}
                   </div>
                 )}
@@ -583,325 +628,383 @@ export default function HodDashboard() {
         </>
       )}
 
-      {/* Analytics Tab Content */}
-      {viewMode === 'analytics' && (() => {
-        const deptInv = inventory.filter(item => item.department === activeDept);
-        const deptReqs = requests.filter(r => r.department === activeDept || r.studentDepartment === activeDept);
-        
-        const totalReqs = deptReqs.length;
-        const activeLoans = deptReqs.filter(r => r.status === 'Active').length;
-        const pendingReturnsCount = deptReqs.filter(r => r.status === 'Active' || r.status === 'Return Awaiting Admin').length;
-        
-        const todayStr = new Date().toISOString().split('T')[0];
-        const overdueCount = deptReqs.filter(r => {
-          if (r.status !== 'Active') return false;
-          const reqDateObj = new Date(r.requestDate);
-          if (isNaN(reqDateObj.getTime())) return false;
-          const dueDate = new Date(reqDateObj.getTime() + (r.duration || 7) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-          return todayStr > dueDate;
-        }).length;
+            {/* Analytics Tab Content */}
+      {viewMode === 'analytics' && (
+        <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-300">
 
-        const totalQuantity = deptInv.reduce((sum, item) => sum + item.total, 0);
-        const availableQuantity = deptInv.reduce((sum, item) => sum + item.available, 0);
-        const underRepairCount = deptInv.filter(item => item.status === 'Under Repair').length;
-        
-        // New Analytics Data
-        const damageCount = deptReqs.filter(r => r.isDamaged).length;
-        const damagePercentage = totalReqs > 0 ? ((damageCount / totalReqs) * 100).toFixed(1) : '0.0';
-
-        const compCounts: Record<string, number> = {};
-        deptReqs.forEach(r => {
-          if (r.component) {
-            compCounts[r.component] = (compCounts[r.component] || 0) + 1;
-          }
-        });
-        const popularComponents = Object.entries(compCounts)
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 3)
-          .map(entry => ({ name: entry[0], count: entry[1] }));
-
-        const handleExportPDF = () => {
-          // Native browser printing natively parses Tailwind CSS v4 variables (oklch/lab)
-          // and renders sharp vector SVGs rather than blurry canvases.
-          window.print();
-        };
-
-        // Dynamic graph aggregates
-        const chartData = getAnalyticsData();
-        const maxVal = Math.max(...chartData.map(d => Math.max(d.borrowed, d.stockAdded)), 8);
-        const yMax = Math.ceil(maxVal / 4) * 4;
-        // Note: SVG path generators removed — chart now uses Recharts AreaChart directly
-
-        return (
-          <div className="space-y-8 max-w-6xl mx-auto" id="analytics-dashboard-export-target">
-            {/* Analytics Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          {/* Controls */}
+          <div className="flex justify-between items-center bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
+            <div className="flex items-center gap-4">
               <div>
-                <h2 className="text-2xl font-bold tracking-tight">{activeDept} Department Analytics</h2>
-                <p className="text-zinc-400 text-sm mt-1">Rolling monthly summary of borrowings, stocks, and device distributions.</p>
+                <h3 className="font-bold text-lg text-white">Monthly Updates Analytics</h3>
+                <p className="text-xs text-zinc-400 mt-0.5">Historical activity performance and transaction summaries for {activeDept}.</p>
               </div>
-              <div className="flex items-center gap-3">
-                <button 
-                  id="export-pdf-btn"
-                  onClick={handleExportPDF}
-                  className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2.5 rounded-xl shadow-[0_0_15px_rgba(79,70,229,0.3)] transition-all flex items-center gap-2 print:hidden"
-                >
-                  Download Monthly Report (PDF)
-                </button>
-                <div className="text-xs bg-zinc-900 border border-zinc-800/80 px-4 py-2.5 rounded-xl text-zinc-400 font-medium">
-                  Active Department: <span className="text-emerald-400 font-bold font-mono">{activeDept}</span>
-                </div>
+            </div>
+            <div className="flex gap-3">
+              <select
+                value={selectedAnalyticsMonth}
+                onChange={e => setSelectedAnalyticsMonth(e.target.value)}
+                className="bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 cursor-pointer appearance-none"
+              >
+                <option value="2026-12">December 2026</option>
+                <option value="2026-11">November 2026</option>
+                <option value="2026-10">October 2026</option>
+                <option value="2026-09">September 2026 (Current)</option>
+                <option value="2026-08">August 2026</option>
+                <option value="2026-07">July 2026</option>
+                <option value="2026-06">June 2026</option>
+                <option value="2026-05">May 2026</option>
+                <option value="2026-04">April 2026</option>
+                <option value="2026-03">March 2026</option>
+                <option value="2026-02">February 2026</option>
+              </select>
+            </div>
+          </div>
+
+          {/* KPI Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-cyan-500/5 blur-xl pointer-events-none"></div>
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Total Monthly Updates</p>
+              <h2 className="text-4xl font-extrabold mt-3 text-white tracking-tight">{analyticsStats.curr.total}</h2>
+              <div className="mt-4 flex items-center gap-1.5 text-xs">
+                <span className={`font-bold px-1.5 py-0.5 rounded ${parseInt(totalChangeStr) >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                  }`}>
+                  {totalChangeStr}
+                </span>
+                <span className="text-zinc-500">vs previous month ({analyticsStats.prev.total})</span>
               </div>
             </div>
 
-            {/* Statistics Row */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-              <div className={`bg-zinc-900/40 p-5 rounded-2xl flex flex-col justify-between hover:border-zinc-800 transition border ${overdueCount > 0 ? 'border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.05)]' : 'border-zinc-850'}`}>
-                <div className="flex justify-between items-start">
-                  <span className="text-zinc-500 text-xs font-semibold uppercase tracking-wider">Pending Returns</span>
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${overdueCount > 0 ? 'bg-amber-500/10 border border-amber-500/20 animate-pulse' : 'bg-indigo-500/10 border border-indigo-500/20'}`}>
-                    {overdueCount > 0 ? (
-                      <span className="text-amber-400 font-extrabold text-sm">⚠️</span>
-                    ) : (
-                      <svg className="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                      </svg>
-                    )}
-                  </div>
-                </div>
-                <div className="mt-4 flex items-baseline justify-between">
+            <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-fuchsia-500/5 blur-xl pointer-events-none"></div>
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Component Reservations</p>
+              <h2 className="text-4xl font-extrabold mt-3 text-white tracking-tight">{analyticsStats.curr.reqs}</h2>
+              <div className="mt-4 flex items-center gap-1.5 text-xs">
+                <span className={`font-bold px-1.5 py-0.5 rounded ${parseInt(reqsChangeStr) >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                  }`}>
+                  {reqsChangeStr}
+                </span>
+                <span className="text-zinc-500">vs previous month ({analyticsStats.prev.reqs})</span>
+              </div>
+            </div>
+
+            <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-rose-500/5 blur-xl pointer-events-none"></div>
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">High-Value Items</p>
+              <h2 className="text-4xl font-extrabold mt-3 text-white tracking-tight">
+                {inventory.filter(i => i.department === activeDept && i.value_tier === 'HIGH').length}
+              </h2>
+              <div className="mt-4 flex items-center gap-1.5 text-xs">
+                <span className="font-bold px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400">HOD Approval</span>
+                <span className="text-zinc-500">requires dual sign-off</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Advanced Analytics Dashboards */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+            {/* Left Column: Utilization & Inventory Health */}
+            <div className="space-y-6">
+              
+              {/* Utilization / Most Borrowed */}
+              <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6">
+                <div className="mb-4 flex items-center justify-between">
                   <div>
-                    <div className="text-3xl font-black text-white">{pendingReturnsCount}</div>
-                    <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-wider font-semibold">{activeLoans} items active</p>
+                    <h3 className="font-bold text-lg text-white">Utilization</h3>
+                    <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">Most Borrowed Components</p>
                   </div>
-                  {overdueCount > 0 && (
-                    <span className="text-[10px] font-bold border border-amber-500/30 bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 animate-pulse">
-                      ⚠️ {overdueCount} Overdue
-                    </span>
-                  )}
+                  <div className="w-8 h-8 rounded-full bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
+                    <svg className="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                  </div>
                 </div>
+                  {(() => {
+                    // Only count components that are ACTUALLY checked out (physically with student)
+                    const activeStatuses = ['CHECKED_OUT'];
+                    const safeReqs = Array.isArray(requests) ? requests : [];
+                    const deptInv = inventory.filter(i => i.department === activeDept && i.total > 0);
+                    const checkoutReqs = safeReqs.filter(r => (r.department === activeDept || r.studentDepartment === activeDept) && activeStatuses.includes(r.status));
+                    
+                    const compUsage: Record<string, { used: number, total: number }> = {};
+                    deptInv.forEach(i => {
+                      compUsage[i.name] = { used: 0, total: i.total };
+                    });
+                    
+                    checkoutReqs.forEach(r => {
+                      if (r.component && compUsage[r.component]) {
+                        compUsage[r.component].used += (r.quantity || 1);
+                      }
+                    });
+
+                    const sortedUsage = Object.entries(compUsage)
+                      .map(([name, data]) => ({ name, ...data, ratio: data.used / data.total }))
+                      .sort((a, b) => b.ratio - a.ratio)
+                      .slice(0, 3);
+                    
+                    if (sortedUsage.length === 0) {
+                      return <div className="text-sm text-zinc-500 py-4">No active checkouts currently.</div>;
+                    }
+
+                    return (
+                      <div className="space-y-4">
+                        {sortedUsage.map((u, i) => (
+                          <div key={i}>
+                            <div className="flex justify-between text-xs mb-1">
+                              <span className="text-zinc-300 font-medium">{u.name}</span>
+                              <span className="text-zinc-400">{u.used} / {u.total} borrowed</span>
+                            </div>
+                            <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full ${u.ratio > 0.8 ? 'bg-rose-500' : u.ratio > 0.5 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
+                                style={{ width: `${Math.min(u.ratio * 100, 100)}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
               </div>
 
-              <div className="bg-zinc-900/40 border border-zinc-850 p-5 rounded-2xl flex flex-col justify-between hover:border-zinc-800 transition">
-                <div className="flex justify-between items-start">
-                  <span className="text-zinc-500 text-xs font-semibold uppercase tracking-wider">Stock Availability</span>
-                  <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
-                    <svg className="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                    </svg>
+              {/* Overdue Returns (Admin/HOD combined) */}
+              <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-lg text-white">Action Needed</h3>
+                    <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">Overdue Returns</p>
+                  </div>
+                  <div className="w-8 h-8 rounded-full bg-rose-500/10 flex items-center justify-center border border-rose-500/20">
+                    <svg className="w-4 h-4 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   </div>
                 </div>
-                <div className="mt-4">
-                  <div className="text-3xl font-black text-white">
-                    {availableQuantity} <span className="text-sm font-medium text-zinc-500">/ {totalQuantity}</span>
-                  </div>
-                  <div className="w-full bg-zinc-950 h-1.5 rounded-full mt-2 overflow-hidden border border-zinc-800">
-                    <div 
-                      className="bg-gradient-to-r from-cyan-500 to-emerald-500 h-full transition-all duration-500" 
-                      style={{ width: `${totalQuantity > 0 ? (availableQuantity / totalQuantity) * 100 : 0}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
+                {(() => {
+                  const safeReqs = Array.isArray(requests) ? requests : [];
+                  const overdueList = safeReqs.filter(r => {
+                    if (r.status !== 'CHECKED_OUT' || (r.department !== activeDept && r.studentDepartment !== activeDept)) return false;
+                    const reqDate = new Date(r.requestDate);
+                    const now = new Date();
+                    const diffTime = Math.abs(now.getTime() - reqDate.getTime());
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    return diffDays > (r.duration || 7);
+                  });
 
-              <div className="bg-zinc-900/40 border border-zinc-850 p-5 rounded-2xl flex flex-col justify-between hover:border-zinc-800 transition">
-                <div className="flex justify-between items-start">
-                  <span className="text-zinc-500 text-xs font-semibold uppercase tracking-wider">Borrow Log Actions</span>
-                  <div className="w-8 h-8 rounded-lg bg-fuchsia-500/10 border border-fuchsia-500/20 flex items-center justify-center">
-                    <svg className="w-4 h-4 text-fuchsia-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                    </svg>
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <div className="text-3xl font-black text-white">{totalReqs}</div>
-                  <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-wider font-semibold">Total Historical Requests</p>
-                </div>
-              </div>
+                  if (overdueList.length === 0) {
+                    return <div className="text-sm text-emerald-500 font-medium py-4 flex items-center gap-2"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> All checked out items are within their time limits.</div>;
+                  }
 
-              <div className="bg-zinc-900/40 border border-zinc-850 p-5 rounded-2xl flex flex-col justify-between hover:border-zinc-800 transition">
-                <div className="flex justify-between items-start">
-                  <span className="text-zinc-500 text-xs font-semibold uppercase tracking-wider">Under Repair Queue</span>
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${underRepairCount > 0 ? 'bg-red-500/10 border border-red-500/20' : 'bg-zinc-800 text-zinc-400'}`}>
-                    <svg className={`w-4 h-4 ${underRepairCount > 0 ? 'text-red-400 animate-pulse' : 'text-zinc-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <div className={`text-3xl font-black ${underRepairCount > 0 ? 'text-red-400' : 'text-zinc-300'}`}>{underRepairCount}</div>
-                  <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-wider font-semibold">Devices Broken or offline</p>
-                </div>
+                  return (
+                    <div className="space-y-3">
+                      {overdueList.slice(0, 3).map((r, i) => (
+                        <div key={i} className="flex justify-between items-center p-3 bg-rose-500/5 border border-rose-500/10 rounded-xl">
+                          <div>
+                            <div className="text-sm text-white font-medium">{r.component}</div>
+                            <div className="text-xs text-zinc-500">{r.studentName} ({r.usn})</div>
+                          </div>
+                          <div className="text-xs font-bold text-rose-400">Overdue</div>
+                        </div>
+                      ))}
+                      {overdueList.length > 3 && (
+                        <div className="text-xs text-zinc-500 text-center pt-2">+{overdueList.length - 3} more overdue items</div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
-            {/* Extended Analytics Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* Most Popular Components */}
-              <div className="bg-zinc-900 border border-zinc-800/80 p-5 rounded-2xl hover:border-zinc-700 transition">
-                <div className="flex justify-between items-center mb-4">
-                  <span className="text-zinc-500 text-xs font-semibold uppercase tracking-wider">Most Requested Components</span>
-                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                    <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                    </svg>
-                  </div>
+            {/* Right Column: Trend Graph */}
+            <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 flex flex-col">
+              <div className="mb-6 flex justify-between items-start">
+                <div>
+                  <h3 className="font-bold text-lg text-white">Daily Trend</h3>
+                  <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">Activity over {selectedMonthLabel}</p>
                 </div>
-                {popularComponents.length === 0 ? (
-                  <p className="text-sm text-zinc-600 mt-2">No components requested yet.</p>
+                <div className="text-right">
+                  <div className={`text-3xl font-black font-mono ${analyticsStats.curr.total > analyticsStats.prev.total ? 'text-purple-400' : analyticsStats.curr.total < analyticsStats.prev.total ? 'text-rose-400' : 'text-zinc-400'}`}>
+                    {analyticsStats.curr.total}
+                  </div>
+                  <div className="text-xs text-zinc-400 mt-1">This month vs last ({analyticsStats.prev.total} → {analyticsStats.curr.total})</div>
+                </div>
+              </div>
+
+              {/* Custom Line/Area Chart using SVG */}
+              <div className="relative w-full h-[220px] mt-auto border border-zinc-800/50 rounded-xl bg-zinc-950/50 overflow-hidden group">
+                {analyticsChartData.length === 0 ? (
+                  <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-sm">No data available for {selectedMonthLabel}</div>
                 ) : (
-                  <div className="space-y-3">
-                    {popularComponents.map((comp, idx) => (
-                      <div key={idx} className="flex justify-between items-center bg-zinc-900/50 px-3 py-2 rounded-lg border border-zinc-800/50">
-                        <div className="flex items-center gap-3">
-                          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${idx === 0 ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30' : idx === 1 ? 'bg-zinc-300/20 text-zinc-300 border border-zinc-300/30' : 'bg-amber-700/20 text-amber-700 border border-amber-700/30'}`}>
-                            {idx + 1}
-                          </span>
-                          <span className="text-zinc-300 text-sm font-medium">{comp.name}</span>
-                        </div>
-                        <span className="text-emerald-400 font-bold text-sm bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">{comp.count} reqs</span>
-                      </div>
-                    ))}
+                  <svg viewBox="0 0 600 220" className="w-full h-full preserve-3d" preserveAspectRatio="none">
+                    <defs>
+                      <linearGradient id="areaGradientUpdates" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#c084fc" stopOpacity="0.4" />
+                        <stop offset="100%" stopColor="#c084fc" stopOpacity="0.0" />
+                      </linearGradient>
+                    </defs>
+                    
+                    {/* Grid lines */}
+                    {[0, 1, 2, 3, 4].map(idx => {
+                      const y = 40 + idx * 35;
+                      const val = Math.round((analyticsYMax / 4) * idx);
+                      return (
+                        <g key={idx}>
+                          <line x1="40" y1={180 - idx * 35} x2="580" y2={180 - idx * 35} stroke="#3f3f46" strokeWidth="1" strokeDasharray="4,4" opacity="0.3" />
+                          <text x="30" y={184 - idx * 35} textAnchor="end" className="text-[10px] font-mono fill-zinc-500">{val}</text>
+                        </g>
+                      );
+                    })}
+                    
+                    {/* X Axis labels (First, Middle, Last) */}
+                    <text x="45" y="198" textAnchor="middle" className="text-[9px] font-mono fill-zinc-500">Day 1</text>
+                    <text x="310" y="198" textAnchor="middle" className="text-[9px] font-mono fill-zinc-500">Day {Math.floor(analyticsChartData.length / 2)}</text>
+                    <text x="575" y="198" textAnchor="middle" className="text-[9px] font-mono fill-zinc-500">Day {analyticsChartData.length}</text>
+
+                    {/* Chart Area & Line */}
+                    {analyticsChartData.length > 0 && (
+                      <>
+                        <path d={updatesAreaPath} fill="url(#areaGradientUpdates)" />
+                        <path d={updatesLinePath} fill="none" stroke="#c084fc" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </>
+                    )}
+
+                    {/* Interactive Hover Points */}
+                    {analyticsChartData.map((d, idx) => {
+                      if (hoveredAnalyticsIdx !== idx) return null;
+                      const x = 45 + idx * (530 / (analyticsChartData.length - 1));
+                      const y = 180 - (d.total / analyticsYMax) * 140;
+                      return (
+                        <g key={`hover-${idx}`}>
+                          <line x1={x} y1="40" x2={x} y2="180" stroke="#c084fc" strokeWidth="1" strokeDasharray="2,2" opacity="0.5" />
+                          <circle cx={x} cy={y} r="4" fill="#c084fc" stroke="#18181b" strokeWidth="2" />
+                        </g>
+                      );
+                    })}
+
+                    {/* Invisible Hover Catchers */}
+                    {analyticsChartData.map((_, idx) => {
+                      const step = 530 / (analyticsChartData.length - 1);
+                      const x = 45 + idx * step;
+                      return (
+                        <rect
+                          key={`catcher-${idx}`}
+                          x={Math.max(0, x - step / 2)}
+                          y="0"
+                          width={step}
+                          height="220"
+                          fill="transparent"
+                          onMouseEnter={() => setHoveredAnalyticsIdx(idx)}
+                          onMouseLeave={() => setHoveredAnalyticsIdx(null)}
+                        />
+                      );
+                    })}
+                  </svg>
+                )}
+                
+                {/* Tooltip HTML Overlay */}
+                {hoveredAnalyticsIdx !== null && analyticsChartData[hoveredAnalyticsIdx] && (
+                  <div 
+                    className="absolute bg-zinc-900 border border-zinc-700 p-3 rounded-lg shadow-xl pointer-events-none z-10 transition-all duration-100 ease-out min-w-[140px]"
+                    style={{ 
+                      left: `${Math.min(Math.max(45 + hoveredAnalyticsIdx * (530 / (analyticsChartData.length - 1)) - 60, 10), 460) / 600 * 100}%`, 
+                      top: '20px' 
+                    }}
+                  >
+                    <div className="text-[10px] text-zinc-400 font-semibold mb-1 uppercase tracking-wider">
+                      Day {analyticsChartData[hoveredAnalyticsIdx].day} - {selectedMonthLabel}
+                    </div>
+                    <div className="flex justify-between items-center text-xs mb-0.5">
+                      <span className="text-zinc-300">Reservations</span>
+                      <span className="font-mono text-fuchsia-400 font-bold">{analyticsChartData[hoveredAnalyticsIdx].reservations}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs border-t border-zinc-800 mt-1 pt-1">
+                      <span className="text-white font-bold">Total Activity</span>
+                      <span className="font-mono text-cyan-400">{analyticsChartData[hoveredAnalyticsIdx].total}</span>
+                    </div>
                   </div>
                 )}
               </div>
-
-              {/* Damage Statistics */}
-              <div className="bg-zinc-900 border border-zinc-800/80 p-5 rounded-2xl hover:border-zinc-700 transition">
-                <div className="flex justify-between items-center mb-4">
-                  <span className="text-zinc-500 text-xs font-semibold uppercase tracking-wider">Historical Damage Reports</span>
-                  <div className="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
-                    <svg className="w-4 h-4 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                </div>
-                <div className="flex items-end gap-4 mt-2">
-                  <div className="text-4xl font-black text-rose-400">{damagePercentage}%</div>
-                  <div className="pb-1">
-                    <p className="text-sm font-bold text-white">{damageCount} damaged items</p>
-                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Out of {totalReqs} total loans</p>
-                  </div>
-                </div>
-                <div className="w-full bg-zinc-950 h-2 rounded-full mt-5 overflow-hidden border border-zinc-800">
-                  <div 
-                    className="bg-gradient-to-r from-rose-500 to-rose-600 h-full" 
-                    style={{ width: `${Math.min(100, Number(damagePercentage))}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Split Visualizer Panel */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              
-              {/* Left Column: Line Area Chart */}
-              <div className="lg:col-span-8 bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 relative overflow-hidden flex flex-col justify-between">
-                
-                {/* Chart Header */}
-                <div className="flex flex-wrap justify-between items-center gap-4 mb-6 border-b border-zinc-850 pb-4">
-                  <h3 className="font-bold text-lg text-white">Stock Additions & Borrow History</h3>
-                  
-                  {/* Custom Legends */}
-                  <div className="flex gap-4 text-xs font-semibold">
-                    <span className="flex items-center gap-2 text-fuchsia-400">
-                      <span className="w-3 h-1.5 rounded bg-fuchsia-500 inline-block shadow shadow-fuchsia-500/50"></span>
-                      Borrowed Items
-                    </span>
-                    <span className="flex items-center gap-2 text-cyan-400">
-                      <span className="w-3 h-1.5 rounded bg-cyan-400 inline-block shadow shadow-cyan-400/50"></span>
-                      Added Stock Count
-                    </span>
-                  </div>
-                </div>
-
-                {/* Recharts Visual Graph */}
-                <div className="w-full h-[260px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="colorBorrow" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#d946ef" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#d946ef" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="colorStock" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="label" stroke="#52525b" fontSize={10} tickLine={false} axisLine={false} />
-                      <YAxis stroke="#52525b" fontSize={10} tickLine={false} axisLine={false} />
-                      <RechartsTooltip 
-                        contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '12px' }}
-                        itemStyle={{ color: '#e4e4e7', fontSize: '12px' }}
-                        labelStyle={{ color: '#a1a1aa', fontWeight: 'bold', marginBottom: '4px' }}
-                      />
-                      <Area type="monotone" dataKey="stockAdded" stroke="#06b6d4" strokeWidth={3} fillOpacity={1} fill="url(#colorStock)" name="Stock Added" />
-                      <Area type="monotone" dataKey="borrowed" stroke="#d946ef" strokeWidth={3} fillOpacity={1} fill="url(#colorBorrow)" name="Borrowed Items" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* Right Column: Inventory health and individual components list */}
-              <div className="lg:col-span-4 bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 flex flex-col justify-between">
-                <div>
-                  <h3 className="font-bold text-lg text-white mb-1">Component Inventory Load</h3>
-                  <p className="text-xs text-zinc-500 mb-5 uppercase tracking-wider font-semibold">Department Hardware Status</p>
-                  
-                  {deptInv.length === 0 ? (
-                    <p className="text-zinc-500 text-xs py-8 text-center border border-zinc-850 border-dashed rounded-xl">No active components cataloged.</p>
-                  ) : (
-                    <div className="space-y-4 max-h-[220px] overflow-y-auto pr-1">
-                      {deptInv.map(item => {
-                        const usagePct = item.total > 0 ? ((item.total - item.available) / item.total) * 100 : 0;
-                        const availPct = 100 - usagePct;
-                        return (
-                          <div key={item.id} className="text-xs">
-                            <div className="flex justify-between items-center mb-1.5">
-                              <span className="font-bold text-zinc-300 truncate max-w-[65%]" title={item.name}>{item.name}</span>
-                              <span className="font-mono font-bold text-zinc-400">
-                                {item.available} <span className="text-zinc-650">/ {item.total}</span>
-                              </span>
-                            </div>
-                            <div className="w-full h-2 bg-zinc-950 rounded-full overflow-hidden border border-zinc-850 relative">
-                              <div 
-                                className={`h-full rounded-full transition-all duration-550 ${
-                                  item.available === 0 ? 'bg-red-500 animate-pulse' :
-                                  availPct < 35 ? 'bg-amber-500' : 
-                                  'bg-gradient-to-r from-emerald-500 to-cyan-500'
-                                }`} 
-                                style={{ width: `${availPct}%` }}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                <div className="border-t border-zinc-850 mt-6 pt-5 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    <span className="text-zinc-450">Optimal Stock</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                    <span className="text-zinc-450">Low Stock</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                    <span className="text-zinc-450">Empty</span>
-                  </div>
-                </div>
-
-              </div>
-
             </div>
           </div>
-        );
-      })()}
+
+          {/* Recent Activity Table */}
+          <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 overflow-hidden">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+              <div>
+                <h3 className="font-bold text-lg text-white">Recent Activity Log</h3>
+                <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">Detailed transaction history for {selectedMonthLabel}</p>
+              </div>
+              <div className="relative w-full sm:w-64">
+                <input
+                  type="text"
+                  placeholder="Search activity..."
+                  value={analyticsSearchQuery}
+                  onChange={(e) => setAnalyticsSearchQuery(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 text-sm text-white px-9 py-2 rounded-xl focus:outline-none focus:border-cyan-500"
+                />
+                <svg className="w-4 h-4 absolute left-3 top-2.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[600px]">
+                <thead>
+                  <tr className="border-b border-zinc-800 text-zinc-400 text-xs uppercase tracking-wider bg-zinc-950/50">
+                    <th className="py-3 px-4 font-semibold">Date & Time</th>
+                    <th className="py-3 px-4 font-semibold">Action</th>
+                    <th className="py-3 px-4 font-semibold">Student / User</th>
+                    <th className="py-3 px-4 font-semibold text-right">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/50 text-sm">
+                {analyticsRecentActivity.filter(activity => 
+                  activity.title.toLowerCase().includes(analyticsSearchQuery.toLowerCase()) || 
+                  activity.student.toLowerCase().includes(analyticsSearchQuery.toLowerCase()) ||
+                  activity.status.toLowerCase().includes(analyticsSearchQuery.toLowerCase())
+                ).length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-8 text-center text-zinc-500">
+                      No activity found matching your search.
+                    </td>
+                  </tr>
+                ) : (
+                  analyticsRecentActivity
+                    .filter(activity => 
+                      activity.title.toLowerCase().includes(analyticsSearchQuery.toLowerCase()) || 
+                      activity.student.toLowerCase().includes(analyticsSearchQuery.toLowerCase()) ||
+                      activity.status.toLowerCase().includes(analyticsSearchQuery.toLowerCase())
+                    )
+                    .map((activity, idx) => (
+                    <tr key={idx} className="hover:bg-zinc-800/20 transition-colors group">
+                      <td className="py-3 px-4 text-zinc-400 font-mono text-xs whitespace-nowrap">
+                        {new Date(activity.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${activity.type === 'reservation' ? 'bg-fuchsia-500/10 text-fuchsia-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                            {activity.type === 'reservation' ? (
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                            ) : (
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
+                            )}
+                          </div>
+                          <span className="text-white font-medium">{activity.title}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-zinc-300">{activity.student}</td>
+                      <td className="py-3 px-4 text-right">
+                        <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest border ${activity.status === 'PENDING_APPROVAL' || activity.status === 'PENDING_HOD' || activity.status === 'Pending HOD' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' : activity.status === 'APPROVED' || activity.status === 'CHECKED_OUT' || activity.status === 'READY_FOR_PICKUP' || activity.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-zinc-800 text-zinc-400 border-zinc-700'}`}>
+                          {activity.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
