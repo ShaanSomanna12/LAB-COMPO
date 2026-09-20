@@ -525,12 +525,12 @@ export default function MyReservations() {
     const isRejected = status === 'REJECTED' || status === 'CANCELLED';
     const isReturned = status === 'RETURNED' || status === 'COMPLETED';
 
-    if (isApproved) return <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest shadow-[0_0_15px_rgba(16,185,129,0.2)]">{displayText}</span>;
-    if (isActive) return <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest shadow-[0_0_15px_rgba(6,182,212,0.2)]">{displayText}</span>;
-    if (isPending) return <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest shadow-[0_0_15px_rgba(245,158,11,0.2)]">{displayText}</span>;
-    if (isRejected) return <span className="bg-rose-500/10 text-rose-400 border border-rose-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest">{displayText}</span>;
-    if (isReturned) return <span className="bg-zinc-500/10 text-zinc-400 border border-zinc-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest">{displayText}</span>;
-    return <span className="bg-zinc-800 text-zinc-300 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest">{displayText}</span>;
+    if (isApproved) return <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-[0_0_15px_rgba(16,185,129,0.2)]">{displayText}</span>;
+    if (isActive) return <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-[0_0_15px_rgba(6,182,212,0.2)]">{displayText}</span>;
+    if (isPending) return <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-[0_0_15px_rgba(245,158,11,0.2)]">{displayText}</span>;
+    if (isRejected) return <span className="bg-rose-500/10 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
+    if (isReturned) return <span className="bg-zinc-500/10 text-zinc-400 border border-zinc-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
+    return <span className="bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
   };
 
   const renderTimeline = (res: any) => {
@@ -785,7 +785,7 @@ export default function MyReservations() {
 
           {/* Reservations Grid */}
           {isLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-64 rounded-3xl border border-white/5 bg-white/5" />)}
             </div>
           ) : displayedReservations.length === 0 ? (
@@ -804,18 +804,18 @@ export default function MyReservations() {
                     initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: i * 0.05 }}
                     className="bg-black/40 backdrop-blur-xl border border-white/10 hover:border-cyan-500/30 rounded-3xl overflow-hidden transition-all duration-300 flex flex-col shadow-[0_8px_32px_rgba(0,0,0,0.4)] group relative"
                   >
-                    <div className="p-6 md:p-8 flex-1 flex flex-col z-10">
-                      <div className="flex justify-between items-start mb-6">
+                    <div className="p-4 md:p-5 flex-1 flex flex-col z-10">
+                      <div className="flex justify-between items-start mb-3">
                         {getStatusBadge(res.status)}
                         <span className="text-xs text-zinc-500 font-mono bg-white/5 px-2 py-1 rounded-md border border-white/10">#{res.reservation_id.toString().slice(0, 8)}</span>
                       </div>
 
                       <div className="flex items-center gap-4 mb-4">
-                        <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center border border-white/10 shrink-0 shadow-[inset_0_0_15px_rgba(255,255,255,0.05)]">
+                        <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center border border-white/10 shrink-0 shadow-[inset_0_0_15px_rgba(255,255,255,0.05)]">
                           <Microchip className="w-6 h-6 text-zinc-300" />
                         </div>
                         <div>
-                          <h3 className={`${spaceGrotesk.className} text-2xl font-bold text-white leading-tight`}>{res.components?.name || 'Unknown'}</h3>
+                          <h3 className={`${spaceGrotesk.className} text-lg font-bold text-white leading-tight`}>{res.components?.name || 'Unknown'}</h3>
                           <div className="flex flex-wrap items-center gap-2 text-xs font-mono font-medium text-zinc-400 mt-1">
                             <span className="bg-white/5 px-1.5 py-0.5 rounded border border-white/10">{res.components?.department}</span>
                             <span className="bg-white/5 px-1.5 py-0.5 rounded border border-white/10">{res.components?.lab_location}</span>
@@ -866,7 +866,7 @@ export default function MyReservations() {
                       </div>
                     </div>
 
-                    <div className="bg-white/5 p-4 md:p-6 border-t border-white/10 flex flex-col gap-3 relative z-10">
+                    <div className="bg-white/5 p-3 md:p-4 border-t border-white/10 flex flex-col gap-2 relative z-10">
                       <button
                         onClick={() => {
                           const durationDays = res.due_date ? getWorkingDaysCount(res.created_at, res.due_date) : 1;
@@ -881,7 +881,7 @@ export default function MyReservations() {
                           });
                           setShowInspectModal(true);
                         }}
-                        className="w-full py-2.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/20 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
+                        className="w-full py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/20 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
                       >
                         <Eye className="w-4 h-4" /> Inspect Letter
                       </button>
@@ -899,11 +899,11 @@ export default function MyReservations() {
                                   Show Digital Pass at the desk to complete checkout.
                                 </div>
                               ) : (
-                                <button onClick={() => handleCollectClick(res.reservation_id)} className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+                                <button onClick={() => handleCollectClick(res.reservation_id)} className="w-full py-2 bg-emerald-500 text-xs hover:bg-emerald-400 text-black rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.3)]">
                                   <Camera className="w-5 h-5" /> Collect & Geotag
                                 </button>
                               )}
-                              <button onClick={() => handleWithdraw(res.reservation_id)} className="w-full py-2.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl font-bold text-xs uppercase tracking-widest transition-colors flex justify-center items-center gap-2">
+                              <button onClick={() => handleWithdraw(res.reservation_id)} className="w-full py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl font-bold text-xs uppercase tracking-widest transition-colors flex justify-center items-center gap-2">
                                 Withdraw Request
                               </button>
                             </>
@@ -917,20 +917,20 @@ export default function MyReservations() {
 
                           {res.status === 'CHECKED_OUT' && (
                             <>
-                              <button onClick={() => handleReturnClick(res.reservation_id)} className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-black rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(245,158,11,0.3)] mb-2">
+                              <button onClick={() => handleReturnClick(res.reservation_id)} className="w-full py-2 bg-amber-500 text-xs hover:bg-amber-400 text-black rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(245,158,11,0.3)] mb-2">
                                 Return Component
                               </button>
                               
                               {!res.extension_requested ? (
-                                <button onClick={() => openExtensionModal(res.reservation_id)} className="w-full py-2.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-xl font-bold text-xs uppercase tracking-widest transition-colors flex justify-center items-center gap-2">
+                                <button onClick={() => openExtensionModal(res.reservation_id)} className="w-full py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-xl font-bold text-xs uppercase tracking-widest transition-colors flex justify-center items-center gap-2">
                                   Request Extension
                                 </button>
                               ) : res.extension_status === 'PENDING' ? (
-                                <div className="w-full py-2.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-xl font-bold text-xs uppercase tracking-widest text-center">
+                                <div className="w-full py-2 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-xl font-bold text-xs uppercase tracking-widest text-center">
                                   Extension Pending
                                 </div>
                               ) : res.extension_status === 'REJECTED' ? (
-                                <div className="w-full py-2.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-xl font-bold text-xs uppercase tracking-widest text-center">
+                                <div className="w-full py-2 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-xl font-bold text-xs uppercase tracking-widest text-center">
                                   Extension Rejected
                                 </div>
                               ) : null}
@@ -938,7 +938,7 @@ export default function MyReservations() {
                           )}
 
                           {res.status === 'PENDING_APPROVAL' && (
-                            <button onClick={() => handleWithdraw(res.reservation_id)} className="w-full py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl font-bold text-sm transition-colors flex justify-center items-center gap-2">
+                            <button onClick={() => handleWithdraw(res.reservation_id)} className="w-full py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl font-bold text-sm transition-colors flex justify-center items-center gap-2">
                               Withdraw Request
                             </button>
                           )}
