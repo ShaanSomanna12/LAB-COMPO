@@ -17,6 +17,8 @@ export interface RequisitionLetterProps {
   status: string;
   section?: string;
   year?: string;
+  mobile?: string;
+  returnDate?: string;
 }
 
 export default function RequisitionLetter({
@@ -28,14 +30,17 @@ export default function RequisitionLetter({
   duration,
   status,
   section,
-  year
+  year,
+  mobile,
+  returnDate: explicitReturnDate
 }: RequisitionLetterProps) {
   
   const handlePrint = () => {
     window.print();
   };
 
-  const returnDate = new Date(new Date(requestDate).getTime() + duration * 24 * 60 * 60 * 1000).toLocaleDateString();
+  const calculatedReturnDate = new Date(new Date(requestDate).getTime() + duration * 24 * 60 * 60 * 1000).toLocaleDateString();
+  const displayReturnDate = explicitReturnDate ? new Date(explicitReturnDate).toLocaleDateString() : calculatedReturnDate;
   const formattedRequestDate = new Date(requestDate).toLocaleDateString();
 
   return (
@@ -83,7 +88,7 @@ export default function RequisitionLetter({
           <br/>
           <p>Respected Sir/Madam,</p>
           <p className="mt-2 text-justify">
-            I, <strong>{studentName}</strong>, bearing USN <strong>{usn}</strong>, am currently pursuing my studies in the Department of {department}{section ? `, Section ${section}` : ''}{year ? `, in my ${year} year of engineering` : ''}. 
+            I, <strong>{studentName}</strong>, bearing USN <strong>{usn}</strong>{mobile ? ` (Mobile: ${mobile})` : ''}, am currently pursuing my studies in the Department of {department}{section ? `, Section ${section}` : ''}{year ? `, in my ${year} year of engineering` : ''}. 
             I am writing to formally request the temporary issuance of the following laboratory components required for the execution of my academic project/assignment.
           </p>
         </div>
@@ -114,7 +119,7 @@ export default function RequisitionLetter({
         <div className="text-justify space-y-3">
           <p>
             I kindly request you to approve the issuance of the aforementioned components for a duration of <strong>{duration} days</strong>. 
-            The components are expected to be returned in proper working condition on or before <strong>{returnDate}</strong>.
+            The components are expected to be returned in proper working condition on or before <strong>{displayReturnDate}</strong>.
           </p>
           <p>
             <strong>Undertaking:</strong> I hereby declare that I will bear full responsibility for the components issued to me. 
