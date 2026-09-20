@@ -501,7 +501,7 @@ export default function AdminDashboard() {
     if (!approveModal) return;
     const req = requests.find(r => r.id === approveModal.id);
     if (!req) return;
-    const newStatus = req.valueTier === 'HIGH' ? 'PENDING_HOD' : 'APPROVED';
+    const newStatus = (req.valueTier || '').toUpperCase() === 'HIGH' ? 'PENDING_HOD' : 'APPROVED';
     await updateRequestStatus(approveModal.id, newStatus, approveQty, approveTime, approveDate);
     setRequests(reqs => reqs.map(r => r.id === approveModal.id ? { ...r, status: newStatus as RequestStatus, quantity: approveQty, collectionTime: approveTime, requestDate: approveDate } : r));
     setApproveModal(null);
@@ -1291,7 +1291,7 @@ export default function AdminDashboard() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
             {(() => {
-              const pendingActionStatuses = ['PENDING_APPROVAL', 'APPROVED', 'READY_FOR_PICKUP', 'PENDING', 'Pending HOD', 'Pending Renewal HOD', 'Approved by HOD', 'Ready for Collection', 'PENDING_COLLECTION'];
+              const pendingActionStatuses = ['PENDING_APPROVAL', 'PENDING_HOD', 'APPROVED', 'READY_FOR_PICKUP', 'PENDING', 'Pending HOD', 'Pending Renewal HOD', 'Approved by HOD', 'Ready for Collection', 'PENDING_COLLECTION'];
               const activeStatuses = ['CHECKED_OUT', 'RETURN_REQUESTED', 'Active', 'BORROWED', 'PENDING_RETURN'];
               
               let filteredRequests = requests
@@ -1389,6 +1389,7 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest border ${req.status === 'PENDING_APPROVAL' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20 shadow-[0_0_10px_rgba(234,179,8,0.2)]' :
+                        req.status === 'PENDING_HOD' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 shadow-[0_0_10px_rgba(245,158,11,0.2)]' :
                         req.status === 'APPROVED' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20 shadow-[0_0_10px_rgba(6,182,212,0.2)]' :
                           req.status === 'READY_FOR_PICKUP' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20 shadow-[0_0_10px_rgba(168,85,247,0.2)]' :
                             (req.status === 'CHECKED_OUT') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.2)]' :
@@ -1397,6 +1398,7 @@ export default function AdminDashboard() {
                                 'bg-green-500/10 text-green-400 border-green-500/20'
                         }`}>
                         {req.status === 'PENDING_APPROVAL' ? 'PENDING APPROVAL' :
+                         req.status === 'PENDING_HOD' ? 'AWAITING HOD' :
                          req.status === 'APPROVED' ? 'PENDING CHECKOUT' :
                          req.status === 'READY_FOR_PICKUP' ? 'PENDING CHECKOUT' :
                          (req.status === 'CHECKED_OUT') ? 'COLLECTED' :
