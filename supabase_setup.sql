@@ -59,9 +59,6 @@ CREATE TABLE IF NOT EXISTS public.reservations (
     borrowed_at TIMESTAMP WITH TIME ZONE,
     before_img_url VARCHAR(1000),
     after_img_url VARCHAR(1000),
-    geotag_image_url VARCHAR(1000),
-    latitude DOUBLE PRECISION,
-    longitude DOUBLE PRECISION,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

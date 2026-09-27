@@ -474,27 +474,6 @@ export default function HodDashboard() {
               {selectedReq ? (
                 <div className="space-y-6">
                   
-                  {/* Geotag Images Uploaded */}
-                  {selectedReq.images && selectedReq.images.length > 0 && (
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                      <h3 className="text-sm font-bold text-zinc-400 mb-4 tracking-wider uppercase">Geotag Images Provided by Student</h3>
-                      <div className="grid grid-cols-2 gap-4">
-                        {selectedReq.images.map((img, idx) => (
-                          <div key={idx} className="relative group">
-                            <img 
-                              src={img} 
-                              alt={`Geotag ${idx + 1}`} 
-                              className="w-full h-44 object-cover rounded-xl border border-zinc-700 shadow-md group-hover:brightness-110 transition-all cursor-zoom-in"
-                              onClick={() => window.open(img)}
-                            />
-                            <div className="absolute bottom-2 left-2 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded text-[10px] text-zinc-300 border border-zinc-800 font-mono">
-                              Image {idx + 1}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
 
                   {/* The Requisition Letter Mock Document */}
                   <div className="bg-white text-black p-4 sm:p-8 shadow-2xl rounded-2xl border border-zinc-300 relative min-h-[450px] sm:min-h-[600px] flex flex-col font-serif overflow-hidden">
@@ -618,7 +597,7 @@ export default function HodDashboard() {
                   </svg>
                   <h3 className="text-xl font-bold text-zinc-400">Select a Student Request</h3>
                   <p className="text-zinc-500 text-sm mt-1 max-w-sm">
-                    Choose a requisition from the pending queue on the left to review geotag images, student details, and sign off digitally.
+                    Choose a requisition from the pending queue on the left to review student details and sign off digitally.
                   </p>
                 </div>
               )}

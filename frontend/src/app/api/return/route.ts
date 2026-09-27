@@ -65,7 +65,8 @@ export async function POST(request: Request) {
           .update({
             status: 'RETURNED',
             returned_at: new Date().toISOString(),
-            return_condition: condition || 'GOOD'
+            return_condition: condition || 'GOOD',
+            is_damaged: isDamaged
           })
           .eq('reservation_id', activeResId);
 
@@ -113,7 +114,8 @@ export async function POST(request: Request) {
         .update({
           status: 'RETURNED',
           returned_at: new Date().toISOString(),
-          return_condition: condition || 'GOOD'
+          return_condition: condition || 'GOOD',
+          is_damaged: condition === 'DAMAGED'
         })
         .eq('reservation_id', reservationId);
 

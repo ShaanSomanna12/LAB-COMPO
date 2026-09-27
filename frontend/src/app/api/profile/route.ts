@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 
 export async function POST(request: Request) {
   try {
-    const { email, name, usn, department, branch, section } = await request.json();
+    const { email, name, usn, department, branch, section, mobile } = await request.json();
 
     if (!email) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
@@ -25,7 +25,8 @@ export async function POST(request: Request) {
         usn: usn ? usn.toUpperCase() : undefined,
         department,
         branch,
-        section
+        section,
+        mobile
       })
       .eq('email', email)
       .select();

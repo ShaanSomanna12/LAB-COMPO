@@ -369,7 +369,7 @@ CREATE POLICY "notices_delete_blocked"
 
 
 -- =============================================================================
--- SECTION 8b — STORAGE BUCKET POLICIES (inventory-images, reservations-images)
+-- SECTION 8b — STORAGE BUCKET POLICIES (inventory-images)
 --   • SELECT: public (image URLs are already public CDN links)
 --   • INSERT: authenticated users only (prevents anonymous image spam)
 --   • UPDATE / DELETE: blocked for clients; service_role only
@@ -390,20 +390,7 @@ CREATE POLICY "inventory_images_insert_auth"
     AND auth.uid() IS NOT NULL
   );
 
--- reservations-images: only authenticated sessions can upload
-DROP POLICY IF EXISTS "Public Access for reservations-images"       ON storage.objects;
-DROP POLICY IF EXISTS "Allow public insert to reservations-images"  ON storage.objects;
 
-CREATE POLICY "reservations_images_select_public"
-  ON storage.objects FOR SELECT
-  USING (bucket_id = 'reservations-images');
-
-CREATE POLICY "reservations_images_insert_auth"
-  ON storage.objects FOR INSERT
-  WITH CHECK (
-    bucket_id = 'reservations-images'
-    AND auth.uid() IS NOT NULL
-  );
 
 
 -- =============================================================================

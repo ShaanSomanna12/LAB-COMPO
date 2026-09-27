@@ -10,6 +10,7 @@ import { siteConfig } from '@/config/site';
 import { Skeleton } from '@/components/ui/Skeleton';
 import RequisitionLetter from '@/components/RequisitionLetter';
 import { isWorkingDay, getWorkingDaysCount } from '@/lib/dateValidator';
+import ImageCropper from '@/app/admin/ImageCropper';
 
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] });
 
@@ -61,6 +62,21 @@ export default function StudentCheckout() {
   const [year, setYear] = useState('');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [minDate, setMinDate] = useState('');
+  
+  const [projectType, setProjectType] = useState('Course Assignment / Lab Work');
+  const [projectTitle, setProjectTitle] = useState('');
+  const [projectPurpose, setProjectPurpose] = useState('');
+  const [hackathonDate, setHackathonDate] = useState('');
+  const [hackathonVenue, setHackathonVenue] = useState('');
+  const [studentIdCardUrl, setStudentIdCardUrl] = useState('');
+  const [teamMembers, setTeamMembers] = useState<{ name: string; usn: string; phone: string; idCardUrl: string }[]>([]);
+  const [showCropper, setShowCropper] = useState(false);
+  const [imageToCrop, setImageToCrop] = useState<string | null>(null);
+  const [cropTarget, setCropTarget] = useState<'student' | 'signature' | number | null>(null);
+  const [isPolicyModalOpen, setIsPolicyModalOpen] = useState(false);
+  
+  const [requestMode, setRequestMode] = useState<'individual' | 'team'>('individual');
+  const [signatureUrl, setSignatureUrl] = useState('');
   
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -144,6 +160,21 @@ export default function StudentCheckout() {
     setCart(prev => prev.map(i => i.id === id ? { ...i, requestedQty: newQty } : i));
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, target: 'student' | 'signature' | number) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setImageToCrop(event.target.result as string);
+          setCropTarget(target);
+          setShowCropper(true);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleDateChange = (val: string) => {
     const { isValid, reason } = isWorkingDay(val);
     if (!isValid) {
@@ -180,13 +211,31 @@ export default function StudentCheckout() {
       return;
     }
     
-    if (!returnDate) {
+    if (!studentIdCardUrl) {
+      toast.error('Please upload your college ID card photo');
+      setIsLoading(false);
+      return;
+    }
+
+    if (!signatureUrl) {
+      toast.error('Please upload your signature');
+      setIsLoading(false);
+      return;
+    }
+    
+    if (projectType !== 'SIP IDT PROJECT (InUnity)' && !returnDate) {
       toast.error('Please specify a return date');
       setIsLoading(false);
       return;
     }
     
-    if (returnDate < date) {
+    if (projectType === 'SIP IDT PROJECT (InUnity)' && year !== '1st Year') {
+      toast.error('SIP IDT Projects are strictly restricted to 1st Year students only.');
+      setIsLoading(false);
+      return;
+    }
+    
+    if (projectType !== 'SIP IDT PROJECT (InUnity)' && returnDate < date) {
       toast.error('Return date must be on or after the collection date');
       setIsLoading(false);
       return;
@@ -208,6 +257,42 @@ export default function StudentCheckout() {
     }
 
     try {
+      // Helper to upload image
+      const uploadImage = async (base64Url: string) => {
+        if (!base64Url.startsWith('data:image')) return base64Url;
+        const base64Data = base64Url.split(',')[1];
+        const byteString = atob(base64Data);
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+          ia[i] = byteString.charCodeAt(i);
+        }
+        const fileExt = base64Url.substring("data:image/".length, base64Url.indexOf(";base64"));
+        const fileName = `id-card-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from('inventory-images')
+          .upload(fileName, ab, { contentType: `image/${fileExt}` });
+        if (uploadError) throw new Error("Failed to upload image: " + uploadError.message);
+        const { data: { publicUrl } } = supabase.storage.from('inventory-images').getPublicUrl(fileName);
+        return publicUrl;
+      };
+
+      let finalStudentIdCardUrl = studentIdCardUrl;
+      if (studentIdCardUrl) {
+        finalStudentIdCardUrl = await uploadImage(studentIdCardUrl);
+      }
+      
+      let finalSignatureUrl = signatureUrl;
+      if (signatureUrl) {
+        finalSignatureUrl = await uploadImage(signatureUrl);
+      }
+      
+      const finalTeamMembers = [];
+      for (const tm of teamMembers) {
+         const tmIdUrl = await uploadImage(tm.idCardUrl);
+         finalTeamMembers.push({ ...tm, idCardUrl: tmIdUrl });
+      }
+
       const itemsPayload = cart.map(item => ({
         name: item.name,
         department: item.department,
@@ -232,8 +317,17 @@ export default function StudentCheckout() {
           date,
           time,
           mobile,
-          duration: durationDays,
-          items: itemsPayload
+          duration: projectType !== 'SIP IDT PROJECT (InUnity)' ? durationDays : null,
+          items: itemsPayload,
+          projectType,
+          projectTitle,
+          projectPurpose,
+          hackathonDate: projectType === 'Hackathon Participation' ? hackathonDate : null,
+          hackathonVenue: projectType === 'Hackathon Participation' ? hackathonVenue : null,
+          idCardUrl: finalStudentIdCardUrl,
+          signatureUrl: finalSignatureUrl,
+          requestMode,
+          teamMembers: finalTeamMembers
         })
       });
 
@@ -254,7 +348,14 @@ export default function StudentCheckout() {
         items: itemsPayload.map((item: any) => ({ name: item.name, quantity: item.quantity })),
         requestDate: date,
         duration: durationDays,
-        status: 'PENDING'
+        status: 'PENDING',
+        signatureUrl: finalSignatureUrl,
+        projectTitle,
+        projectType,
+        projectPurpose,
+        hackathonDate: projectType === 'Hackathon Participation' ? hackathonDate : null,
+        hackathonVenue: projectType === 'Hackathon Participation' ? hackathonVenue : null,
+        teamMembers: finalTeamMembers
       });
       setCart([]);
       setShowLetter(true);
@@ -638,6 +739,18 @@ export default function StudentCheckout() {
                           </select>
                         </div>
                         <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Year of Engg</label>
+                          <select required value={year} onChange={e => setYear(e.target.value)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 appearance-none text-white font-medium">
+                            <option value="1st Year">1st Year</option>
+                            <option value="2nd Year">2nd Year</option>
+                            <option value="3rd Year">3rd Year</option>
+                            <option value="4th Year">4th Year</option>
+                          </select>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
                           <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Section</label>
                           <select required value={section} onChange={e => setSection(e.target.value)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 appearance-none text-white font-medium">
                             <option value="" disabled>Select Section</option>
@@ -656,11 +769,17 @@ export default function StudentCheckout() {
                             <option value="M">Section M</option>
                           </select>
                         </div>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Mobile Number</label>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Request Mode</label>
+                          <select required value={requestMode} onChange={e => setRequestMode(e.target.value as any)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 appearance-none text-white font-medium">
+                            <option value="individual">Individual Request</option>
+                            <option value="team">Team Request</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Mobile Number</label>
                         <input required type="tel" value={mobile} onChange={e => setMobile(e.target.value.replace(/\D/g, ''))} maxLength={15} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 text-white font-medium" />
+                      </div>
                       </div>
                     </div>
 
@@ -668,15 +787,100 @@ export default function StudentCheckout() {
                     <div className="space-y-4">
                       <h3 className="text-xs font-mono text-cyan-500 tracking-widest uppercase border-b border-slate-900 pb-2 mb-4">Requisition Details</h3>
 
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Project Type</label>
+                        <select required value={projectType} onChange={e => setProjectType(e.target.value)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 appearance-none text-white font-medium">
+                          <option value="Course Assignment / Lab Work">Course Assignment / Lab Work</option>
+                          <option value="Mini Project">Mini Project</option>
+                          <option value="Major Project">Major Project</option>
+                          <option value="Hackathon Participation">Hackathon Participation</option>
+                          <option value="Research / Publication Work">Research / Publication Work</option>
+                          <option value="Personal Learning / Prototyping">Personal Learning / Prototyping</option>
+                          <option value="Student Club / Technical Event">Student Club / Technical Event</option>
+                          {year === '1st Year' ? (
+                            <option value="SIP IDT PROJECT (InUnity)">SIP IDT PROJECT (InUnity)</option>
+                          ) : (
+                            <option value="SIP IDT PROJECT (InUnity)" disabled>SIP IDT PROJECT (InUnity) - Restricted to 1st Year Students</option>
+                          )}
+                        </select>
+                        {year && year !== '1st Year' && projectType === 'SIP IDT PROJECT (InUnity)' && (
+                           <p className="text-rose-400 text-[10px] mt-1 font-bold">You are a {year} student. This project type is only available for 1st year students.</p>
+                        )}
+                      </div>
+
+                      {projectType === 'Hackathon Participation' && (
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Date of Hackathon</label>
+                            <input 
+                              required 
+                              type="date" 
+                              min={minDate}
+                              value={hackathonDate} 
+                              onChange={e => setHackathonDate(e.target.value)} 
+                              className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 [color-scheme:dark] text-white font-medium" 
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Venue (College/Location)</label>
+                            <input 
+                              required 
+                              type="text" 
+                              value={hackathonVenue} 
+                              onChange={e => setHackathonVenue(e.target.value)} 
+                              className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 text-white font-medium" 
+                              placeholder="e.g. IIT Bombay" 
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Title of the Project</label>
+                        <input 
+                          required 
+                          type="text" 
+                          value={projectTitle} 
+                          onChange={e => setProjectTitle(e.target.value)} 
+                          className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 text-white font-medium" 
+                          placeholder="Enter project title" 
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500">Purpose of Project</label>
+                          <span className={`text-[10px] font-mono ${projectPurpose.trim().split(/\s+/).filter(Boolean).length >= 200 ? 'text-rose-400 font-bold' : 'text-zinc-500'}`}>
+                            {projectPurpose.trim().split(/\s+/).filter(Boolean).length}/200 words
+                          </span>
+                        </div>
+                        <textarea 
+                          required 
+                          value={projectPurpose} 
+                          onChange={e => {
+                            const words = e.target.value.trim().split(/\s+/).filter(Boolean);
+                            // Allow deletion or limit to 200 words
+                            if (words.length <= 200 || e.target.value.length < projectPurpose.length) {
+                              setProjectPurpose(e.target.value);
+                            }
+                          }} 
+                          rows={3} 
+                          className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 text-white font-medium resize-none" 
+                          placeholder="Describe the purpose of your project (max 200 words)" 
+                        />
+                      </div>
+
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Collection Date</label>
                           <input required type="date" min={minDate} value={date} onChange={e => handleDateChange(e.target.value)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 [color-scheme:dark] text-white font-medium" />
                         </div>
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Return Date</label>
-                          <input required type="date" min={date || minDate} value={returnDate} onChange={e => handleReturnDateChange(e.target.value)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 [color-scheme:dark] text-white font-medium" />
-                        </div>
+                        {projectType !== 'SIP IDT PROJECT (InUnity)' && (
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Return Date</label>
+                            <input required type="date" min={date || minDate} value={returnDate} onChange={e => handleReturnDateChange(e.target.value)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 [color-scheme:dark] text-white font-medium" />
+                          </div>
+                        )}
                       </div>
 
                       <div>
@@ -735,8 +939,106 @@ export default function StudentCheckout() {
                         />
                       </div>
                       <label htmlFor="liability-checkbox" className="text-xs text-zinc-400 leading-relaxed cursor-pointer select-none">
-                        I hereby agree to the <span className="text-cyan-400 font-bold">Lab Policy & Borrowing Regulations</span> and accept full liability for returning these items in working condition or paying for appropriate replacements. <span className="text-rose-400 font-bold block mt-1">⚠️ Crucial Notice: Issuing of your Hall Ticket will be blocked if the borrowed components are not returned on time.</span>
+                        I hereby agree to the <span onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsPolicyModalOpen(true); }} className="text-cyan-400 font-bold underline hover:text-cyan-300 transition-colors">Lab Policy & Borrowing Regulations</span> and accept full liability for returning these items in working condition or paying for appropriate replacements. 
+                        {projectType === 'SIP IDT PROJECT (InUnity)' && (
+                          <span className="text-rose-400 font-bold block mt-2">
+                            ⚠️ STRICT TERMS: You must return the component after the completion of the project. If any damage occurs, you are strictly liable to replace and return a new, original component purchased at your own expense within the specified time frame.
+                          </span>
+                        )}
                       </label>
+                    </div>
+
+                    {/* ID Card Uploads */}
+                    <div className="mb-6 space-y-4">
+                      <h3 className="text-xs font-mono text-cyan-500 tracking-widest uppercase border-b border-slate-900 pb-2 mb-2">Verification Documents</h3>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2">Your College ID Card *</label>
+                        <div className="flex items-center gap-4">
+                          <label className="flex-shrink-0 cursor-pointer bg-slate-900/60 hover:bg-slate-800 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-cyan-400 transition-colors font-medium">
+                            <input type="file" accept="image/*" className="hidden" onChange={e => handleFileChange(e, 'student')} />
+                            {studentIdCardUrl ? 'Change Photo' : 'Upload ID Photo'}
+                          </label>
+                          {studentIdCardUrl && (
+                            <img src={studentIdCardUrl} alt="ID preview" className="h-12 w-12 object-cover rounded-lg border border-slate-800" />
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2">Your Signature * {requestMode === 'team' && '(Team Leader)'}</label>
+                        <div className="flex items-center gap-4">
+                          <label className="flex-shrink-0 cursor-pointer bg-slate-900/60 hover:bg-slate-800 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-cyan-400 transition-colors font-medium">
+                            <input type="file" accept="image/*" className="hidden" onChange={e => handleFileChange(e, 'signature')} />
+                            {signatureUrl ? 'Change Signature' : 'Upload Signature'}
+                          </label>
+                          {signatureUrl && (
+                            <img src={signatureUrl} alt="Signature preview" className="h-12 w-24 object-contain bg-white rounded-lg border border-slate-800" />
+                          )}
+                        </div>
+                        <p className="text-zinc-500 text-[9px] mt-1">Please provide a clear photo of your signature.</p>
+                      </div>
+
+                      {requestMode === 'team' && (
+                        <div className="mt-6">
+                          <div className="flex justify-between items-center border-b border-slate-900 pb-2 mb-4">
+                            <h4 className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Team Members</h4>
+                            <button
+                              type="button"
+                              onClick={() => setTeamMembers([...teamMembers, { name: '', usn: '', phone: '', idCardUrl: '' }])}
+                              className="text-[10px] text-cyan-400 font-bold uppercase hover:text-cyan-300"
+                            >
+                              + Add Member
+                            </button>
+                          </div>
+                          
+                          <div className="mb-4 p-3 bg-cyan-950/20 border border-cyan-900/30 rounded-lg text-xs text-cyan-300 font-medium">
+                            Please enter the student's name, USN, and upload their college ID card for each team member.
+                          </div>
+                          
+                          <div className="space-y-4">
+                            {teamMembers.map((member, index) => (
+                              <div key={index} className="p-4 bg-slate-900/30 border border-slate-800 rounded-xl relative">
+                                <button
+                                  type="button"
+                                  onClick={() => setTeamMembers(teamMembers.filter((_, i) => i !== index))}
+                                  className="absolute top-2 right-2 text-rose-500 hover:text-rose-400"
+                                >
+                                  ✕
+                                </button>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
+                                  <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Name</label>
+                                    <input required type="text" value={member.name || ''} onChange={e => { const nm = [...teamMembers]; nm[index].name = e.target.value; setTeamMembers(nm); }} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500/80" />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">USN</label>
+                                    <input required type="text" value={member.usn || ''} onChange={e => { const nm = [...teamMembers]; nm[index].usn = e.target.value.toUpperCase(); setTeamMembers(nm); }} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500/80 font-mono uppercase" />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Phone</label>
+                                    <input required type="tel" value={member.phone || ''} onChange={e => { const nm = [...teamMembers]; nm[index].phone = e.target.value.replace(/\D/g, ''); setTeamMembers(nm); }} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500/80" />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2">ID Card Photo *</label>
+                                  <div className="flex items-center gap-4">
+                                    <label className="flex-shrink-0 cursor-pointer bg-slate-900/60 hover:bg-slate-800 border border-slate-800 rounded-lg px-4 py-2 text-xs text-cyan-400 transition-colors font-medium">
+                                      <input type="file" accept="image/*" className="hidden" onChange={e => handleFileChange(e, index)} />
+                                      {member.idCardUrl ? 'Change Photo' : 'Upload ID'}
+                                    </label>
+                                    {member.idCardUrl && (
+                                      <img src={member.idCardUrl} alt="ID preview" className="h-10 w-10 object-cover rounded-lg border border-slate-800" />
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            {teamMembers.length === 0 && (
+                              <p className="text-xs text-zinc-500 text-center py-2">No team members added.</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </form>
@@ -859,6 +1161,110 @@ export default function StudentCheckout() {
             </div>
             <div className="p-6 overflow-y-auto print:p-0">
               <RequisitionLetter {...submittedData} />
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {showCropper && imageToCrop && (
+        <ImageCropper
+          imageSrc={imageToCrop}
+          onCropComplete={(croppedBase64) => {
+            if (cropTarget === 'student') {
+              setStudentIdCardUrl(croppedBase64);
+            } else if (cropTarget === 'signature') {
+              setSignatureUrl(croppedBase64);
+            } else if (typeof cropTarget === 'number') {
+              const nm = [...teamMembers];
+              nm[cropTarget].idCardUrl = croppedBase64;
+              setTeamMembers(nm);
+            }
+            setShowCropper(false);
+            setImageToCrop(null);
+          }}
+          onCancel={() => {
+            setShowCropper(false);
+            setImageToCrop(null);
+          }}
+        />
+      )}
+
+      {/* Lab Policy Modal */}
+      {isPolicyModalOpen && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-white border border-gray-200 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl relative font-sans">
+            <div className="p-5 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-2xl">
+              <h2 className="text-gray-900 font-bold text-lg tracking-wider flex items-center gap-2 uppercase">
+                <svg className="w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                LAB POLICY & BORROWING REGULATIONS
+              </h2>
+              <button 
+                onClick={() => setIsPolicyModalOpen(false)}
+                className="text-gray-400 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg p-2 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto space-y-6 text-sm text-gray-700">
+              <section className="space-y-2">
+                <h3 className="text-gray-900 font-bold uppercase tracking-wider text-xs flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-600"></span>
+                  1. Component Handling & Usage
+                </h3>
+                <p className="leading-relaxed pl-3.5">
+                  All components, microcontrollers, and tools must be handled with utmost care. You are expected to follow proper electrical and safety guidelines while using the hardware to avoid short-circuits or physical damage.
+                </p>
+              </section>
+
+              <section className="space-y-2">
+                <h3 className="text-gray-900 font-bold uppercase tracking-wider text-xs flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                  2. Strict Liability for Damage or Loss
+                </h3>
+                <p className="leading-relaxed pl-3.5">
+                  By borrowing components, you assume full financial and academic responsibility for them. If any item is damaged, burnt out, lost, or returned in a non-working condition due to negligence, <strong className="text-black">you are strictly mandated to purchase and submit a brand-new, original replacement of the exact same model within the specified timeline.</strong>
+                </p>
+              </section>
+
+              <section className="space-y-2">
+                <h3 className="text-gray-900 font-bold uppercase tracking-wider text-xs flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                  3. Return Deadlines & Academic Holds
+                </h3>
+                <p className="leading-relaxed pl-3.5">
+                  Components must be returned on or before the approved Return Date. <strong className="text-black">Failure to return components on time will result in an automatic academic block.</strong> Your Hall Ticket for upcoming exams will be withheld until the lab clearance is obtained by returning or replacing the overdue items.
+                </p>
+              </section>
+
+              <section className="space-y-2">
+                <h3 className="text-gray-900 font-bold uppercase tracking-wider text-xs flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-600"></span>
+                  4. SIP IDT & Long-Term Projects
+                </h3>
+                <p className="leading-relaxed pl-3.5">
+                  For ongoing projects (such as SIP IDT) where a fixed return date is not explicitly set initially, components must be returned <strong className="text-black">immediately upon project completion or at the end of the academic semester</strong>, whichever comes first. The strict damage liability policy equally applies to long-term borrowing.
+                </p>
+              </section>
+
+              <section className="space-y-2">
+                <h3 className="text-gray-900 font-bold uppercase tracking-wider text-xs flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                  5. Non-Transferability
+                </h3>
+                <p className="leading-relaxed pl-3.5">
+                  Hardware is issued to you (and your listed team). You cannot transfer, lend, or swap borrowed components with other students or teams without prior official approval and system reassignment by the lab administrator.
+                </p>
+              </section>
+            </div>
+            
+            <div className="p-5 border-t border-gray-200 bg-gray-50 flex justify-end rounded-b-2xl">
+              <button 
+                onClick={() => setIsPolicyModalOpen(false)}
+                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow transition-colors uppercase text-xs tracking-wider"
+              >
+                I Understand
+              </button>
             </div>
           </div>
         </div>

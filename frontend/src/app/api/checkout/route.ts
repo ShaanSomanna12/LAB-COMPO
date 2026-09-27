@@ -36,10 +36,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Reservation is not approved or ready for pickup' }, { status: 400 });
     }
 
-    if (!reservation.geotag_image_url) {
-      return NextResponse.json({ error: 'Student must upload a photo of the component before checkout can be finalized.' }, { status: 400 });
-    }
-
     const isAssetTracked = reservation.components?.tracking_type === 'ASSET';
 
     if (isAssetTracked) {

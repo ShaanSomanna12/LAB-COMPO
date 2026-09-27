@@ -26,7 +26,7 @@ export async function GET() {
       .from('reservations')
       .select(`
         *,
-        users(name, usn, mobile),
+        users(name, usn, mobile, branch),
         components(name, department, lab_location, value_tier, tracking_type),
         reservation_status_history(old_status, new_status, changed_at, note, changed_by, users(name))
       `)
@@ -40,6 +40,7 @@ export async function GET() {
       studentName: res.users?.name,
       usn: res.users?.usn,
       mobile: res.users?.mobile,
+      year: res.users?.branch,
       component: res.components?.name,
       department: res.components?.department || 'EDL',
       location: res.components?.lab_location || 'Main Lab',
@@ -47,6 +48,7 @@ export async function GET() {
       section: res.section,
       studentDepartment: res.student_department,
       requestDate: res.created_at ? res.created_at.split('T')[0] : null,
+      createdAt: res.created_at,
       date: res.created_at ? res.created_at.split('T')[0] : null,
       duration: res.due_date && res.created_at ? getWorkingDaysCount(res.created_at, res.due_date) : 7,
       dueDate: res.due_date || null,
@@ -56,11 +58,17 @@ export async function GET() {
       trackingType: res.components?.tracking_type || 'QUANTITY',
       quantity: res.quantity || 1,
       collectionTime: res.collection_time || null,
-      geotagImageUrl: res.geotag_image_url || null,
       afterImgUrl: res.after_img_url || null,
-      latitude: res.latitude || null,
-      longitude: res.longitude || null,
-      images: [res.geotag_image_url, res.after_img_url].filter(Boolean),
+      images: [res.after_img_url].filter(Boolean),
+      projectType: res.project_type || 'Normal',
+      projectTitle: res.project_title || null,
+      projectPurpose: res.project_purpose || null,
+      hackathonDate: res.hackathon_date || null,
+      hackathonVenue: res.hackathon_venue || null,
+      idCardUrl: res.id_card_url || null,
+      signatureUrl: res.signature_url || null,
+      requestMode: res.request_mode || 'individual',
+      teamMembers: res.team_members || [],
       extensionRequested: res.extension_requested || false,
       extensionReason: res.extension_reason || null,
       extensionDays: res.extension_days || null,
@@ -90,7 +98,7 @@ export async function PATCH(request: Request) {
   }
   try {
     const body = await request.json();
-    const { id, status, images, geotag, is_damaged, return_condition, returnCondition, quantity, collectionTime, dueDate, date, rejectionReason } = body;
+    const { id, status, images, is_damaged, return_condition, returnCondition, quantity, collectionTime, dueDate, date, rejectionReason } = body;
 
     const canMutate =
       payload.roleId === ROLES.ADMIN ||
@@ -152,15 +160,8 @@ export async function PATCH(request: Request) {
        updates.returned_at = new Date().toISOString();
     }
     
-    if (geotag) {
-      if (status === 'RETURN_REQUESTED') {
-        updates.after_img_url = geotag.imageUrl;
-      } else {
-        updates.geotag_image_url = geotag.imageUrl;
-        updates.borrowed_at = new Date().toISOString();
-      }
-      updates.latitude = geotag.latitude;
-      updates.longitude = geotag.longitude;
+    if (status === 'RETURN_REQUESTED' && images && images.length > 0) {
+      updates.after_img_url = images[0];
     }
     
     const { data, error } = await supabase
@@ -260,7 +261,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { studentName, usn, section, studentDepartment, items, date, time, duration, images } = body;
+    const { studentName, usn, section, studentDepartment, items, date, time, duration, images, projectType, projectTitle, projectPurpose, hackathonDate, hackathonVenue, idCardUrl, signatureUrl, requestMode, teamMembers } = body;
     
     if (!items || !Array.isArray(items)) {
       return NextResponse.json({ error: 'Invalid items array' }, { status: 400 });
@@ -289,15 +290,31 @@ export async function POST(request: Request) {
 
     const newReservations = [];
 
-    // 2. Loop through requested items and create reservations
+    // 1.5 Pre-flight check: Does the cart require admin approval?
+    let cartRequiresApproval = false;
+    const componentCache: Record<string, any> = {};
+
     for (const item of items) {
-      // Find component ID and value_tier
-      const { data: component, error: compError } = await supabase
+      const { data: component } = await supabase
         .from('components')
         .select('component_id, value_tier, available_quantity')
         .eq('name', item.name)
         .limit(1)
         .maybeSingle();
+
+      if (component) {
+        componentCache[item.name] = component;
+        const reqQty = item.quantity || 1;
+        const tierUpper = (component.value_tier || 'MEDIUM').toUpperCase();
+        if (tierUpper !== 'LOW' || reqQty > 3) {
+          cartRequiresApproval = true;
+        }
+      }
+    }
+
+    // 2. Loop through requested items and create reservations
+    for (const item of items) {
+      const component = componentCache[item.name];
 
       if (!component) {
         console.warn('Component not found:', item.name);
@@ -309,20 +326,16 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: `Not enough stock available for ${item.name}. (Available: ${component.available_quantity})` }, { status: 400 });
       }
 
-      const tierUpper = (component.value_tier || 'MEDIUM').toUpperCase();
-      let isLowTier = tierUpper === 'LOW';
-      
-      let status = 'PENDING_APPROVAL';
-      if (isLowTier && reqQty <= 3) {
-        status = 'APPROVED';
-      } else if (tierUpper === 'HIGH') {
-        status = 'PENDING_APPROVAL';
-      }
+      const status = cartRequiresApproval ? 'PENDING_APPROVAL' : 'APPROVED';
       
       const collectionDate = date ? new Date(date) : new Date();
-      let dueDate = new Date(collectionDate);
-      dueDate.setDate(dueDate.getDate() + (duration || 7));
-      dueDate = getNextWorkingDay(dueDate);
+      let dueDate: Date | null = new Date(collectionDate);
+      if (duration === null) {
+        dueDate = null;
+      } else {
+        dueDate.setDate(dueDate.getDate() + (duration || 7));
+        dueDate = getNextWorkingDay(dueDate);
+      }
 
       const { data: reservation, error: resError } = await supabase
         .from('reservations')
@@ -332,8 +345,16 @@ export async function POST(request: Request) {
           status: status,
           section: section || 'A',
           student_department: studentDepartment || user.department || 'CSE',
-          project_title: body.projectTitle || null,
-          due_date: dueDate.toISOString(),
+          project_title: projectTitle || null,
+          project_purpose: projectPurpose || null,
+          project_type: projectType || 'Normal',
+          hackathon_date: hackathonDate || null,
+          hackathon_venue: hackathonVenue || null,
+          id_card_url: idCardUrl || null,
+          signature_url: signatureUrl || null,
+          request_mode: requestMode || 'individual',
+          team_members: teamMembers || null,
+          due_date: dueDate ? dueDate.toISOString() : null,
           quantity: item.quantity || 1,
           collection_time: time || null
         }])

@@ -47,41 +47,23 @@ export default function OrderQRModal({ isOpen, onClose, reservationId, studentNa
         </div>
 
         {/* Printable Content */}
-        <div className="p-8 flex flex-col items-center justify-center bg-white text-black print:p-4">
-          <div className="border-4 border-black p-6 rounded-2xl w-full max-w-sm flex flex-col items-center gap-4 print:border-none print:p-0">
-            <div className="text-center w-full border-b-2 border-black pb-3">
-              <h2 className="text-2xl font-black uppercase tracking-widest">LAB CHECKOUT</h2>
-              <p className="text-sm font-bold text-gray-600 font-mono mt-1">ID: {reservationId.substring(0, 8).toUpperCase()}</p>
-            </div>
-            
+        <div className="p-6 flex flex-col items-center justify-center bg-white text-black print:p-2">
+          <div className="border-4 border-black p-4 rounded-xl w-[220px] flex flex-col items-center gap-3 print:border-none print:p-0 print:w-[150px]">
             <div className="bg-white p-2">
-              <QRCodeSVG value={reservationId} size={180} level="H" />
+              <QRCodeSVG value={reservationId} size={120} level="H" includeMargin={true} />
             </div>
 
-            <div className="w-full text-left mt-2 space-y-2 border-t-2 border-black pt-4">
-              <div>
-                <div className="text-xs text-gray-500 uppercase font-bold tracking-wider">Component</div>
-                <div className="font-bold text-lg leading-tight">{componentName} {quantity > 1 ? `(x${quantity})` : ''}</div>
-              </div>
+            <div className="w-full text-center border-t-2 border-black pt-3">
+              <div className="text-xs text-gray-500 uppercase font-bold tracking-wider mb-0.5">Component</div>
+              <div className="font-bold text-sm leading-tight">{componentName} {quantity > 1 ? `(x${quantity})` : ''}</div>
               
-              <div className="flex justify-between">
-                <div>
-                  <div className="text-xs text-gray-500 uppercase font-bold tracking-wider">Student</div>
-                  <div className="font-bold">{studentName}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs text-gray-500 uppercase font-bold tracking-wider">USN</div>
-                  <div className="font-bold font-mono">{usn}</div>
-                </div>
+              <div className="mt-2 pt-2 border-t border-dashed border-gray-300">
+                <div className="text-xs text-gray-500 uppercase font-bold tracking-wider mb-0.5">USN</div>
+                <div className="font-bold font-mono text-sm">{usn}</div>
               </div>
-            </div>
-            
-            <div className="text-center mt-2 w-full pt-2 border-t border-dashed border-gray-400 text-xs text-gray-500">
-              Please return this label with the component.
             </div>
           </div>
         </div>
-        
       </div>
     </div>
   );
