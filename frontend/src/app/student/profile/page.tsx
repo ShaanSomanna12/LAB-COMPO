@@ -33,9 +33,10 @@ export default function MyProfile() {
     const fetchProfile = async () => {
       setIsLoading(true);
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          router.push('/student');
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError || !user) {
+          await supabase.auth.signOut();
+          router.push('/');
           return;
         }
 
@@ -161,7 +162,12 @@ export default function MyProfile() {
         }
       }
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        await supabase.auth.signOut();
+        router.push('/');
+        return;
+      }
       if (!user || !user.email) throw new Error("No authenticated email found.");
 
       const response = await fetch('/api/profile', {
@@ -193,17 +199,19 @@ export default function MyProfile() {
   };
 
   return (
-    <div className="min-h-screen bg-[#030303] text-zinc-100 flex flex-col p-4 md:p-8 font-sans selection:bg-cyan-500/30">
-      <div className="absolute inset-0 cyber-grid opacity-20 pointer-events-none z-0"></div>
+    <div className="min-h-screen bg-[#020617] text-zinc-100 flex flex-col p-4 md:p-8 font-sans selection:bg-cyan-500/30">
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[100vw] h-[40vh] bg-gradient-to-b from-indigo-900/10 to-transparent" />
+      </div>
       
       {/* Top Header */}
-      <div className="w-full max-w-3xl mx-auto mb-8 relative z-10 flex justify-between items-center">
+      <div className="w-full max-w-3xl mx-auto mb-8 relative z-10 flex justify-between items-center mt-4">
         <div>
-          <h1 className="text-3xl md:text-4xl font-black bg-gradient-to-r from-pink-400 to-rose-400 bg-clip-text text-transparent tracking-tight">
+          <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">
             MY PROFILE
           </h1>
-          <p className="text-zinc-500 font-mono text-sm uppercase tracking-widest mt-1">
-            Manage your personal details
+          <p className="text-zinc-500 text-sm mt-1">
+            Manage your personal details and academic info.
           </p>
         </div>
         
@@ -221,14 +229,15 @@ export default function MyProfile() {
             <div className="w-12 h-12 border-4 border-rose-500 border-t-transparent rounded-full animate-spin"></div>
           </div>
         ) : (
-          <div className="bg-zinc-950/80 backdrop-blur-xl border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+          <div className="bg-zinc-900/40 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
             
-            <div className="bg-gradient-to-r from-pink-950/30 to-rose-950/30 p-6 border-b border-zinc-800 flex flex-col gap-2">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <svg className="w-6 h-6 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+            <div className="bg-white/5 p-6 border-b border-white/10 flex flex-col gap-2 relative overflow-hidden">
+              <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent opacity-50" />
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                 Identity Credentials
               </h2>
-              <p className="text-xs text-zinc-400">Please ensure all fields are accurately filled. This information is used for hardware checkout and lab access.</p>
+              <p className="text-xs text-zinc-400">Please ensure all fields are accurately filled for hardware checkout and lab access.</p>
             </div>
 
             <form onSubmit={handleSave} className="p-6 md:p-8 space-y-6">
@@ -241,8 +250,8 @@ export default function MyProfile() {
                     type="text" 
                     value={name} 
                     onChange={e => setName(e.target.value)} 
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 transition-all text-white" 
-                    placeholder="Please enter your name" 
+                    className="w-full bg-zinc-900/80 border border-white/10 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all text-white placeholder:text-zinc-600" 
+                    placeholder="Enter your full name" 
                   />
                 </div>
                 
@@ -254,20 +263,20 @@ export default function MyProfile() {
                     value={usn} 
                     onChange={e => {
                        setUsn(e.target.value.toUpperCase());
-                       setScanResult(null); // Reset scan result on USN change
+                       setScanResult(null);
                     }} 
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-sm font-mono uppercase focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 transition-all text-white" 
+                    className="w-full bg-zinc-900/80 border border-white/10 rounded-lg px-4 py-3 text-sm font-mono uppercase focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all text-white placeholder:text-zinc-600" 
                     placeholder="e.g. 1RV22CS001" 
                   />
                 </div>
               </div>
 
               {/* ID Card Upload Section */}
-              <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 md:p-6 space-y-4">
+              <div className="bg-black/20 border border-white/5 rounded-xl p-5 space-y-4">
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className="text-sm font-bold text-white mb-1">ID Card Verification</h3>
-                    <p className="text-xs text-zinc-400">Upload your student ID card to verify your USN automatically using AI scanning.</p>
+                    <p className="text-xs text-zinc-400">Upload your student ID card to automatically verify your USN and Validity.</p>
                   </div>
                   {scanResult?.match && (
                     <div className="bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold border border-emerald-500/20 flex items-center gap-1">
@@ -294,19 +303,19 @@ export default function MyProfile() {
                           setScanResult(null);
                           if (fileInputRef.current) fileInputRef.current.value = '';
                         }}
-                        className="absolute top-1 right-1 bg-black/60 p-1 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-500"
+                        className="absolute top-1 right-1 bg-black/60 p-1.5 rounded-full text-white opacity-0 group-hover:opacity-100 transition-all hover:bg-rose-500/80 backdrop-blur-sm"
                       >
-                        <X className="w-3 h-3" />
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   ) : (
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="w-full md:w-32 h-24 rounded-lg border-2 border-dashed border-zinc-700 hover:border-rose-500 hover:bg-rose-500/5 transition-colors flex flex-col items-center justify-center gap-2 text-zinc-500 hover:text-rose-400"
+                      className="w-full md:w-32 h-24 rounded-lg border border-dashed border-white/20 hover:border-cyan-500/50 hover:bg-cyan-500/5 transition-all flex flex-col items-center justify-center gap-2 text-zinc-500 hover:text-cyan-400"
                     >
-                      <Camera className="w-6 h-6" />
-                      <span className="text-[10px] uppercase font-bold tracking-wider">Upload ID</span>
+                      <Camera className="w-5 h-5" />
+                      <span className="text-[10px] font-semibold">Upload ID</span>
                     </button>
                   )}
                   
@@ -318,7 +327,7 @@ export default function MyProfile() {
                     className="hidden"
                   />
 
-                  <div className="flex-1 bg-zinc-950 rounded-lg p-3 border border-zinc-800 w-full text-xs font-mono">
+                  <div className="flex-1 bg-zinc-950/50 rounded-lg p-3.5 border border-white/5 w-full text-xs font-mono">
                     {isScanning ? (
                       <div className="flex items-center gap-2 text-cyan-400">
                         <div className="w-3 h-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
@@ -352,7 +361,7 @@ export default function MyProfile() {
                     required
                     value={year} 
                     onChange={e => setYear(e.target.value)} 
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 appearance-none text-white"
+                    className="w-full bg-zinc-900/80 border border-white/10 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 appearance-none text-white transition-all"
                   >
                     <option value="1st Year">1st Year</option>
                     <option value="2nd Year">2nd Year</option>
@@ -367,7 +376,7 @@ export default function MyProfile() {
                     required
                     value={department} 
                     onChange={e => setDepartment(e.target.value)} 
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 appearance-none text-white"
+                    className="w-full bg-zinc-900/80 border border-white/10 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 appearance-none text-white transition-all"
                   >
                     <option value="" disabled>Select Department</option>
                     <option value="CSE">Computer Science & Engineering</option>
@@ -387,7 +396,7 @@ export default function MyProfile() {
                   required
                   value={section} 
                   onChange={e => setSection(e.target.value)} 
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 appearance-none text-white"
+                  className="w-full bg-zinc-900/80 border border-white/10 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 appearance-none text-white transition-all"
                 >
                   <option value="" disabled>Select Section</option>
                   <option value="A">Section A</option>
@@ -413,7 +422,7 @@ export default function MyProfile() {
                   type="tel" 
                   value={mobile} 
                   onChange={e => setMobile(e.target.value.replace(/\D/g, ''))} 
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 transition-all text-white" 
+                  className="w-full bg-zinc-900/80 border border-white/10 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all text-white placeholder:text-zinc-600" 
                   placeholder="Enter your phone number" 
                 />
               </div>
@@ -422,7 +431,7 @@ export default function MyProfile() {
                 <button 
                   type="submit" 
                   disabled={isSaving}
-                  className="w-full py-4 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-400 hover:to-rose-500 text-white font-bold rounded-xl transition duration-300 shadow-[0_0_20px_rgba(244,63,94,0.3)] active:scale-[0.98] disabled:opacity-50 flex justify-center items-center gap-2"
+                  className="w-full py-4 bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold rounded-xl transition duration-300 active:scale-[0.98] disabled:opacity-50 flex justify-center items-center gap-2 backdrop-blur-sm"
                 >
                   {isSaving ? 'Saving Profile...' : 'Save Profile Details'}
                 </button>

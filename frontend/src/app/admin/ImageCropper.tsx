@@ -259,21 +259,21 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }: Ima
   };
 
   return (
-    <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center z-60 p-4 animate-in fade-in duration-200">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-3xl shadow-2xl p-6 relative flex flex-col max-h-[92vh]">
-        <button onClick={onCancel} className="absolute top-4 right-4 text-zinc-400 hover:text-white transition">✕</button>
+    <div className="fixed inset-0 bg-white/90 backdrop-blur-md flex flex-col items-center justify-center z-60 p-4 animate-in fade-in duration-200">
+      <div className="bg-white border border-slate-300 rounded-2xl w-full max-w-3xl shadow-2xl p-6 relative flex flex-col max-h-[92vh]">
+        <button onClick={onCancel} className="absolute top-4 right-4 text-slate-500 hover:text-slate-900 transition">✕</button>
 
-        <h3 className="text-xl font-bold text-white mb-2">Crop Image</h3>
-        <p className="text-xs text-zinc-400 mb-4">Drag inside the box to move it. Drag the white handles to resize the crop selection.</p>
+        <h3 className="text-xl font-bold text-slate-900 mb-2">Crop Image</h3>
+        <p className="text-xs text-slate-500 mb-4">Drag inside the box to move it. Drag the white handles to resize the crop selection.</p>
 
         {/* Aspect Ratio Selector */}
-        <div className="bg-zinc-950 p-1 rounded-lg border border-zinc-800 flex gap-1 mb-4 max-w-sm">
+        <div className="bg-white p-1 rounded-lg border border-slate-200 flex gap-1 mb-4 max-w-sm">
           {(['free', '1:1', '4:3', '16:9'] as const).map(ratio => (
             <button
               key={ratio}
               type="button"
               onClick={() => setAspectRatio(ratio)}
-              className={`flex-1 text-center py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${aspectRatio === ratio ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-white'}`}
+              className={`flex-1 text-center py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${aspectRatio === ratio ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
             >
               {ratio}
             </button>
@@ -281,7 +281,7 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }: Ima
         </div>
 
         {/* Image Workspace Area */}
-        <div className="flex-1 min-h-[300px] bg-zinc-950 rounded-lg overflow-hidden border border-zinc-850 flex items-center justify-center p-4 relative">
+        <div className="flex-1 min-h-[300px] bg-white rounded-lg overflow-hidden border border-slate-850 flex items-center justify-center p-4 relative">
           <div
             ref={containerRef}
             className="relative select-none"
@@ -324,7 +324,7 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }: Ima
                   <div className="absolute left-2/3 top-0 bottom-0 w-[1px] border-l border-dashed border-white/35 pointer-events-none"></div>
 
                   {/* Aspect Ratio Box Text */}
-                  <div className="absolute bottom-1 right-2 bg-black/60 px-1 py-0.5 rounded text-[8px] font-black font-mono text-white/80 pointer-events-none uppercase tracking-wider">
+                  <div className="absolute bottom-1 right-2 bg-white/20 px-1 py-0.5 rounded text-[8px] font-black font-mono text-slate-900/80 pointer-events-none uppercase tracking-wider">
                     {aspectRatio === 'free' ? 'Custom' : aspectRatio}
                   </div>
                 </div>
@@ -342,7 +342,7 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }: Ima
                 >
                   {/* Corner Handles */}
                   <div
-                    className="w-3.5 h-3.5 bg-white absolute rounded-full border border-zinc-950 top-0 left-0 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize z-40"
+                    className="w-3.5 h-3.5 bg-white absolute rounded-full border border-slate-950 top-0 left-0 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize z-40"
                     style={{ pointerEvents: 'auto' }}
                     onMouseDown={(e) => {
                       e.preventDefault();
@@ -358,7 +358,7 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }: Ima
                     }}
                   />
                   <div
-                    className="w-3.5 h-3.5 bg-white absolute rounded-full border border-zinc-950 top-0 right-0 translate-x-1/2 -translate-y-1/2 cursor-nesw-resize z-40"
+                    className="w-3.5 h-3.5 bg-white absolute rounded-full border border-slate-950 top-0 right-0 translate-x-1/2 -translate-y-1/2 cursor-nesw-resize z-40"
                     style={{ pointerEvents: 'auto' }}
                     onMouseDown={(e) => {
                       e.preventDefault();
@@ -374,7 +374,7 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }: Ima
                     }}
                   />
                   <div
-                    className="w-3.5 h-3.5 bg-white absolute rounded-full border border-zinc-950 bottom-0 left-0 -translate-x-1/2 translate-y-1/2 cursor-nesw-resize z-40"
+                    className="w-3.5 h-3.5 bg-white absolute rounded-full border border-slate-950 bottom-0 left-0 -translate-x-1/2 translate-y-1/2 cursor-nesw-resize z-40"
                     style={{ pointerEvents: 'auto' }}
                     onMouseDown={(e) => {
                       e.preventDefault();
@@ -390,7 +390,7 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }: Ima
                     }}
                   />
                   <div
-                    className="w-3.5 h-3.5 bg-white absolute rounded-full border border-zinc-950 bottom-0 right-0 translate-x-1/2 translate-y-1/2 cursor-nwse-resize z-40"
+                    className="w-3.5 h-3.5 bg-white absolute rounded-full border border-slate-950 bottom-0 right-0 translate-x-1/2 translate-y-1/2 cursor-nwse-resize z-40"
                     style={{ pointerEvents: 'auto' }}
                     onMouseDown={(e) => {
                       e.preventDefault();
@@ -412,18 +412,18 @@ export default function ImageCropper({ imageSrc, onCropComplete, onCancel }: Ima
         </div>
 
         {/* Action Controls */}
-        <div className="flex gap-3 mt-6 border-t border-zinc-800 pt-4 justify-end">
+        <div className="flex gap-3 mt-6 border-t border-slate-200 pt-4 justify-end">
           <button
             type="button"
             onClick={onCancel}
-            className="px-5 py-2.5 bg-zinc-850 hover:bg-zinc-800 text-zinc-300 rounded-lg text-xs font-bold transition-all"
+            className="px-5 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg text-xs font-bold transition-all"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={handleApplyCrop}
-            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-blue-500/10"
+            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-slate-900 rounded-lg text-xs font-bold transition-all shadow-md shadow-blue-500/10"
           >
             Apply Crop ✓
           </button>

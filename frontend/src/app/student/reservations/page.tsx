@@ -94,9 +94,10 @@ export default function MyReservations() {
   const fetchReservations = async () => {
     setIsLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/student');
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        await supabase.auth.signOut();
+        router.push('/');
         return;
       }
 
@@ -371,11 +372,11 @@ export default function MyReservations() {
     const isRejected = status === 'REJECTED' || status === 'CANCELLED';
     const isReturned = status === 'RETURNED' || status === 'COMPLETED';
 
-    if (isApproved) return <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-[0_0_15px_rgba(16,185,129,0.2)]">{displayText}</span>;
-    if (isActive) return <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-[0_0_15px_rgba(6,182,212,0.2)]">{displayText}</span>;
-    if (isPending) return <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-[0_0_15px_rgba(245,158,11,0.2)]">{displayText}</span>;
-    if (isRejected) return <span className="bg-rose-500/10 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
-    if (isReturned) return <span className="bg-zinc-500/10 text-zinc-400 border border-zinc-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
+    if (isApproved) return <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
+    if (isActive) return <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
+    if (isPending) return <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
+    if (isRejected) return <span className="bg-rose-500/10 text-rose-400 border border-rose-500/20 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
+    if (isReturned) return <span className="bg-zinc-700/50 text-zinc-400 border border-zinc-600/30 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
     return <span className="bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
   };
 
@@ -385,11 +386,9 @@ export default function MyReservations() {
     <>
       <div className="min-h-screen bg-[#020617] text-zinc-100 flex flex-col items-center justify-start pt-[calc(4.5rem+env(safe-area-inset-top,0px))] pb-12 px-4 font-sans selection:bg-cyan-500/30 relative overflow-x-hidden">
         
-        {/* Dynamic Background */}
-        <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-[#020617] to-[#020617] pointer-events-none" />
-        <div className="fixed top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-cyan-600/10 blur-[120px] pointer-events-none mix-blend-screen" />
-        <div className="fixed bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-emerald-600/10 blur-[120px] pointer-events-none mix-blend-screen" />
-        <ParticleNetwork />
+        {/* Subtle Background */}
+        <div className="fixed inset-0 bg-[#020617] pointer-events-none" />
+        <div className="fixed top-0 left-0 right-0 h-64 bg-gradient-to-b from-zinc-900/60 to-transparent pointer-events-none" />
 
         
         <div className="w-full max-w-5xl relative z-10">
@@ -402,10 +401,10 @@ export default function MyReservations() {
               >
                 <ArrowLeft className="w-4 h-4" /> Back to Dashboard
               </button>
-              <h1 className={`${spaceGrotesk.className} text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400 tracking-tighter mb-3`}>
+              <h1 className={`${spaceGrotesk.className} text-2xl md:text-3xl font-black text-white tracking-tight mb-1`}>
                 My Reservations
               </h1>
-              <p className="text-zinc-400 font-medium">Track your hardware requests, proofs, and timelines.</p>
+              <p className="text-zinc-400 text-xs">Track your hardware requests, proofs, and timelines.</p>
             </div>
 
             <button
@@ -423,16 +422,16 @@ export default function MyReservations() {
           </div>
 
           {/* Instructions Box */}
-          <div className="mb-8 p-5 bg-cyan-950/30 border border-cyan-500/30 rounded-2xl flex items-start gap-4 shadow-[0_0_30px_rgba(6,182,212,0.1)]">
-            <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center shrink-0 border border-cyan-500/40">
-              <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="mb-6 p-4 bg-white/3 border border-white/8 rounded-2xl flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center shrink-0">
+              <svg className="w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
             <div>
-              <h4 className="text-cyan-400 font-bold uppercase tracking-widest text-xs mb-1.5">Collection Instructions</h4>
-              <p className="text-zinc-300 text-sm leading-relaxed">
-                After receiving admin approval, please proceed to the lab. Ensure you carry your physical ID card and be ready to show your Digital Pass ID. Finally, collect the component from the lab admin.
+              <h4 className="text-zinc-300 font-semibold text-xs mb-1">Collection Instructions</h4>
+              <p className="text-zinc-500 text-xs leading-relaxed">
+                After receiving admin approval, please proceed to the lab. Carry your physical ID and show your Digital Pass to collect the component.
               </p>
             </div>
           </div>
@@ -516,7 +515,7 @@ export default function MyReservations() {
             </motion.div>
           ) : (
             <AnimatePresence mode="wait">
-              <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.3 }} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.3 }} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {displayedGroups.map((group, i) => {
                   const firstRes = group[0];
                   
@@ -524,30 +523,30 @@ export default function MyReservations() {
                   <motion.div
                     key={firstRes.reservation_id}
                     initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: i * 0.05 }}
-                    className="bg-black/40 backdrop-blur-xl border border-white/10 hover:border-cyan-500/30 rounded-3xl overflow-hidden transition-all duration-300 flex flex-col shadow-[0_8px_32px_rgba(0,0,0,0.4)] group relative"
+                    className="bg-zinc-900/60 border border-white/8 hover:border-white/15 rounded-xl overflow-hidden transition-all duration-200 flex flex-col"
                   >
-                    <div className="p-4 md:p-5 flex-1 flex flex-col z-10">
-                      <div className="flex justify-between items-start mb-3">
-                        <div className="flex items-center gap-2">
-                           <FileText className="w-5 h-5 text-cyan-400" />
-                           <span className="text-white font-bold">{firstRes.project_title || 'Hardware Request'}</span>
+                    <div className="p-3 flex-1 flex flex-col z-10">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex items-center gap-1.5">
+                           <FileText className="w-3.5 h-3.5 text-cyan-400" />
+                           <span className="text-white font-semibold text-xs">{firstRes.project_title || 'Hardware Request'}</span>
                         </div>
-                        <span className="text-xs text-zinc-500 font-mono bg-white/5 px-2 py-1 rounded-md border border-white/10">{new Date(firstRes.created_at).toLocaleDateString()}</span>
+                        <span className="text-[10px] text-zinc-500 font-mono bg-white/5 px-1.5 py-0.5 rounded border border-white/10">{new Date(firstRes.created_at).toLocaleDateString()}</span>
                       </div>
                       
                       {firstRes.due_date && (
-                        <div className="flex items-center gap-2 text-sm text-rose-400 font-medium mb-3 bg-rose-500/10 px-3 py-1.5 rounded-lg border border-rose-500/20 w-fit">
-                          <AlertCircle className="w-4 h-4" /> Due {new Date(firstRes.due_date).toLocaleDateString()}
+                        <div className="flex items-center gap-1.5 text-xs text-rose-400 font-medium mb-2 bg-rose-500/10 px-2 py-1 rounded border border-rose-500/20 w-fit">
+                          <AlertCircle className="w-3 h-3" /> Due {new Date(firstRes.due_date).toLocaleDateString()}
                         </div>
                       )}
 
-                      <div className="flex flex-col gap-3 mt-2">
+                      <div className="flex flex-col gap-2 mt-1.5">
                         {group.map(res => (
-                           <div key={res.reservation_id} className="bg-white/5 p-3.5 rounded-2xl border border-white/10 flex flex-col gap-3">
+                           <div key={res.reservation_id} className="bg-white/4 p-2.5 rounded-lg border border-white/8 flex flex-col gap-1.5">
                               <div className="flex justify-between items-start">
                                  <div>
-                                    <h4 className="text-sm font-bold text-zinc-200">{res.components?.name || 'Unknown'}</h4>
-                                    <div className="flex flex-wrap gap-2 mt-1.5">
+                                    <h4 className="text-xs font-semibold text-zinc-200">{res.components?.name || 'Unknown'}</h4>
+                                    <div className="flex flex-wrap gap-1.5 mt-1">
                                        <span className="text-[10px] bg-white/5 px-2 py-0.5 rounded-md text-zinc-400 border border-white/10 font-mono">{res.components?.department}</span>
                                        {res.assignedAssetId && (
                                          <span className="text-[10px] bg-cyan-500/10 px-2 py-0.5 rounded-md text-cyan-400 border border-cyan-500/30 font-mono">ID: {res.assignedAssetId}</span>
@@ -592,7 +591,7 @@ export default function MyReservations() {
                       </div>
                     </div>
 
-                    <div className="bg-white/5 p-3 md:p-4 border-t border-white/10 flex flex-col gap-2 relative z-10">
+                    <div className="px-3 md:px-4 py-3 border-t border-white/8 flex flex-col gap-2 bg-white/2">
                       <button
                         onClick={() => {
                           const durationDays = firstRes.due_date ? getWorkingDaysCount(firstRes.created_at, firstRes.due_date) : 1;
@@ -623,9 +622,9 @@ export default function MyReservations() {
                           });
                           setShowInspectModal(true);
                         }}
-                        className="w-full py-3 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/20 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-colors shadow-[0_0_20px_rgba(99,102,241,0.15)]"
+                        className="w-full py-2 bg-white/5 hover:bg-white/8 text-zinc-400 hover:text-zinc-200 border border-white/8 rounded-lg font-medium text-[11px] flex items-center justify-center gap-1.5 transition-colors"
                       >
-                        <Eye className="w-4 h-4" /> Inspect Letter
+                        <Eye className="w-3.5 h-3.5" /> Inspect Letter
                       </button>
                     </div>
                   </motion.div>

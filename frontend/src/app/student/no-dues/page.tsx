@@ -22,7 +22,7 @@ export default function NoDuesPage() {
     name: '',
     usn: '',
     department: 'CSE', // Default or fetch from user profile if available
-    year: 'Final'
+    semester: '8th'
   });
 
   useEffect(() => {
@@ -32,9 +32,10 @@ export default function NoDuesPage() {
   const checkDues = async () => {
     setIsLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/student');
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        await supabase.auth.signOut();
+        router.push('/');
         return;
       }
 
@@ -156,11 +157,24 @@ export default function NoDuesPage() {
               <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0 border border-emerald-500/40">
                 <CheckCircle className="w-5 h-5 text-emerald-400" />
               </div>
-              <div>
+              <div className="flex-1">
                 <h4 className="text-emerald-400 font-bold uppercase tracking-widest text-xs mb-1.5">Clearance Approved</h4>
-                <p className="text-zinc-300 text-sm leading-relaxed">
+                <p className="text-zinc-300 text-sm leading-relaxed mb-4">
                   You have successfully returned all components and have no pending dues. You can now print your No Dues Certificate below.
                 </p>
+                <div className="flex items-center gap-3 print:hidden">
+                  <label htmlFor="semester-select" className="text-sm font-bold text-emerald-400">Select Semester:</label>
+                  <select 
+                    id="semester-select"
+                    value={studentData.semester}
+                    onChange={(e) => setStudentData({...studentData, semester: e.target.value})}
+                    className="bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400 transition-colors"
+                  >
+                    {['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'].map(sem => (
+                      <option key={sem} value={sem} className="bg-[#020617]">{sem} Semester</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -169,7 +183,7 @@ export default function NoDuesPage() {
                 studentName={studentData.name}
                 usn={studentData.usn}
                 department={studentData.department}
-                year={studentData.year}
+                semester={studentData.semester}
                 date={new Date().toLocaleDateString('en-GB')}
               />
             </div>

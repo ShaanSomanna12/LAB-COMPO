@@ -6,7 +6,7 @@ export interface NoDuesCertificateProps {
   studentName: string;
   usn: string;
   department: string;
-  year?: string;
+  semester?: string;
   date: string;
   signatureUrl?: string | null;
 }
@@ -15,7 +15,7 @@ export default function NoDuesCertificate({
   studentName,
   usn,
   department,
-  year,
+  semester,
   date,
   signatureUrl,
 }: NoDuesCertificateProps) {
@@ -57,7 +57,7 @@ export default function NoDuesCertificate({
         <p className="text-justify leading-loose text-base">
           This is to certify that <strong>Mr./Ms. {studentName}</strong>, bearing USN <strong>{usn}</strong>, 
           a student of the <strong>Department of {department}</strong>
-          {year ? ` in their ${year} year` : ''}, has successfully returned all laboratory components, tools, 
+          {semester ? ` in their ${semester} semester` : ''}, has successfully returned all laboratory components, tools, 
           and equipment borrowed from the Department Laboratory.
         </p>
         
@@ -67,19 +67,19 @@ export default function NoDuesCertificate({
         </p>
 
         {/* Signatures */}
-        <div className="flex justify-between items-end mt-24 mb-8">
-          <div className="text-left flex flex-col items-center">
+        <div className="flex flex-col sm:flex-row justify-between items-center sm:items-end gap-8 sm:gap-0 mt-16 sm:mt-24 mb-8">
+          <div className="text-center sm:text-left flex flex-col items-center">
             <div className="h-16 flex items-center justify-center font-serif italic text-2xl text-blue-800 mix-blend-multiply">
               Verified
             </div>
-            <p className="font-bold border-t-2 border-black pt-1 mt-2 inline-block px-4">Lab Administrator</p>
+            <p className="font-bold border-t-2 border-black pt-1 mt-2 inline-block px-2 sm:px-4 text-sm sm:text-base">Lab Administrator</p>
           </div>
           
-          <div className="text-right flex flex-col items-center">
+          <div className="text-center sm:text-right flex flex-col items-center">
             <div className="h-16 flex items-center justify-center font-serif italic text-2xl text-blue-800 mix-blend-multiply">
               Approved
             </div>
-            <p className="font-bold border-t-2 border-black pt-1 mt-2 inline-block px-4">Head of Department</p>
+            <p className="font-bold border-t-2 border-black pt-1 mt-2 inline-block px-2 sm:px-4 text-sm sm:text-base">Head of Department</p>
           </div>
         </div>
 

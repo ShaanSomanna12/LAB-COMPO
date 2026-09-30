@@ -167,30 +167,30 @@ export default function RequisitionLetter({
         </div>
 
         {/* Signatures */}
-        <div className="flex justify-between items-end mt-12 mb-8">
-          <div className="text-left flex gap-8 sm:gap-12">
-            <div className="flex flex-col items-center">
+        <div className="flex flex-col md:flex-row justify-between items-center md:items-end gap-10 md:gap-0 mt-12 mb-8">
+          <div className="text-left flex gap-6 sm:gap-12">
+            <div className="flex flex-col items-center text-center">
               {isApproved ? (
-                <div className="h-16 flex items-center justify-center font-serif italic text-2xl text-blue-800">Approved</div>
+                <div className="h-16 flex items-center justify-center font-serif italic text-xl sm:text-2xl text-blue-800">Approved</div>
               ) : (
-                <div className="h-16 w-32 border-b border-dashed border-gray-400 mb-2"></div>
+                <div className="h-16 w-24 sm:w-32 border-b border-dashed border-gray-400 mb-2"></div>
               )}
-              <p className="font-bold border-t border-gray-400 pt-1 mt-2 inline-block">Faculty Coordinator</p>
+              <p className="font-bold border-t border-gray-400 pt-1 mt-2 inline-block text-xs sm:text-sm">Faculty Coordinator</p>
             </div>
-            <div className="flex flex-col items-center">
+            <div className="flex flex-col items-center text-center">
               {isApproved ? (
-                <div className="h-16 flex items-center justify-center font-serif italic text-2xl text-blue-800">Approved</div>
+                <div className="h-16 flex items-center justify-center font-serif italic text-xl sm:text-2xl text-blue-800">Approved</div>
               ) : (
-                <div className="h-16 w-32 border-b border-dashed border-gray-400 mb-2"></div>
+                <div className="h-16 w-24 sm:w-32 border-b border-dashed border-gray-400 mb-2"></div>
               )}
-              <p className="font-bold border-t border-gray-400 pt-1 mt-2 inline-block">Lab Admin</p>
+              <p className="font-bold border-t border-gray-400 pt-1 mt-2 inline-block text-xs sm:text-sm">Lab Admin</p>
             </div>
           </div>
-          <div className="text-right flex flex-col items-end">
+          <div className="text-center md:text-right flex flex-col items-center md:items-end w-full md:w-auto mt-6 md:mt-0">
             {signatureUrl ? (
               <img src={signatureUrl} alt="Student Signature" className="h-16 object-contain mb-2 mix-blend-multiply" />
             ) : (
-              <div className="h-16 border-b border-dashed border-gray-400 w-48 mb-2"></div>
+              <div className="h-16 border-b border-dashed border-gray-400 w-32 sm:w-48 mb-2"></div>
             )}
             <p className="font-bold">{studentName}</p>
             <p className="text-xs text-gray-600">({usn})</p>

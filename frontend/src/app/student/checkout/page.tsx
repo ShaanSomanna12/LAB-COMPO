@@ -88,7 +88,12 @@ export default function StudentCheckout() {
   useEffect(() => {
     // Fetch user details from Supabase
     const fetchUserDetails = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        await supabase.auth.signOut();
+        router.push('/');
+        return;
+      }
       if (user && user.email) {
         const { data: userData } = await supabase
           .from('users')
@@ -152,8 +157,8 @@ export default function StudentCheckout() {
       setCart(prev => prev.filter(i => i.id !== id));
       return;
     }
-    // Credit Overusage Mode: Allow requesting up to full available inventory stock
-    const maxQty = item.available;
+    // Limit to min(available, 3)
+    const maxQty = Math.min(item.available, 3);
     
     if (newQty > maxQty) newQty = maxQty;
 
@@ -368,9 +373,10 @@ export default function StudentCheckout() {
 
   const joinWaitlist = async (item: InventoryItem) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error('Not authenticated');
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        await supabase.auth.signOut();
+        router.push('/');
         return;
       }
       const { data: userData } = await supabase.from('users').select('user_id').eq('email', user.email).single();
@@ -625,19 +631,16 @@ export default function StudentCheckout() {
                     return (
                       <div 
                         key={item.id}
-                        onClick={() => toggleCartItem(item)}
                         className={`relative bg-slate-950/40 border rounded-2xl overflow-hidden transition-all duration-300 flex flex-col group backdrop-blur-md ${
                           item.available > 0 
-                            ? (inCart ? 'border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.2)] bg-slate-950/65' : 'border-slate-850 hover:border-cyan-500/40 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(6,182,212,0.08)] cursor-pointer') 
+                            ? (inCart ? 'border-emerald-500 bg-slate-950/65' : 'border-slate-850 hover:border-cyan-500/40') 
                             : 'border-slate-900 opacity-50 cursor-not-allowed grayscale'
                         }`}
                       >
-                        {/* Selected overlay checkmark */}
+                        {/* Quantity badge overlay when in cart */}
                         {inCart && (
-                          <div className="absolute inset-0 bg-emerald-950/15 backdrop-blur-[0.5px] z-10 flex items-center justify-center animate-in fade-in duration-200">
-                            <div className="bg-emerald-500 text-black rounded-full p-2.5 shadow-lg shadow-emerald-500/50 scale-110">
-                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3.5} d="M5 13l4 4L19 7" /></svg>
-                            </div>
+                          <div className="absolute top-2 left-2 z-20 bg-emerald-500 text-black text-[11px] font-black px-2 py-0.5 rounded-full shadow-lg">
+                            ×{cart.find(i => i.id === item.id)?.requestedQty}
                           </div>
                         )}
 
@@ -668,22 +671,54 @@ export default function StudentCheckout() {
                               </div>
                             )}
                           </div>
-                          
-                          <div className="absolute bottom-2 left-2 z-20">
-                            {getValueTierBadge(item.value_tier)}
-                          </div>
                         </div>
                         
                         <div className="p-4 flex flex-col flex-grow">
                           <h3 className="font-bold text-white text-base leading-tight line-clamp-1">{item.name}</h3>
-                          <p className="text-zinc-500 text-[11px] line-clamp-2 mt-2 leading-relaxed flex-grow">{item.desc || 'No item specifications provided.'}</p>
+                          <div className="text-zinc-400 text-xs mt-2 leading-relaxed flex-grow">
+                            {item.desc || 'No item specifications provided.'}
+                          </div>
                           
                           <div className="pt-3 mt-3 border-t border-slate-900 flex items-center justify-between">
-                            <span className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest">{item.location}</span>
-                            {item.available > 0 && (
-                              <div className={`text-[10px] font-bold uppercase tracking-wider ${inCart ? 'text-emerald-400' : 'text-cyan-400 opacity-0 group-hover:opacity-100'} transition-opacity`}>
-                                {inCart ? 'Remove' : 'Select'}
-                              </div>
+                            {item.available > 0 ? (
+                              inCart ? (
+                                /* Stepper shown when item is in cart */
+                                <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden" onClick={e => e.stopPropagation()}>
+                                  <button
+                                    type="button"
+                                    onClick={() => updateCartItemQty(item.id, (cart.find(i => i.id === item.id)?.requestedQty ?? 1) - 1, cart.find(i => i.id === item.id)!)}
+                                    className="w-9 h-9 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-rose-500/20 transition-colors text-lg font-bold"
+                                  >−</button>
+                                  <span className="min-w-[2rem] text-center text-sm font-black text-emerald-400">
+                                    {cart.find(i => i.id === item.id)?.requestedQty}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const cartItem = cart.find(i => i.id === item.id);
+                                      if (cartItem) updateCartItemQty(item.id, cartItem.requestedQty + 1, cartItem);
+                                    }}
+                                    disabled={(cart.find(i => i.id === item.id)?.requestedQty ?? 0) >= Math.min(item.available, 3)}
+                                    className="w-9 h-9 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-emerald-500/20 transition-colors text-lg font-bold disabled:opacity-30 disabled:cursor-not-allowed"
+                                  >+</button>
+                                </div>
+                              ) : (
+                                /* Add button when not in cart */
+                                <button
+                                  type="button"
+                                  onClick={e => { e.stopPropagation(); toggleCartItem(item); }}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 text-xs font-bold rounded-xl transition-all"
+                                >
+                                  <span className="text-base leading-none">+</span> Add
+                                </button>
+                              )
+                            ) : null}
+                            {inCart && (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setCart(prev => prev.filter(i => i.id !== item.id)); }}
+                                className="text-[10px] text-rose-400 hover:text-rose-300 font-bold transition-colors ml-auto"
+                              >Remove</button>
                             )}
                           </div>
                         </div>
