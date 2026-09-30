@@ -315,13 +315,37 @@ export default function AdminDashboard() {
     const storedCollege = localStorage.getItem('collegeName');
     if (storedCollege) setCollegeName(storedCollege.toUpperCase());
 
-    // Department context is still read from localStorage for UI state only.
-    // Auth enforcement is handled server-side (layout.tsx + middleware.ts).
-    const storedAdminDept = localStorage.getItem('admin_dept');
-    if (storedAdminDept) {
-      setAdminDept(storedAdminDept);
-      setIsLocked(true);
-    }
+    // ── Department resolution: JWT is the authoritative source ──────────────
+    // GET /api/auth reads the phoenix_token cookie (httpOnly, set at login)
+    // and returns the department embedded in the signed JWT.
+    // This prevents a stale localStorage value from a previous session
+    // incorrectly pre-selecting the wrong department.
+    const resolveDept = async () => {
+      try {
+        const res = await fetch('/api/auth', { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.department) {
+            // JWT is authoritative — sync localStorage and apply dept
+            localStorage.setItem('admin_dept', data.department);
+            setAdminDept(data.department);
+            setIsLocked(true);
+            return;
+          }
+        }
+      } catch {
+        // Network error — fall through to localStorage fallback
+      }
+
+      // Fallback: use localStorage only if JWT fetch fails
+      const storedAdminDept = localStorage.getItem('admin_dept');
+      if (storedAdminDept) {
+        setAdminDept(storedAdminDept);
+        setIsLocked(true);
+      }
+    };
+
+    resolveDept();
 
     // Fetch unified data from API
     fetch('/api/inventory')
