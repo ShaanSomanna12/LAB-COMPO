@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
@@ -126,19 +126,37 @@ export default function MyProfile() {
             return;
           }
         }
+          }
+        }
       }
+      
+      let uploadedIdUrl = null;
+      if (idCardFile && scanResult?.match) {
+        const filePath = `student-ids/${usn.toUpperCase()}-verified-${Date.now()}.png`;
+        const { error: uploadError } = await supabase.storage.from('id_cards').upload(filePath, idCardFile);
+        if (!uploadError) {
+          const { data: publicUrlData } = supabase.storage.from('id_cards').getPublicUrl(filePath);
+          uploadedIdUrl = publicUrlData.publicUrl;
+        }
+      }
+
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       if (authError || !user) { await supabase.auth.signOut(); router.push('/'); return; }
       if (!user.email) throw new Error("No authenticated email found.");
       const response = await fetch('/api/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: user.email, name, usn, department, branch: year, section, mobile })
+        body: JSON.stringify({ email: user.email, name, usn: usn.toUpperCase(), department, branch: year, section, mobile })
       });
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
         throw new Error(errData.error || 'Failed to update profile');
       }
+
+      if (uploadedIdUrl) {
+        localStorage.setItem('id_card_' + usn.toUpperCase(), uploadedIdUrl);
+      }
+
       toast.success('Profile updated successfully!');
       setTimeout(() => router.push('/student/dashboard'), 1500);
     } catch (error: any) {

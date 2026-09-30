@@ -1,16 +1,18 @@
-'use client';
+﻿'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { Space_Grotesk } from 'next/font/google';
-import ParticleNetwork from '@/components/ui/ParticleNetwork';
 import { siteConfig } from '@/config/site';
-import { Skeleton } from '@/components/ui/Skeleton';
 import RequisitionLetter from '@/components/RequisitionLetter';
 import { isWorkingDay, getWorkingDaysCount } from '@/lib/dateValidator';
-import ImageCropper from '@/app/admin/ImageCropper';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  ChevronRight, ArrowLeft, Search, Plus, Minus, Trash2, 
+  Calendar, Clock, AlertCircle, Upload, CheckCircle2, ShieldCheck, User, Zap
+} from 'lucide-react';
 
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] });
 
@@ -32,20 +34,20 @@ interface CartItem extends InventoryItem {
 }
 
 const DEPARTMENTS = [
-  { id: 'EDL', title: 'Engineering Development LAB (InUnity)', desc: 'Core components, microcontrollers, and embedded systems.', color: 'from-blue-600 to-indigo-600', icon: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z' },
-  { id: 'ECE', title: 'Electronics & Comm.', desc: 'Communication modules, signal processing tools, and RF.', color: 'from-purple-600 to-pink-600', icon: 'M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z' },
-  { id: 'EEE', title: 'Electrical Engineering', desc: 'High-voltage testing tools, multimeters, and analyzers.', color: 'from-amber-500 to-orange-600', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
-  { id: 'CIVIL', title: 'Civil Engineering', desc: 'Surveying tools, structural testing, and building models.', color: 'from-emerald-600 to-teal-600', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4' },
-  { id: 'MECH', title: 'Mechanical Engineering', desc: 'Motors, actuators, robotics chassis, and physical tools.', color: 'from-red-600 to-rose-600', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' }
+  { id: 'EDL', title: 'Engineering Development LAB (InUnity)', desc: 'Core components, microcontrollers, and embedded systems.', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
+  { id: 'ECE', title: 'Electronics & Comm.', desc: 'Communication modules, signal processing tools, and RF.', color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe' },
+  { id: 'EEE', title: 'Electrical Engineering', desc: 'High-voltage testing tools, multimeters, and analyzers.', color: '#ea580c', bg: '#fff7ed', border: '#fed7aa' },
+  { id: 'CIVIL', title: 'Civil Engineering', desc: 'Surveying tools, structural testing, and building models.', color: '#059669', bg: '#ecfdf5', border: '#a7f3d0' },
+  { id: 'MECH', title: 'Mechanical Engineering', desc: 'Motors, actuators, robotics chassis, and physical tools.', color: '#e11d48', bg: '#fff1f2', border: '#fecdd3' }
 ];
 
 export default function StudentCheckout() {
   const router = useRouter();
   
-  // Multi-step state
+  // Steps
   const [step, setStep] = useState<'department' | 'components' | 'form'>('department');
   
-  // Selection state
+  // Selections
   const [selectedDept, setSelectedDept] = useState<string | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -66,1244 +68,454 @@ export default function StudentCheckout() {
   const [projectType, setProjectType] = useState('Course Assignment / Lab Work');
   const [projectTitle, setProjectTitle] = useState('');
   const [projectPurpose, setProjectPurpose] = useState('');
-  const [hackathonDate, setHackathonDate] = useState('');
-  const [hackathonVenue, setHackathonVenue] = useState('');
   const [studentIdCardUrl, setStudentIdCardUrl] = useState('');
-  const [teamMembers, setTeamMembers] = useState<{ name: string; usn: string; phone: string; idCardUrl: string }[]>([]);
-  const [showCropper, setShowCropper] = useState(false);
-  const [imageToCrop, setImageToCrop] = useState<string | null>(null);
-  const [cropTarget, setCropTarget] = useState<'student' | 'signature' | number | null>(null);
-  const [isPolicyModalOpen, setIsPolicyModalOpen] = useState(false);
-  
-  const [requestMode, setRequestMode] = useState<'individual' | 'team'>('individual');
-  const [signatureUrl, setSignatureUrl] = useState('');
+  const [idCardFile, setIdCardFile] = useState<File | null>(null);
+  const [hasVerifiedProfileId, setHasVerifiedProfileId] = useState(false);
   
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [showLetter, setShowLetter] = useState(false);
-  const [submittedData, setSubmittedData] = useState<any>(null);
   const [isLoadingInventory, setIsLoadingInventory] = useState(true);
-  const [notices, setNotices] = useState<any[]>([]);
 
   useEffect(() => {
-    // Fetch user details from Supabase
     const fetchUserDetails = async () => {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user) {
-        await supabase.auth.signOut();
-        router.push('/');
-        return;
-      }
-      if (user && user.email) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('name, usn, department, branch, section, mobile')
-          .eq('email', user.email)
-          .maybeSingle();
-          
-        if (userData) {
-          if (userData.usn) setUsn(userData.usn);
-          if (userData.name) setStudentName(userData.name);
-          if (userData.department) setDepartment(userData.department);
-          if (userData.branch) setYear(userData.branch);
-          if (userData.section) setSection(userData.section);
-          if (userData.mobile) setMobile(userData.mobile);
-          if (userData.department) {
-             const res = await fetch(`/api/notices?department=${userData.department}`);
-             const noticesData = await res.json();
-             if (Array.isArray(noticesData)) setNotices(noticesData);
+      if (authError || !user) { await supabase.auth.signOut(); router.push('/'); return; }
+      
+      const { data: userData } = await supabase
+        .from('users')
+        .select('name, usn, department, branch, section, mobile')
+        .eq('email', user.email)
+        .maybeSingle();
+
+      if (userData) {
+        setStudentName(userData.name || '');
+        setUsn(userData.usn || '');
+        setDepartment(userData.department || '');
+        setYear(userData.branch || '');
+        setSection(userData.section || '');
+        setMobile(userData.mobile || '');
+        
+        // Check if ID card was verified and saved in local storage by profile page
+        if (userData.usn) {
+          const cachedIdUrl = localStorage.getItem('id_card_' + userData.usn.toUpperCase());
+          if (cachedIdUrl) {
+            setStudentIdCardUrl(cachedIdUrl);
+            setHasVerifiedProfileId(true);
           }
         }
       }
     };
+
     fetchUserDetails();
+    
+    // Min date calculation
+    const today = new Date();
+    today.setDate(today.getDate() + 1);
+    while(today.getDay() === 0) {
+      today.setDate(today.getDate() + 1);
+    }
+    const todayStr = today.toISOString().split('T')[0];
+    setMinDate(todayStr);
+    setDate(todayStr);
+  }, [router]);
 
-    // Fetch inventory
+  useEffect(() => {
+    if (date) {
+      const start = new Date(date);
+      start.setDate(start.getDate() + 7);
+      setReturnDate(start.toISOString().split('T')[0]);
+    }
+  }, [date]);
+
+  const loadInventory = async (deptId: string) => {
     setIsLoadingInventory(true);
-    fetch('/api/inventory')
-      .then(res => res.json())
-      .then(data => {
-        setInventory(Array.isArray(data) ? data : []);
-      })
-      .catch(err => {
-        console.error("Failed to load inventory", err);
-        setInventory([]);
-      })
-      .finally(() => {
-        setIsLoadingInventory(false);
-      });
-
-    setMinDate(new Date().toLocaleDateString('en-CA'));
-  }, []);
-
-  const handleDeptSelect = (deptId: string) => {
-    setSelectedDept(deptId);
     setStep('components');
+    setSelectedDept(deptId);
+    
+    try {
+      const { data, error } = await supabase
+        .from('components')
+        .select('*')
+        .eq('department', deptId)
+        .order('name');
+        
+      if (error) throw error;
+      setInventory(data || []);
+    } catch (err: any) {
+      toast.error('Failed to load inventory');
+    } finally {
+      setIsLoadingInventory(false);
+    }
   };
 
-  const toggleCartItem = (item: InventoryItem) => {
-    if (item.available <= 0) return;
+  const handleAddToCart = (item: InventoryItem) => {
+    if (item.available <= 0) return toast.error('Item out of stock');
     setCart(prev => {
-      const exists = prev.find(i => i.id === item.id);
-      if (exists) {
-        return prev.filter(i => i.id !== item.id);
+      const existing = prev.find(i => i.id === item.id);
+      if (existing) {
+        if (existing.requestedQty >= item.available) {
+          toast.error(Only  available);
+          return prev;
+        }
+        return prev.map(i => i.id === item.id ? { ...i, requestedQty: i.requestedQty + 1 } : i);
       }
       return [...prev, { ...item, requestedQty: 1 }];
     });
+    toast.success(Added );
   };
 
-  const updateCartItemQty = (id: string | number, newQty: number, item: CartItem) => {
-    if (newQty < 1) {
-      setCart(prev => prev.filter(i => i.id !== id));
-      return;
-    }
-    // Limit to min(available, 3)
-    const maxQty = Math.min(item.available, 3);
-    
-    if (newQty > maxQty) newQty = maxQty;
-
-    setCart(prev => prev.map(i => i.id === id ? { ...i, requestedQty: newQty } : i));
+  const handleRemoveFromCart = (id: string | number) => {
+    setCart(prev => prev.filter(i => i.id !== id));
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, target: 'student' | 'signature' | number) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setImageToCrop(event.target.result as string);
-          setCropTarget(target);
-          setShowCropper(true);
+  const handleUpdateQty = (id: string | number, delta: number) => {
+    setCart(prev => prev.map(i => {
+      if (i.id === id) {
+        const newQty = i.requestedQty + delta;
+        if (newQty < 1) return i;
+        if (newQty > i.available) {
+          toast.error(Only  available);
+          return i;
         }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleDateChange = (val: string) => {
-    const { isValid, reason } = isWorkingDay(val);
-    if (!isValid) {
-      toast.error(reason);
-      setDate('');
-    } else {
-      setDate(val);
-      if (returnDate && returnDate < val) {
-        setReturnDate(val);
+        return { ...i, requestedQty: newQty };
       }
-    }
-  };
-
-  const handleReturnDateChange = (val: string) => {
-    if (val < date) {
-      toast.error('Return date cannot be earlier than collection date');
-      return;
-    }
-    const check = isWorkingDay(val);
-    if (!check.isValid) {
-      toast.error(`Invalid return date: ${check.reason}`);
-    } else {
-      setReturnDate(val);
-    }
+      return i;
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!studentName || !usn || !department || !date || !time) return toast.error("Missing required fields");
+    if (!hasVerifiedProfileId && !idCardFile && !studentIdCardUrl) return toast.error("Please upload your ID Card");
+    if (cart.length === 0) return toast.error("Cart is empty");
+    if (!agreedToTerms) return toast.error("You must agree to the Terms & Conditions");
+    
+    if (!isWorkingDay(date)) return toast.error('Pickup date must be a working day (Mon-Sat)');
+
     setIsLoading(true);
 
-    if (cart.length === 0) {
-      toast.error('Your cart is empty');
-      setIsLoading(false);
-      return;
-    }
-    
-    if (!studentIdCardUrl) {
-      toast.error('Please upload your college ID card photo');
-      setIsLoading(false);
-      return;
-    }
-
-    if (!signatureUrl) {
-      toast.error('Please upload your signature');
-      setIsLoading(false);
-      return;
-    }
-    
-    if (projectType !== 'SIP IDT PROJECT (InUnity)' && !returnDate) {
-      toast.error('Please specify a return date');
-      setIsLoading(false);
-      return;
-    }
-    
-    if (projectType === 'SIP IDT PROJECT (InUnity)' && year !== '1st Year') {
-      toast.error('SIP IDT Projects are strictly restricted to 1st Year students only.');
-      setIsLoading(false);
-      return;
-    }
-    
-    if (projectType !== 'SIP IDT PROJECT (InUnity)' && returnDate < date) {
-      toast.error('Return date must be on or after the collection date');
-      setIsLoading(false);
-      return;
-    }
-    
-    if (!mobile || mobile.length < 10) {
-      toast.error('Please enter a valid mobile number');
-      setIsLoading(false);
-      return;
-    }
-    
-    const durationDays = getWorkingDaysCount(date, returnDate);
-
-    const todayStr = new Date().toLocaleDateString('en-CA');
-    if (!date || date < todayStr) {
-      toast.error('Please select a valid future date for collection');
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      // Helper to upload image
-      const uploadImage = async (base64Url: string) => {
-        if (!base64Url.startsWith('data:image')) return base64Url;
-        const base64Data = base64Url.split(',')[1];
-        const byteString = atob(base64Data);
-        const ab = new ArrayBuffer(byteString.length);
-        const ia = new Uint8Array(ab);
-        for (let i = 0; i < byteString.length; i++) {
-          ia[i] = byteString.charCodeAt(i);
+      let finalIdCardUrl = studentIdCardUrl;
+      
+      // Upload new ID card if provided and not already verified
+      if (idCardFile && !hasVerifiedProfileId) {
+        const filePath = student-ids/-.png;
+        const { error: uploadError } = await supabase.storage.from('id_cards').upload(filePath, idCardFile);
+        if (uploadError) throw new Error("Failed to upload ID Card");
+        const { data: publicUrlData } = supabase.storage.from('id_cards').getPublicUrl(filePath);
+        finalIdCardUrl = publicUrlData.publicUrl;
+      }
+
+      // Check max value limit
+      let highValueCount = 0;
+      cart.forEach(item => {
+        if (item.value_tier === 'HIGH' || item.value_tier === 'CRITICAL') {
+          highValueCount += item.requestedQty;
         }
-        const fileExt = base64Url.substring("data:image/".length, base64Url.indexOf(";base64"));
-        const fileName = `id-card-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage
-          .from('inventory-images')
-          .upload(fileName, ab, { contentType: `image/${fileExt}` });
-        if (uploadError) throw new Error("Failed to upload image: " + uploadError.message);
-        const { data: { publicUrl } } = supabase.storage.from('inventory-images').getPublicUrl(fileName);
-        return publicUrl;
-      };
+      });
+      const needsHodApproval = highValueCount > 2;
+      const initialStatus = needsHodApproval ? 'PENDING_HOD' : 'PENDING_APPROVAL';
 
-      let finalStudentIdCardUrl = studentIdCardUrl;
-      if (studentIdCardUrl) {
-        finalStudentIdCardUrl = await uploadImage(studentIdCardUrl);
-      }
-      
-      let finalSignatureUrl = signatureUrl;
-      if (signatureUrl) {
-        finalSignatureUrl = await uploadImage(signatureUrl);
-      }
-      
-      const finalTeamMembers = [];
-      for (const tm of teamMembers) {
-         const tmIdUrl = await uploadImage(tm.idCardUrl);
-         finalTeamMembers.push({ ...tm, idCardUrl: tmIdUrl });
-      }
+      // Insert Reservation
+      const { data: resData, error: resError } = await supabase.from('reservations').insert([{
+        student_name: studentName,
+        usn: usn.toUpperCase(),
+        department,
+        branch: year,
+        section,
+        mobile,
+        target_department: selectedDept,
+        request_date: date,
+        time_slot: time,
+        duration: getWorkingDaysCount(date, returnDate),
+        status: initialStatus,
+        id_card_url: finalIdCardUrl,
+        project_title: projectTitle || projectType,
+        project_description: projectPurpose,
+        is_team_project: false
+      }]).select().single();
 
-      const itemsPayload = cart.map(item => ({
-        name: item.name,
-        department: item.department,
-        location: item.location || 'Main Lab',
+      if (resError) throw resError;
+
+      // Insert Items
+      const itemsToInsert = cart.map(item => ({
+        reservation_id: resData.id,
+        component_id: item.id,
         quantity: item.requestedQty
       }));
+      
+      const { error: itemsError } = await supabase.from('reservation_items').insert(itemsToInsert);
+      if (itemsError) throw itemsError;
 
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      const res = await fetch('/api/requests', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          studentName,
-          usn,
-          studentDepartment: department,
-          section,
-          date,
-          time,
-          mobile,
-          duration: projectType !== 'SIP IDT PROJECT (InUnity)' ? durationDays : null,
-          items: itemsPayload,
-          projectType,
-          projectTitle,
-          projectPurpose,
-          hackathonDate: projectType === 'Hackathon Participation' ? hackathonDate : null,
-          hackathonVenue: projectType === 'Hackathon Participation' ? hackathonVenue : null,
-          idCardUrl: finalStudentIdCardUrl,
-          signatureUrl: finalSignatureUrl,
-          requestMode,
-          teamMembers: finalTeamMembers
-        })
-      });
-
-      if (!res.ok) {
-        let errMsg = 'Failed to submit checkout request';
-        try {
-          const errData = await res.json();
-          if (errData.error) errMsg = errData.error;
-        } catch (e) {}
-        throw new Error(errMsg);
-      }
-      setSubmittedData({
-        studentName,
-        usn,
-        department,
-        section,
-        year,
-        items: itemsPayload.map((item: any) => ({ name: item.name, quantity: item.quantity })),
-        requestDate: date,
-        duration: durationDays,
-        status: 'PENDING',
-        signatureUrl: finalSignatureUrl,
-        projectTitle,
-        projectType,
-        projectPurpose,
-        hackathonDate: projectType === 'Hackathon Participation' ? hackathonDate : null,
-        hackathonVenue: projectType === 'Hackathon Participation' ? hackathonVenue : null,
-        teamMembers: finalTeamMembers
-      });
-      setCart([]);
-      setShowLetter(true);
-    } catch (error: any) {
-      toast.error(error.message || 'An error occurred');
+      toast.success("Request Submitted Successfully!");
+      router.push('/student/dashboard');
+      
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || 'Submission failed');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const joinWaitlist = async (item: InventoryItem) => {
-    try {
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user) {
-        await supabase.auth.signOut();
-        router.push('/');
-        return;
-      }
-      const { data: userData } = await supabase.from('users').select('user_id').eq('email', user.email).single();
-      
-      const { error } = await supabase.from('waitlists').insert([{
-        user_id: userData?.user_id,
-        component_id: item.id
-      }]);
-      
-      if (error) throw error;
-      toast.success(`Joined waitlist for ${item.name}`);
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to join waitlist');
-    }
-  };
-
-  const getDeptItemCount = (deptId: string) => {
-    return inventory.filter(i => i.department === deptId).length;
-  };
-
-  const getValueTierBadge = (tier?: string) => {
-    switch (tier) {
-      case 'LOW':
-        return (
-          <span className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[9px] font-black rounded uppercase tracking-wider flex items-center gap-1 shrink-0">
-            <span className="w-1 h-1 rounded-full bg-emerald-400"></span>
-            Auto Approve
-          </span>
-        );
-      case 'MEDIUM':
-        return (
-          <span className="px-2 py-0.5 bg-orange-500/10 border border-orange-500/30 text-orange-400 text-[9px] font-black rounded uppercase tracking-wider flex items-center gap-1 shrink-0">
-            <span className="w-1 h-1 rounded-full bg-orange-400"></span>
-            Admin Approval
-          </span>
-        );
-      case 'HIGH':
-        return (
-          <span className="px-2 py-0.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-[9px] font-black rounded uppercase tracking-wider flex items-center gap-1 shrink-0">
-            <span className="w-1 h-1 rounded-full bg-rose-400 animate-pulse"></span>
-            HOD Approval
-          </span>
-        );
-      default:
-        return null;
-    }
-  };
+  const inputCls = "w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all";
+  const labelCls = "block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wide";
 
   return (
-    <div className="min-h-screen bg-[#020617] text-zinc-100 flex flex-col p-4 md:p-8 font-sans selection:bg-cyan-500/30 pb-24 relative overflow-hidden">
-      {/* Base Deep Radial Gradient */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-20%,_#1e1b4b_0%,_#020617_100%)] z-0"></div>
+    <div className={${spaceGrotesk.className} min-h-screen selection:bg-blue-100 bg-[#f8fafc] text-slate-800}>
+      <div className="fixed top-0 left-0 right-0 h-56 pointer-events-none" style={{ background: 'linear-gradient(180deg, rgba(239,246,255,0.9) 0%, rgba(248,250,252,0) 100%)' }} />
 
-      {/* 3D Particle Network Background */}
-      <ParticleNetwork />
-
-      {/* Wrapper content */}
-      <div className="w-full max-w-6xl mx-auto relative z-10 flex-grow flex flex-col">
+      <div className="relative z-10 max-w-4xl mx-auto px-4 py-6 md:py-10">
         
-        {/* Top Header */}
-        <div className="w-full mb-8 flex justify-between items-center relative">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className={`${spaceGrotesk.className} text-3xl md:text-5xl font-black bg-gradient-to-r from-cyan-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent tracking-tight`}>
-              HARDWARE DASHBOARD
-            </h1>
-            <p className="text-zinc-500 font-mono text-[10px] uppercase tracking-widest mt-1.5 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
-              {step === 'department' && "Step 1: Select Department Inventory"}
-              {step === 'components' && `Step 2: Catalog Selection (${selectedDept})`}
-              {step === 'form' && "Step 3: Submit Requisition Form"}
-            </p>
+            <button onClick={() => step === 'department' ? router.push('/student/dashboard') : setStep(step === 'form' ? 'components' : 'department')}
+              className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-blue-600 transition-colors mb-2">
+              <ArrowLeft className="w-4 h-4" /> {step === 'department' ? 'Back to Dashboard' : 'Go Back'}
+            </button>
+            <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Hardware Requisition</h1>
+            <p className="text-sm text-slate-500 mt-1">Request components for your lab or project</p>
           </div>
           
-          <button 
-            onClick={() => {
-              if (step === 'components') setStep('department');
-              else if (step === 'form') setStep('components');
-              else router.push('/student/dashboard');
-            }}
-            className="px-5 py-2.5 bg-slate-950/40 hover:bg-slate-900 border border-slate-800 rounded-xl transition-all text-zinc-400 hover:text-white uppercase font-mono text-xs font-bold tracking-wider"
-          >
-            {step === 'department' ? 'Back to Dashboard' : '← Go Back'}
-          </button>
-        </div>
-
-        {/* Step Progress Bar */}
-        <div className="w-full max-w-2xl mx-auto mb-12 relative">
-          <div className="flex items-center justify-between relative">
-            <div className="absolute left-0 right-0 top-1/2 h-[2px] bg-slate-800 -translate-y-1/2 z-0"></div>
-            <div 
-              className="absolute left-0 top-1/2 h-[2px] bg-gradient-to-r from-cyan-500 to-indigo-500 -translate-y-1/2 z-0 transition-all duration-500"
-              style={{
-                width: step === 'department' ? '0%' : step === 'components' ? '50%' : '100%'
-              }}
-            ></div>
-
-            {/* Step 1 */}
-            <div className="flex flex-col items-center z-10">
-              <div 
-                onClick={() => setStep('department')}
-                className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs border-2 cursor-pointer transition-all duration-300 ${
-                  step === 'department'
-                    ? 'bg-cyan-500 text-black border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.6)]'
-                    : 'bg-slate-950 text-zinc-400 border-slate-700 hover:border-cyan-500/50'
-                }`}
-              >
-                1
-              </div>
-              <span className={`text-[9px] font-mono uppercase tracking-wider mt-2 font-bold ${step === 'department' ? 'text-cyan-400' : 'text-zinc-500'}`}>Department</span>
-            </div>
-
-            {/* Step 2 */}
-            <div className="flex flex-col items-center z-10">
-              <div 
-                onClick={() => {
-                  if (selectedDept) setStep('components');
-                }}
-                className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs border-2 cursor-pointer transition-all duration-300 ${
-                  step === 'components'
-                    ? 'bg-cyan-500 text-black border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.6)]'
-                    : step === 'form'
-                      ? 'bg-indigo-500 text-white border-indigo-400'
-                      : 'bg-slate-950 text-zinc-400 border-slate-700 cursor-not-allowed'
-                }`}
-              >
-                2
-              </div>
-              <span className={`text-[9px] font-mono uppercase tracking-wider mt-2 font-bold ${step === 'components' ? 'text-cyan-400' : step === 'form' ? 'text-indigo-400' : 'text-zinc-500'}`}>Catalog</span>
-            </div>
-
-            {/* Step 3 */}
-            <div className="flex flex-col items-center z-10">
-              <div 
-                onClick={() => {
-                  if (cart.length > 0) setStep('form');
-                }}
-                className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs border-2 transition-all duration-300 ${
-                  step === 'form'
-                    ? 'bg-gradient-to-r from-cyan-500 to-indigo-500 text-white border-cyan-400 shadow-[0_0_15px_rgba(99,102,241,0.6)]'
-                    : 'bg-slate-950 text-zinc-400 border-slate-700 cursor-not-allowed'
-                }`}
-              >
-                3
-              </div>
-              <span className={`text-[9px] font-mono uppercase tracking-wider mt-2 font-bold ${step === 'form' ? 'text-cyan-400' : 'text-zinc-500'}`}>Checkout</span>
-            </div>
+          <div className="hidden sm:flex items-center gap-2">
+            <div className={w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm }>1</div>
+            <div className={w-8 h-1 rounded-full } />
+            <div className={w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm }>2</div>
+            <div className={w-8 h-1 rounded-full } />
+            <div className={w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm }>3</div>
           </div>
         </div>
-        
-        {/* Active Notices Banner */}
-        {notices.length > 0 && (
-          <div className="mb-8 space-y-3 relative z-20 animate-in fade-in slide-in-from-top-8 duration-700">
-            {notices.map(notice => (
-              <div key={notice.id} className={`p-4 rounded-2xl border flex items-start gap-4 shadow-2xl backdrop-blur-md ${notice.type === 'alert' ? 'bg-red-500/10 border-red-500/30 text-red-100' : notice.type === 'warning' ? 'bg-amber-500/10 border-amber-500/30 text-amber-100' : 'bg-cyan-500/10 border-cyan-500/30 text-cyan-100'}`}>
-                <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${notice.type === 'alert' ? 'bg-red-500/20 text-red-400' : notice.type === 'warning' ? 'bg-amber-500/20 text-amber-400' : 'bg-cyan-500/20 text-cyan-400'}`}>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                </div>
-                <div>
-                  <h4 className="font-bold text-sm tracking-wide uppercase mb-1 flex items-center gap-2">
-                    {notice.type === 'alert' ? 'Critical Alert' : notice.type === 'warning' ? 'Lab Warning' : 'Lab Announcement'}
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-black/30">{notice.admin_dept} Admin</span>
-                  </h4>
-                  <p className="text-sm font-medium opacity-90 leading-relaxed">{notice.message}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
 
-        {/* STEP 1: Department Selection */}
+        {/* STEP 1: Select Department */}
         {step === 'department' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in zoom-in duration-300">
-            {DEPARTMENTS.map(dept => (
-              <div 
-                key={dept.id}
-                onClick={() => handleDeptSelect(dept.id)}
-                className="group relative bg-slate-950/40 backdrop-blur-xl border border-slate-850 hover:border-cyan-500/50 rounded-2xl p-6 cursor-pointer transition-all duration-500 overflow-hidden hover:-translate-y-1.5 hover:shadow-[0_0_30px_rgba(6,182,212,0.12)] flex flex-col justify-between min-h-[220px]"
-              >
-                <div className={`absolute inset-0 bg-gradient-to-br ${dept.color} opacity-0 group-hover:opacity-[0.06] transition duration-500 z-0`}></div>
-                
-                <div className="relative z-10 flex-grow">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 text-white bg-gradient-to-br ${dept.color} shadow-lg shadow-black/50 group-hover:scale-105 transition-transform duration-300 border border-white/5`}>
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={dept.icon} />
-                    </svg>
-                  </div>
-                  <h3 className={`${spaceGrotesk.className} text-xl font-bold text-white tracking-tight`}>{dept.title}</h3>
-                  <p className="text-zinc-400 text-xs mt-1.5 leading-relaxed">{dept.desc}</p>
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {DEPARTMENTS.map((dept) => (
+              <button key={dept.id} onClick={() => loadInventory(dept.id)}
+                className="group relative text-left p-5 rounded-2xl bg-white border border-slate-200 hover:border-slate-300 shadow-sm hover:shadow-md transition-all overflow-hidden">
+                <div className="absolute top-0 left-0 bottom-0 w-1 transition-all duration-300" style={{ background: dept.color }} />
+                <h3 className="text-lg font-bold text-slate-800 mb-1">{dept.title}</h3>
+                <p className="text-xs text-slate-500 line-clamp-2">{dept.desc}</p>
+                <div className="mt-4 flex items-center gap-1 text-[11px] font-semibold transition-colors" style={{ color: dept.color }}>
+                  Browse Components <ChevronRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
                 </div>
-
-                <div className="relative z-10 pt-4 mt-4 border-t border-slate-900/60 flex items-center justify-between">
-                  {isLoadingInventory ? (
-                    <span className="w-28 h-4 bg-slate-900/50 rounded animate-pulse border border-slate-800"></span>
-                  ) : (
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-cyan-950/40 text-cyan-400 border border-cyan-900/40">
-                      {getDeptItemCount(dept.id)} components present
-                    </span>
-                  )}
-                  <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest group-hover:text-cyan-400 transition-colors">Select →</span>
-                </div>
-              </div>
+              </button>
             ))}
-          </div>
+          </motion.div>
         )}
 
-        {/* STEP 2: Component Catalog */}
-        {step === 'components' && (() => {
-          const filteredInventory = inventory
-            .filter(i => i.department === selectedDept)
-            .filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()) || (i.desc && i.desc.toLowerCase().includes(searchQuery.toLowerCase())))
-            .sort((a, b) => a.name.localeCompare(b.name));
-
-          return (
-            <div className="space-y-8 animate-in fade-in slide-in-from-right-8 duration-300">
-              {/* Search Bar */}
-              <div className="relative max-w-xl mx-auto">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-zinc-500">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-                </div>
-                <input
-                  type="text"
-                  placeholder={`Search ${selectedDept} components...`}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-950/60 backdrop-blur-xl border border-slate-800 focus:border-cyan-500/50 rounded-xl pl-12 pr-4 py-3 text-sm text-white focus:outline-none focus:ring-1 focus:ring-cyan-500/30 transition-all font-mono"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                {isLoadingInventory ? (
-                  Array.from({ length: 8 }).map((_, i) => (
-                    <div key={i} className="bg-slate-950/40 border border-slate-850 rounded-2xl p-4 space-y-4 animate-pulse">
-                      <Skeleton className="h-40 w-full rounded-xl bg-slate-900/40 border border-slate-800" />
-                      <Skeleton className="h-4 w-3/4 rounded bg-slate-900/40" />
-                      <Skeleton className="h-3 w-1/2 rounded bg-slate-900/40" />
-                      <div className="flex justify-between items-center pt-3 border-t border-slate-900/60">
-                        <Skeleton className="h-3.5 w-1/3 rounded bg-slate-900/40" />
-                        <Skeleton className="h-3.5 w-1/4 rounded bg-slate-900/40" />
-                      </div>
-                    </div>
-                  ))
-                ) : filteredInventory.length === 0 ? (
-                  <div className="col-span-full py-20 flex flex-col items-center justify-center border border-dashed border-slate-800 rounded-2xl bg-slate-950/30">
-                    <svg className="w-12 h-12 text-zinc-700 mb-4 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                    </svg>
-                    <p className="text-zinc-500 font-mono uppercase tracking-widest text-xs">No matching hardware cataloged</p>
+        {/* STEP 2: Select Components */}
+        {step === 'components' && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col lg:flex-row gap-6">
+            <div className="flex-1">
+              <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-6">
+                <div className="p-4 border-b border-slate-100 flex gap-3 items-center">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                      placeholder="Search inventory..." className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition-all text-slate-800" />
                   </div>
-                ) : (
-                  filteredInventory.map(item => {
-                    const inCart = cart.some(i => i.id === item.id);
-                    return (
-                      <div 
-                        key={item.id}
-                        className={`relative bg-slate-950/40 border rounded-2xl overflow-hidden transition-all duration-300 flex flex-col group backdrop-blur-md ${
-                          item.available > 0 
-                            ? (inCart ? 'border-emerald-500 bg-slate-950/65' : 'border-slate-850 hover:border-cyan-500/40') 
-                            : 'border-slate-900 opacity-50 cursor-not-allowed grayscale'
-                        }`}
-                      >
-                        {/* Quantity badge overlay when in cart */}
-                        {inCart && (
-                          <div className="absolute top-2 left-2 z-20 bg-emerald-500 text-black text-[11px] font-black px-2 py-0.5 rounded-full shadow-lg">
-                            ×{cart.find(i => i.id === item.id)?.requestedQty}
-                          </div>
-                        )}
-
-                        <div className="h-44 bg-slate-950 border-b border-slate-850 relative overflow-hidden flex items-center justify-center p-4">
-                          <div className="absolute inset-0 cyber-grid opacity-10 pointer-events-none"></div>
-                          {item.photo_url ? (
-                            <img src={item.photo_url} alt={item.name} loading="lazy" decoding="async" className="max-w-full max-h-full object-contain group-hover:scale-102 transition-transform duration-700" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-zinc-700 text-xs font-mono">NO COMPONENT PHOTO</div>
-                          )}
-                          
-                          <div className="absolute top-2 right-2 flex flex-col items-end gap-1.5 z-20">
-                            {item.available > 0 ? (
-                              <span className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold rounded uppercase tracking-wider">
-                                {item.available} Available
-                              </span>
-                            ) : (
-                              <div className="flex flex-col gap-1 items-end">
-                                <span className="px-2 py-0.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-[10px] font-bold rounded uppercase tracking-wider">
-                                  Out of Stock
-                                </span>
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); joinWaitlist(item); }} 
-                                  className="px-2 py-0.5 bg-zinc-900/80 hover:bg-zinc-800 text-cyan-400 border border-cyan-500/30 text-[9px] font-bold rounded uppercase tracking-wider transition z-30"
-                                >
-                                  Join Waitlist
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        
-                        <div className="p-4 flex flex-col flex-grow">
-                          <h3 className="font-bold text-white text-base leading-tight line-clamp-1">{item.name}</h3>
-                          <div className="text-zinc-400 text-xs mt-2 leading-relaxed flex-grow">
-                            {item.desc || 'No item specifications provided.'}
-                          </div>
-                          
-                          <div className="pt-3 mt-3 border-t border-slate-900 flex items-center justify-between">
-                            {item.available > 0 ? (
-                              inCart ? (
-                                /* Stepper shown when item is in cart */
-                                <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden" onClick={e => e.stopPropagation()}>
-                                  <button
-                                    type="button"
-                                    onClick={() => updateCartItemQty(item.id, (cart.find(i => i.id === item.id)?.requestedQty ?? 1) - 1, cart.find(i => i.id === item.id)!)}
-                                    className="w-9 h-9 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-rose-500/20 transition-colors text-lg font-bold"
-                                  >−</button>
-                                  <span className="min-w-[2rem] text-center text-sm font-black text-emerald-400">
-                                    {cart.find(i => i.id === item.id)?.requestedQty}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const cartItem = cart.find(i => i.id === item.id);
-                                      if (cartItem) updateCartItemQty(item.id, cartItem.requestedQty + 1, cartItem);
-                                    }}
-                                    disabled={(cart.find(i => i.id === item.id)?.requestedQty ?? 0) >= Math.min(item.available, 3)}
-                                    className="w-9 h-9 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-emerald-500/20 transition-colors text-lg font-bold disabled:opacity-30 disabled:cursor-not-allowed"
-                                  >+</button>
-                                </div>
-                              ) : (
-                                /* Add button when not in cart */
-                                <button
-                                  type="button"
-                                  onClick={e => { e.stopPropagation(); toggleCartItem(item); }}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 text-xs font-bold rounded-xl transition-all"
-                                >
-                                  <span className="text-base leading-none">+</span> Add
-                                </button>
-                              )
-                            ) : null}
-                            {inCart && (
-                              <button
-                                type="button"
-                                onClick={e => { e.stopPropagation(); setCart(prev => prev.filter(i => i.id !== item.id)); }}
-                                className="text-[10px] text-rose-400 hover:text-rose-300 font-bold transition-colors ml-auto"
-                              >Remove</button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* STEP 3: Checkout Form */}
-        {step === 'form' && cart.length > 0 && (
-          <div className="w-full max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in zoom-in-95 duration-300">
-            
-            {/* Form Section (Left) */}
-            <div className="lg:col-span-2 bg-slate-950/40 backdrop-blur-xl border border-slate-850 rounded-2xl shadow-2xl overflow-hidden flex flex-col justify-between">
-              <div>
-                <div className="bg-gradient-to-r from-cyan-950/20 to-indigo-950/20 p-6 border-b border-slate-850">
-                  <h2 className={`${spaceGrotesk.className} text-xl font-bold text-white flex items-center gap-2 tracking-wide`}>
-                    <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
-                    REQUISITION FORM
-                  </h2>
                 </div>
-
-                <form onSubmit={handleSubmit} className="p-6 md:p-8 space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Student Info */}
-                    <div className="space-y-4">
-                      <h3 className="text-xs font-mono text-cyan-500 tracking-widest uppercase border-b border-slate-900 pb-2 mb-4">Student Details</h3>
-                      
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Full Name</label>
-                        <input required type="text" value={studentName} onChange={e => setStudentName(e.target.value)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 transition-all text-white font-medium" placeholder="Please enter your name" />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">USN</label>
-                        <input required readOnly type="text" value={usn} onChange={e => setUsn(e.target.value.toUpperCase())} className="w-full bg-slate-900/40 border border-slate-850 rounded-lg px-4 py-2.5 text-sm font-mono uppercase focus:outline-none opacity-60 cursor-not-allowed text-zinc-400" placeholder="e.g. 4VV25CS001" />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Department</label>
-                          <select required value={department} onChange={e => setDepartment(e.target.value)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 appearance-none text-white font-medium">
-                            <option value="" disabled>Select Department</option>
-                            <option value="CSE">1. CSE</option>
-                            <option value="MECH">2. Mechanical</option>
-                            <option value="ECE">3. ECE</option>
-                            <option value="EEE">4. EEE</option>
-                            <option value="CIVIL">5. CIVIL</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Year of Engg</label>
-                          <select required value={year} onChange={e => setYear(e.target.value)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 appearance-none text-white font-medium">
-                            <option value="1st Year">1st Year</option>
-                            <option value="2nd Year">2nd Year</option>
-                            <option value="3rd Year">3rd Year</option>
-                            <option value="4th Year">4th Year</option>
-                          </select>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Section</label>
-                          <select required value={section} onChange={e => setSection(e.target.value)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 appearance-none text-white font-medium">
-                            <option value="" disabled>Select Section</option>
-                            <option value="A">Section A</option>
-                            <option value="B">Section B</option>
-                            <option value="C">Section C</option>
-                            <option value="D">Section D</option>
-                            <option value="E">Section E</option>
-                            <option value="F">Section F</option>
-                            <option value="G">Section G</option>
-                            <option value="H">Section H</option>
-                            <option value="I">Section I</option>
-                            <option value="J">Section J</option>
-                            <option value="K">Section K</option>
-                            <option value="L">Section L</option>
-                            <option value="M">Section M</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Request Mode</label>
-                          <select required value={requestMode} onChange={e => setRequestMode(e.target.value as any)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 appearance-none text-white font-medium">
-                            <option value="individual">Individual Request</option>
-                            <option value="team">Team Request</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Mobile Number</label>
-                        <input required type="tel" value={mobile} onChange={e => setMobile(e.target.value.replace(/\D/g, ''))} maxLength={15} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 text-white font-medium" />
-                      </div>
-                      </div>
+                
+                <div className="p-4 max-h-[60vh] overflow-y-auto space-y-3">
+                  {isLoadingInventory ? (
+                    <div className="py-12 flex flex-col items-center justify-center gap-3">
+                      <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+                      <p className="text-sm text-slate-400">Loading inventory...</p>
                     </div>
-
-                    {/* Request Info */}
-                    <div className="space-y-4">
-                      <h3 className="text-xs font-mono text-cyan-500 tracking-widest uppercase border-b border-slate-900 pb-2 mb-4">Requisition Details</h3>
-
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Project Type</label>
-                        <select required value={projectType} onChange={e => setProjectType(e.target.value)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 appearance-none text-white font-medium">
-                          <option value="Course Assignment / Lab Work">Course Assignment / Lab Work</option>
-                          <option value="Mini Project">Mini Project</option>
-                          <option value="Major Project">Major Project</option>
-                          <option value="Hackathon Participation">Hackathon Participation</option>
-                          <option value="Research / Publication Work">Research / Publication Work</option>
-                          <option value="Personal Learning / Prototyping">Personal Learning / Prototyping</option>
-                          <option value="Student Club / Technical Event">Student Club / Technical Event</option>
-                          {year === '1st Year' ? (
-                            <option value="SIP IDT PROJECT (InUnity)">SIP IDT PROJECT (InUnity)</option>
-                          ) : (
-                            <option value="SIP IDT PROJECT (InUnity)" disabled>SIP IDT PROJECT (InUnity) - Restricted to 1st Year Students</option>
-                          )}
-                        </select>
-                        {year && year !== '1st Year' && projectType === 'SIP IDT PROJECT (InUnity)' && (
-                           <p className="text-rose-400 text-[10px] mt-1 font-bold">You are a {year} student. This project type is only available for 1st year students.</p>
-                        )}
-                      </div>
-
-                      {projectType === 'Hackathon Participation' && (
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Date of Hackathon</label>
-                            <input 
-                              required 
-                              type="date" 
-                              min={minDate}
-                              value={hackathonDate} 
-                              onChange={e => setHackathonDate(e.target.value)} 
-                              className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 [color-scheme:dark] text-white font-medium" 
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Venue (College/Location)</label>
-                            <input 
-                              required 
-                              type="text" 
-                              value={hackathonVenue} 
-                              onChange={e => setHackathonVenue(e.target.value)} 
-                              className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 text-white font-medium" 
-                              placeholder="e.g. IIT Bombay" 
-                            />
-                          </div>
+                  ) : inventory.filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
+                    <div className="py-12 text-center text-slate-400 text-sm">No items found matching your search.</div>
+                  ) : (
+                    inventory.filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase())).map(item => (
+                      <div key={item.id} className="flex items-center gap-4 p-3 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100/50 transition-colors">
+                        <div className="w-12 h-12 rounded-lg bg-white border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+                          {item.photo_url ? <img src={item.photo_url} alt={item.name} className="w-full h-full object-cover" /> : <Microchip className="w-5 h-5 text-slate-300" />}
                         </div>
-                      )}
-
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Title of the Project</label>
-                        <input 
-                          required 
-                          type="text" 
-                          value={projectTitle} 
-                          onChange={e => setProjectTitle(e.target.value)} 
-                          className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 text-white font-medium" 
-                          placeholder="Enter project title" 
-                        />
-                      </div>
-
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500">Purpose of Project</label>
-                          <span className={`text-[10px] font-mono ${projectPurpose.trim().split(/\s+/).filter(Boolean).length >= 200 ? 'text-rose-400 font-bold' : 'text-zinc-500'}`}>
-                            {projectPurpose.trim().split(/\s+/).filter(Boolean).length}/200 words
-                          </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-slate-800 truncate">{item.name}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">Available: <span className={item.available > 0 ? "text-emerald-600 font-bold" : "text-red-500 font-bold"}>{item.available}</span> / {item.total}</p>
                         </div>
-                        <textarea 
-                          required 
-                          value={projectPurpose} 
-                          onChange={e => {
-                            const words = e.target.value.trim().split(/\s+/).filter(Boolean);
-                            // Allow deletion or limit to 200 words
-                            if (words.length <= 200 || e.target.value.length < projectPurpose.length) {
-                              setProjectPurpose(e.target.value);
-                            }
-                          }} 
-                          rows={3} 
-                          className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 text-white font-medium resize-none" 
-                          placeholder="Describe the purpose of your project (max 200 words)" 
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Collection Date</label>
-                          <input required type="date" min={minDate} value={date} onChange={e => handleDateChange(e.target.value)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 [color-scheme:dark] text-white font-medium" />
-                        </div>
-                        {projectType !== 'SIP IDT PROJECT (InUnity)' && (
-                          <div>
-                            <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Return Date</label>
-                            <input required type="date" min={date || minDate} value={returnDate} onChange={e => handleReturnDateChange(e.target.value)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 [color-scheme:dark] text-white font-medium" />
-                          </div>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Collection Time</label>
-                        <select required value={time} onChange={e => setTime(e.target.value)} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/20 appearance-none text-white font-medium">
-                            <option value="09:00">09:00 AM</option>
-                            <option value="09:30">09:30 AM</option>
-                            <option value="10:00">10:00 AM</option>
-                            <option value="10:30">10:30 AM</option>
-                            <option value="11:00">11:00 AM</option>
-                            <option value="11:30">11:30 AM</option>
-                            <option value="12:00">12:00 PM</option>
-                            <option value="12:30">12:30 PM</option>
-                            <option value="13:00">01:00 PM</option>
-                            <option value="13:30">01:30 PM</option>
-                            <option value="14:00">02:00 PM</option>
-                            <option value="14:30">02:30 PM</option>
-                            <option value="15:00">03:00 PM</option>
-                            <option value="15:30">03:30 PM</option>
-                            <option value="16:00">04:00 PM</option>
-                            <option value="16:30">04:30 PM</option>
-                            <option value="17:00">05:00 PM</option>
-                          </select>
-                        </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-6 border-t border-slate-900">
-
-                    {(!usn || !studentName) && (
-                      <div className="mb-4 p-4 bg-orange-950/20 border border-orange-500/30 rounded-xl flex flex-col gap-3">
-                        <div className="flex items-start gap-2 text-orange-400 text-sm font-bold">
-                          <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                          Incomplete Profile!
-                        </div>
-                        <p className="text-zinc-400 text-xs leading-relaxed">You must fill in your Name and USN in your profile options before requesting hardware checkout permissions.</p>
-                        <button 
-                          type="button"
-                          onClick={() => router.push('/student/profile')}
-                          className="w-full py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/20 rounded-lg text-xs font-bold transition"
-                        >
-                          Configure Profile
+                        <button onClick={() => handleAddToCart(item)} disabled={item.available <= 0}
+                          className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 disabled:opacity-50 flex items-center justify-center transition-colors shrink-0">
+                          <Plus className="w-4 h-4" />
                         </button>
                       </div>
-                    )}
-                    
-                    {/* Liability Checkbox */}
-                    <div className="mb-6 flex items-start gap-3 bg-slate-900/10 border border-slate-900 p-4 rounded-xl">
-                      <div className="flex items-center h-5 mt-0.5">
-                        <input
-                          id="liability-checkbox"
-                          type="checkbox"
-                          checked={agreedToTerms}
-                          onChange={(e) => setAgreedToTerms(e.target.checked)}
-                          className="w-4 h-4 rounded bg-zinc-900 border-zinc-700 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-zinc-900 cursor-pointer"
-                        />
-                      </div>
-                      <label htmlFor="liability-checkbox" className="text-xs text-zinc-400 leading-relaxed cursor-pointer select-none">
-                        I hereby agree to the <span onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsPolicyModalOpen(true); }} className="text-cyan-400 font-bold underline hover:text-cyan-300 transition-colors">Lab Policy & Borrowing Regulations</span> and accept full liability for returning these items in working condition or paying for appropriate replacements. 
-                        {projectType === 'SIP IDT PROJECT (InUnity)' && (
-                          <span className="text-rose-400 font-bold block mt-2">
-                            ⚠️ STRICT TERMS: You must return the component after the completion of the project. If any damage occurs, you are strictly liable to replace and return a new, original component purchased at your own expense within the specified time frame.
-                          </span>
-                        )}
-                      </label>
-                    </div>
-
-                    {/* ID Card Uploads */}
-                    <div className="mb-6 space-y-4">
-                      <h3 className="text-xs font-mono text-cyan-500 tracking-widest uppercase border-b border-slate-900 pb-2 mb-2">Verification Documents</h3>
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2">Your College ID Card *</label>
-                        <div className="flex items-center gap-4">
-                          <label className="flex-shrink-0 cursor-pointer bg-slate-900/60 hover:bg-slate-800 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-cyan-400 transition-colors font-medium">
-                            <input type="file" accept="image/*" className="hidden" onChange={e => handleFileChange(e, 'student')} />
-                            {studentIdCardUrl ? 'Change Photo' : 'Upload ID Photo'}
-                          </label>
-                          {studentIdCardUrl && (
-                            <img src={studentIdCardUrl} alt="ID preview" className="h-12 w-12 object-cover rounded-lg border border-slate-800" />
-                          )}
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2">Your Signature * {requestMode === 'team' && '(Team Leader)'}</label>
-                        <div className="flex items-center gap-4">
-                          <label className="flex-shrink-0 cursor-pointer bg-slate-900/60 hover:bg-slate-800 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-cyan-400 transition-colors font-medium">
-                            <input type="file" accept="image/*" className="hidden" onChange={e => handleFileChange(e, 'signature')} />
-                            {signatureUrl ? 'Change Signature' : 'Upload Signature'}
-                          </label>
-                          {signatureUrl && (
-                            <img src={signatureUrl} alt="Signature preview" className="h-12 w-24 object-contain bg-white rounded-lg border border-slate-800" />
-                          )}
-                        </div>
-                        <p className="text-zinc-500 text-[9px] mt-1">Please provide a clear photo of your signature.</p>
-                      </div>
-
-                      {requestMode === 'team' && (
-                        <div className="mt-6">
-                          <div className="flex justify-between items-center border-b border-slate-900 pb-2 mb-4">
-                            <h4 className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Team Members</h4>
-                            <button
-                              type="button"
-                              onClick={() => setTeamMembers([...teamMembers, { name: '', usn: '', phone: '', idCardUrl: '' }])}
-                              className="text-[10px] text-cyan-400 font-bold uppercase hover:text-cyan-300"
-                            >
-                              + Add Member
-                            </button>
-                          </div>
-                          
-                          <div className="mb-4 p-3 bg-cyan-950/20 border border-cyan-900/30 rounded-lg text-xs text-cyan-300 font-medium">
-                            Please enter the student's name, USN, and upload their college ID card for each team member.
-                          </div>
-                          
-                          <div className="space-y-4">
-                            {teamMembers.map((member, index) => (
-                              <div key={index} className="p-4 bg-slate-900/30 border border-slate-800 rounded-xl relative">
-                                <button
-                                  type="button"
-                                  onClick={() => setTeamMembers(teamMembers.filter((_, i) => i !== index))}
-                                  className="absolute top-2 right-2 text-rose-500 hover:text-rose-400"
-                                >
-                                  ✕
-                                </button>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
-                                  <div>
-                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Name</label>
-                                    <input required type="text" value={member.name || ''} onChange={e => { const nm = [...teamMembers]; nm[index].name = e.target.value; setTeamMembers(nm); }} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500/80" />
-                                  </div>
-                                  <div>
-                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">USN</label>
-                                    <input required type="text" value={member.usn || ''} onChange={e => { const nm = [...teamMembers]; nm[index].usn = e.target.value.toUpperCase(); setTeamMembers(nm); }} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500/80 font-mono uppercase" />
-                                  </div>
-                                  <div>
-                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Phone</label>
-                                    <input required type="tel" value={member.phone || ''} onChange={e => { const nm = [...teamMembers]; nm[index].phone = e.target.value.replace(/\D/g, ''); setTeamMembers(nm); }} className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500/80" />
-                                  </div>
-                                </div>
-                                <div>
-                                  <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2">ID Card Photo *</label>
-                                  <div className="flex items-center gap-4">
-                                    <label className="flex-shrink-0 cursor-pointer bg-slate-900/60 hover:bg-slate-800 border border-slate-800 rounded-lg px-4 py-2 text-xs text-cyan-400 transition-colors font-medium">
-                                      <input type="file" accept="image/*" className="hidden" onChange={e => handleFileChange(e, index)} />
-                                      {member.idCardUrl ? 'Change Photo' : 'Upload ID'}
-                                    </label>
-                                    {member.idCardUrl && (
-                                      <img src={member.idCardUrl} alt="ID preview" className="h-10 w-10 object-cover rounded-lg border border-slate-800" />
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                            {teamMembers.length === 0 && (
-                              <p className="text-xs text-zinc-500 text-center py-2">No team members added.</p>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </form>
+                    ))
+                  )}
+                </div>
               </div>
-
-              <div className="p-6 md:p-8 bg-slate-900/10 border-t border-slate-850">
-                <button 
-                  onClick={handleSubmit}
-                  disabled={isLoading || !agreedToTerms || !usn || !studentName}
-                  className="w-full py-3.5 bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-bold rounded-xl transition duration-300 shadow-[0_0_20px_rgba(6,182,212,0.25)] active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex justify-center items-center gap-2 text-sm uppercase tracking-wider font-semibold"
-                >
-                  {isLoading ? 'Submitting Request...' : `Confirm Reservation (${cart.length} Items)`}
+            </div>
+            
+            <div className="w-full lg:w-80">
+              <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-5 sticky top-24">
+                <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center justify-between">
+                  Your Cart
+                  <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs">{cart.length} items</span>
+                </h3>
+                
+                {cart.length === 0 ? (
+                  <div className="py-8 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50 text-slate-400 text-sm">
+                    Cart is empty. Add components from the left.
+                  </div>
+                ) : (
+                  <div className="space-y-3 mb-6 max-h-[40vh] overflow-y-auto">
+                    {cart.map(item => (
+                      <div key={item.id} className="p-3 border border-slate-100 rounded-xl bg-slate-50">
+                        <p className="text-xs font-bold text-slate-800 line-clamp-2 leading-tight mb-2">{item.name}</p>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg p-1">
+                            <button onClick={() => handleUpdateQty(item.id, -1)} className="w-6 h-6 rounded flex items-center justify-center text-slate-500 hover:bg-slate-100"><Minus className="w-3 h-3" /></button>
+                            <span className="text-xs font-bold w-4 text-center">{item.requestedQty}</span>
+                            <button onClick={() => handleUpdateQty(item.id, 1)} className="w-6 h-6 rounded flex items-center justify-center text-slate-500 hover:bg-slate-100"><Plus className="w-3 h-3" /></button>
+                          </div>
+                          <button onClick={() => handleRemoveFromCart(item.id)} className="text-red-500 hover:bg-red-50 p-1.5 rounded-md transition-colors"><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                <button onClick={() => setStep('form')} disabled={cart.length === 0}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors text-sm shadow-sm">
+                  Proceed to Details
                 </button>
               </div>
             </div>
-
-            {/* Cart Section (Right) */}
-            <div className="lg:col-span-1 bg-slate-950/40 backdrop-blur-xl border border-slate-850 rounded-2xl shadow-2xl overflow-hidden h-fit sticky top-24">
-              <div className="bg-gradient-to-r from-indigo-950/20 to-purple-950/20 p-5 border-b border-slate-850">
-                <h2 className={`${spaceGrotesk.className} text-lg font-bold text-white flex items-center gap-2 tracking-wide`}>
-                  <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                  CHECKOUT LIST ({cart.length})
-                </h2>
-              </div>
-              <div className="p-4 space-y-4 max-h-[50vh] overflow-y-auto custom-scrollbar">
-                {cart.map(item => (
-                  <div key={item.id} className="bg-slate-950/65 border border-slate-850 rounded-xl p-3.5 flex flex-col gap-3 hover:border-slate-700 transition">
-                    <div className="flex gap-3">
-                      <div className="w-12 h-12 rounded-lg overflow-hidden bg-slate-900 border border-slate-850 shrink-0 flex items-center justify-center p-1">
-                        {item.photo_url ? (
-                          <img src={item.photo_url} alt="Item" loading="lazy" decoding="async" className="max-w-full max-h-full object-contain" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-xs">📷</div>
-                        )}
-                      </div>
-                      <div className="flex-grow min-w-0">
-                        <div className="flex justify-between items-start gap-2">
-                          <p className="text-sm font-bold text-zinc-200 truncate">{item.name}</p>
-                          <button 
-                            type="button"
-                            onClick={() => setCart(prev => prev.filter(i => i.id !== item.id))}
-                            className="text-zinc-500 hover:text-rose-500 transition-colors p-1"
-                            title="Remove item"
-                          >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
-                        <div className="flex justify-between items-center mt-1.5 gap-2">
-                          <span className="px-1.5 py-0.5 bg-indigo-950/30 text-indigo-400 border border-indigo-900/30 text-[8px] font-mono font-bold rounded uppercase">
-                            {item.department}
-                          </span>
-                          <span className="text-[10px] text-zinc-500 font-mono">
-                            Stock: {item.available}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between bg-slate-900/40 rounded-lg p-1 border border-slate-850/80">
-                      <button 
-                        type="button" 
-                        onClick={() => updateCartItemQty(item.id, item.requestedQty - 1, item)} 
-                        className="w-8 h-7 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-slate-900 border border-transparent hover:border-slate-800 rounded-lg transition"
-                      >
-                        -
-                      </button>
-                      <span className="text-xs font-mono text-cyan-400 font-bold px-2">{item.requestedQty}</span>
-                      <button 
-                        type="button" 
-                        onClick={() => updateCartItemQty(item.id, item.requestedQty + 1, item)} 
-                        className="w-8 h-7 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-slate-900 border border-transparent hover:border-slate-800 rounded-lg transition"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          </motion.div>
         )}
 
-      </div>
-
-      {/* Floating Cart Widget */}
-      {step === 'components' && cart.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-sm z-50 animate-in slide-in-from-bottom-10 fade-in duration-300 px-4">
-          <div className="bg-slate-950/95 backdrop-blur-xl border border-cyan-500/30 shadow-[0_10px_35px_rgba(6,182,212,0.25)] rounded-2xl p-3.5 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-cyan-500/10 text-cyan-400 rounded-xl flex items-center justify-center font-black text-base border border-cyan-500/20">
-                {cart.length}
+        {/* STEP 3: Form */}
+        {step === 'form' && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <form onSubmit={handleSubmit} className="p-6 md:p-8 space-y-8">
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div><label className={labelCls}>Full Name</label><input required type="text" value={studentName} onChange={e => setStudentName(e.target.value)} className={inputCls} /></div>
+                <div><label className={labelCls}>USN</label><input required type="text" value={usn} onChange={e => setUsn(e.target.value)} className={${inputCls} font-mono uppercase} /></div>
+                <div>
+                  <label className={labelCls}>Department</label>
+                  <select required value={department} onChange={e => setDepartment(e.target.value)} className={inputCls}>
+                    <option value="" disabled>Select Department</option>
+                    {['CSE', 'ISE', 'ECE', 'EEE', 'MECH', 'CIVIL', 'AI_ML'].map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+                <div><label className={labelCls}>Year / Branch</label><input required type="text" value={year} onChange={e => setYear(e.target.value)} className={inputCls} /></div>
+                <div><label className={labelCls}>Section</label><input required type="text" value={section} onChange={e => setSection(e.target.value)} className={inputCls} /></div>
+                <div><label className={labelCls}>Mobile No.</label><input required type="tel" value={mobile} onChange={e => setMobile(e.target.value)} className={inputCls} /></div>
               </div>
+
+              <hr className="border-slate-100" />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className={labelCls}>Project Title</label>
+                  <input required type="text" value={projectTitle} onChange={e => setProjectTitle(e.target.value)} className={inputCls} placeholder="E.g. Smart IoT Plant Monitor" />
+                </div>
+                <div>
+                  <label className={labelCls}>Project Purpose</label>
+                  <select required value={projectType} onChange={e => setProjectType(e.target.value)} className={inputCls}>
+                    <option value="Course Assignment / Lab Work">Course Assignment / Lab Work</option>
+                    <option value="Final Year Project">Final Year Project</option>
+                    <option value="Hackathon / Competition">Hackathon / Competition</option>
+                    <option value="Personal Project">Personal Project</option>
+                  </select>
+                </div>
+              </div>
+
+              <hr className="border-slate-100" />
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label className={labelCls}>Pickup Date</label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input required type="date" min={minDate} value={date} onChange={e => setDate(e.target.value)} className={${inputCls} pl-10} />
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Pickup Time</label>
+                  <div className="relative">
+                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input required type="time" value={time} onChange={e => setTime(e.target.value)} className={${inputCls} pl-10} />
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Return Date</label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input required type="date" disabled value={returnDate} className={${inputCls} pl-10 bg-slate-50 text-slate-500} />
+                  </div>
+                </div>
+              </div>
+
+              <hr className="border-slate-100" />
+
+              {/* ID Card Verification Status */}
               <div>
-                <p className="text-white font-bold text-xs">Items Selected</p>
-                <p className="text-zinc-500 text-[9px] font-mono uppercase tracking-wider">Ready for details</p>
+                <label className={labelCls}>Identity Verification</label>
+                {hasVerifiedProfileId ? (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                      <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-emerald-800">ID Card Verified</p>
+                      <p className="text-xs text-emerald-600 mt-0.5">We'll use the ID card uploaded in your profile.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-slate-100 transition-colors">
+                    <input type="file" id="idUpload" className="hidden" accept="image/*" onChange={e => {
+                      if (e.target.files && e.target.files[0]) setIdCardFile(e.target.files[0]);
+                    }} />
+                    <label htmlFor="idUpload" className="cursor-pointer flex flex-col items-center">
+                      <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 mb-3">
+                        <Upload className="w-5 h-5" />
+                      </div>
+                      <p className="text-sm font-bold text-slate-800 mb-1">Upload ID Card</p>
+                      <p className="text-xs text-slate-500">Required for checkout if not verified in profile</p>
+                      {idCardFile && <p className="text-xs font-semibold text-blue-600 mt-3 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> {idCardFile.name}</p>}
+                    </label>
+                  </div>
+                )}
               </div>
-            </div>
-            <button 
-              onClick={() => setStep('form')}
-              className="bg-cyan-500 hover:bg-cyan-400 text-black px-5 py-2 rounded-xl font-bold text-xs transition-all shadow-lg shadow-cyan-500/10 flex items-center gap-1 uppercase tracking-wider"
-            >
-              Proceed →
-            </button>
-          </div>
-        </div>
-      )}
 
-      {showLetter && submittedData && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in zoom-in-95 duration-200 overflow-y-auto">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl relative mt-10">
-            <div className="p-4 border-b border-zinc-800 flex justify-between items-center bg-zinc-900 sticky top-0 z-10 print:hidden rounded-t-2xl">
-              <h2 className="text-white font-bold tracking-wider">Requisition Generated</h2>
-              <button 
-                onClick={() => router.push('/student/reservations')}
-                className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm font-bold shadow-lg transition"
-              >
-                Close & View Reservations
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input type="checkbox" required checked={agreedToTerms} onChange={e => setAgreedToTerms(e.target.checked)}
+                    className="mt-1 rounded border-blue-300 text-blue-600 focus:ring-blue-500 w-4 h-4 bg-white" />
+                  <span className="text-xs text-blue-900 font-medium leading-relaxed">
+                    I agree to return all components in working condition by the specified return date. I understand that I am responsible for any damage or loss of the components.
+                  </span>
+                </label>
+              </div>
+
+              <button type="submit" disabled={isLoading}
+                className="w-full py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-200 flex justify-center items-center gap-2">
+                {isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "Submit Requisition"}
               </button>
-            </div>
-            <div className="p-6 overflow-y-auto print:p-0">
-              <RequisitionLetter {...submittedData} />
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {showCropper && imageToCrop && (
-        <ImageCropper
-          imageSrc={imageToCrop}
-          onCropComplete={(croppedBase64) => {
-            if (cropTarget === 'student') {
-              setStudentIdCardUrl(croppedBase64);
-            } else if (cropTarget === 'signature') {
-              setSignatureUrl(croppedBase64);
-            } else if (typeof cropTarget === 'number') {
-              const nm = [...teamMembers];
-              nm[cropTarget].idCardUrl = croppedBase64;
-              setTeamMembers(nm);
-            }
-            setShowCropper(false);
-            setImageToCrop(null);
-          }}
-          onCancel={() => {
-            setShowCropper(false);
-            setImageToCrop(null);
-          }}
-        />
-      )}
-
-      {/* Lab Policy Modal */}
-      {isPolicyModalOpen && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95 duration-200">
-          <div className="bg-white border border-gray-200 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl relative font-sans">
-            <div className="p-5 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-2xl">
-              <h2 className="text-gray-900 font-bold text-lg tracking-wider flex items-center gap-2 uppercase">
-                <svg className="w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                LAB POLICY & BORROWING REGULATIONS
-              </h2>
-              <button 
-                onClick={() => setIsPolicyModalOpen(false)}
-                className="text-gray-400 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg p-2 transition-colors"
-              >
-                ✕
-              </button>
-            </div>
-            
-            <div className="p-6 overflow-y-auto space-y-6 text-sm text-gray-700">
-              <section className="space-y-2">
-                <h3 className="text-gray-900 font-bold uppercase tracking-wider text-xs flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-600"></span>
-                  1. Component Handling & Usage
-                </h3>
-                <p className="leading-relaxed pl-3.5">
-                  All components, microcontrollers, and tools must be handled with utmost care. You are expected to follow proper electrical and safety guidelines while using the hardware to avoid short-circuits or physical damage.
-                </p>
-              </section>
-
-              <section className="space-y-2">
-                <h3 className="text-gray-900 font-bold uppercase tracking-wider text-xs flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
-                  2. Strict Liability for Damage or Loss
-                </h3>
-                <p className="leading-relaxed pl-3.5">
-                  By borrowing components, you assume full financial and academic responsibility for them. If any item is damaged, burnt out, lost, or returned in a non-working condition due to negligence, <strong className="text-black">you are strictly mandated to purchase and submit a brand-new, original replacement of the exact same model within the specified timeline.</strong>
-                </p>
-              </section>
-
-              <section className="space-y-2">
-                <h3 className="text-gray-900 font-bold uppercase tracking-wider text-xs flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                  3. Return Deadlines & Academic Holds
-                </h3>
-                <p className="leading-relaxed pl-3.5">
-                  Components must be returned on or before the approved Return Date. <strong className="text-black">Failure to return components on time will result in an automatic academic block.</strong> Your Hall Ticket for upcoming exams will be withheld until the lab clearance is obtained by returning or replacing the overdue items.
-                </p>
-              </section>
-
-              <section className="space-y-2">
-                <h3 className="text-gray-900 font-bold uppercase tracking-wider text-xs flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-600"></span>
-                  4. SIP IDT & Long-Term Projects
-                </h3>
-                <p className="leading-relaxed pl-3.5">
-                  For ongoing projects (such as SIP IDT) where a fixed return date is not explicitly set initially, components must be returned <strong className="text-black">immediately upon project completion or at the end of the academic semester</strong>, whichever comes first. The strict damage liability policy equally applies to long-term borrowing.
-                </p>
-              </section>
-
-              <section className="space-y-2">
-                <h3 className="text-gray-900 font-bold uppercase tracking-wider text-xs flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                  5. Non-Transferability
-                </h3>
-                <p className="leading-relaxed pl-3.5">
-                  Hardware is issued to you (and your listed team). You cannot transfer, lend, or swap borrowed components with other students or teams without prior official approval and system reassignment by the lab administrator.
-                </p>
-              </section>
-            </div>
-            
-            <div className="p-5 border-t border-gray-200 bg-gray-50 flex justify-end rounded-b-2xl">
-              <button 
-                onClick={() => setIsPolicyModalOpen(false)}
-                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow transition-colors uppercase text-xs tracking-wider"
-              >
-                I Understand
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </form>
+          </motion.div>
+        )}
+      </div>
     </div>
+  );
+}
+
+// Microchip icon component
+function Microchip({ className }: { className: string }) {
+  return (
+    <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+      <path d="M9 9h6v6H9z"></path>
+      <path d="M9 1v3"></path>
+      <path d="M15 1v3"></path>
+      <path d="M9 20v3"></path>
+      <path d="M15 20v3"></path>
+      <path d="M20 9h3"></path>
+      <path d="M20 14h3"></path>
+      <path d="M1 9h3"></path>
+      <path d="M1 14h3"></path>
+    </svg>
   );
 }
