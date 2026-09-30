@@ -6,15 +6,13 @@ import { supabase } from '@/lib/supabase';
 import { getWorkingDaysCount } from '@/lib/dateValidator';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
-import { siteConfig } from '@/config/site';
 import RequisitionLetter from '@/components/RequisitionLetter';
 import { Skeleton } from '@/components/ui/Skeleton';
 import QRCode from 'react-qr-code';
-import { Space_Grotesk } from 'next/font/google';
-import ParticleNetwork from '@/components/ui/ParticleNetwork';
-import { Clock, CheckCircle2, AlertCircle, Package, ArrowLeft, ArrowRight, Eye, Camera, QrCode, FileText, ChevronRight, X, User, Microchip } from 'lucide-react';
+import { Inter } from 'next/font/google';
+import { Clock, CheckCircle2, AlertCircle, Package, ArrowLeft, Eye, Camera, QrCode, FileText, X, User, Microchip, ChevronRight } from 'lucide-react';
 
-const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] });
+const inter = Inter({ subsets: ['latin'] });
 
 interface Reservation {
   reservation_id: string;
@@ -22,8 +20,8 @@ interface Reservation {
   created_at: string;
   due_date: string | null;
   project_title: string | null;
-    after_img_url?: string | null;
-      borrowed_at?: string | null;
+  after_img_url?: string | null;
+  borrowed_at?: string | null;
   components: {
     name: string;
     department: string;
@@ -85,8 +83,6 @@ export default function MyReservations() {
   const [extensionReason, setExtensionReason] = useState<string>('');
   const [isSubmittingExtension, setIsSubmittingExtension] = useState(false);
 
-  // Ref for the hidden file input
-  
   useEffect(() => {
     fetchReservations();
   }, []);
@@ -101,7 +97,6 @@ export default function MyReservations() {
         return;
       }
 
-      // Fix: Query 'name' instead of 'full_name'
       let { data: userData, error: userError } = await supabase
         .from('users')
         .select('user_id, usn, name')
@@ -124,7 +119,6 @@ export default function MyReservations() {
         setStudentUsn(userData.usn);
         setStudentName(userData.name || 'Student');
         
-        // Fix: Use components(...) instead of components!inner(...) to avoid query failure if relation missing
         const { data: resData, error } = await supabase
           .from('reservations')
           .select(`
@@ -133,8 +127,8 @@ export default function MyReservations() {
             created_at,
             due_date,
             project_title,
-                        after_img_url,
-                                    borrowed_at,
+            after_img_url,
+            borrowed_at,
             components(name, department, lab_location, value_tier),
             assigned_serial_numbers,
             extension_requested,
@@ -174,8 +168,6 @@ export default function MyReservations() {
     }
   };
 
-  
-  
   const handleCollectClick = async (resId: string) => {
     setUploading(true);
     try {
@@ -202,7 +194,6 @@ export default function MyReservations() {
 
   const handleReturnClick = (resId: string) => {
     setReturnResId(resId);
-    
     setUploadType(null);
     setReturnCondition('WORKING');
     setReturnModalOpen(true);
@@ -223,7 +214,6 @@ export default function MyReservations() {
     
     setIsSubmittingExtension(true);
     try {
-      
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
@@ -245,7 +235,7 @@ export default function MyReservations() {
       
       toast.success('Extension request submitted successfully!');
       setExtensionModalOpen(false);
-      fetchReservations(); // Refresh the list
+      fetchReservations();
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -258,7 +248,6 @@ export default function MyReservations() {
     
     setUploading(true);
     try {
-      
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
@@ -272,7 +261,6 @@ export default function MyReservations() {
           id: returnResId,
           status: 'RETURN_REQUESTED',
           returnCondition,
-          
         })
       });
       if (!res.ok) throw new Error("Failed to process return.");
@@ -283,18 +271,14 @@ export default function MyReservations() {
     } finally {
       setUploading(false);
       setReturnModalOpen(false);
-      
       setReturnResId(null);
     }
   };
 
-  
-  
   const handleWithdraw = async (id: string) => {
     if (!confirm('Are you sure you want to withdraw this request?')) return;
     
     try {
-      
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
@@ -329,7 +313,6 @@ export default function MyReservations() {
   }, [reservations]);
 
   const filteredGroups = groupedReservations.filter(group => {
-    // Search Query Filter
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const matchProj = group[0].project_title?.toLowerCase().includes(q) || false;
@@ -337,7 +320,6 @@ export default function MyReservations() {
       if (!matchComp && !matchProj) return false;
     }
 
-    // Date Filter
     if (dateFilter !== 'ALL') {
       const reqDate = new Date(group[0].created_at);
       const now = new Date();
@@ -357,7 +339,6 @@ export default function MyReservations() {
   const completedGroups = filteredGroups.filter(group => group.every(r => !currentStatuses.includes(r.status)));
   const displayedGroups = activeTab === 'CURRENT' ? currentGroups : completedGroups;
 
-  // Render Status Badge Function
   const getStatusBadge = (status: string) => {
     let displayText = status;
     if (status === 'PENDING_APPROVAL') displayText = 'AWAITING APPROVAL';
@@ -372,373 +353,368 @@ export default function MyReservations() {
     const isRejected = status === 'REJECTED' || status === 'CANCELLED';
     const isReturned = status === 'RETURNED' || status === 'COMPLETED';
 
-    if (isApproved) return <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
-    if (isActive) return <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
-    if (isPending) return <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
-    if (isRejected) return <span className="bg-rose-500/10 text-rose-400 border border-rose-500/20 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
-    if (isReturned) return <span className="bg-zinc-700/50 text-zinc-400 border border-zinc-600/30 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
-    return <span className="bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
+    if (isApproved) return <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
+    if (isActive) return <span className="bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
+    if (isPending) return <span className="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
+    if (isRejected) return <span className="bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
+    if (isReturned) return <span className="bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
+    return <span className="bg-slate-100 text-slate-700 border border-slate-300 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest">{displayText}</span>;
   };
 
-
-
   return (
-    <>
-      <div className="min-h-screen bg-[#020617] text-zinc-100 flex flex-col items-center justify-start pt-[calc(4.5rem+env(safe-area-inset-top,0px))] pb-12 px-4 font-sans selection:bg-cyan-500/30 relative overflow-x-hidden">
+    <div className={`${inter.className} min-h-screen bg-slate-50 text-slate-900 selection:bg-teal-700/30 overflow-x-hidden relative`}>
+      <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white via-slate-50 to-slate-100 pointer-events-none z-0" />
+      <div className="w-full max-w-5xl mx-auto px-4 py-8 md:py-12 relative z-10">
         
-        {/* Subtle Background */}
-        <div className="fixed inset-0 bg-[#020617] pointer-events-none" />
-        <div className="fixed top-0 left-0 right-0 h-64 bg-gradient-to-b from-zinc-900/60 to-transparent pointer-events-none" />
-
-        
-        <div className="w-full max-w-5xl relative z-10">
-          {/* Header */}
-          <div className="flex flex-col md:flex-row md:justify-between md:items-end mb-10 gap-6 mt-8">
-            <div>
-              <button 
-                onClick={() => router.push('/student/dashboard')}
-                className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors mb-4 text-sm font-mono tracking-wide"
-              >
-                <ArrowLeft className="w-4 h-4" /> Back to Dashboard
-              </button>
-              <h1 className={`${spaceGrotesk.className} text-2xl md:text-3xl font-black text-white tracking-tight mb-1`}>
-                My Reservations
-              </h1>
-              <p className="text-zinc-400 text-xs">Track your hardware requests, proofs, and timelines.</p>
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:justify-between md:items-end mb-10 pb-6 border-b-2 border-slate-300 relative">
+          <div className="absolute bottom-0 left-0 w-32 h-0.5 bg-teal-700" />
+          <div>
+            <button onClick={() => router.push('/student/dashboard')}
+              className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-teal-700 transition-colors mb-4 uppercase tracking-widest">
+              <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+            </button>
+            <div className="flex items-center gap-4">
+              <img src="/vvce-logo.png" alt="VVCE Logo" className="h-10 w-auto object-contain shrink-0" />
+              <div>
+                <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-none mb-1 uppercase">My Reservations</h1>
+                <p className="text-xs text-slate-500 font-medium">Track your hardware requests, proofs, and timelines.</p>
+              </div>
             </div>
+          </div>
+          <button
+            onClick={() => setShowQRModal(true)}
+            className="group mt-6 md:mt-0 flex items-center justify-center gap-3 px-6 py-3 bg-white border border-slate-300 hover:border-teal-700 rounded-xl transition-all shadow-sm hover:shadow-md"
+          >
+            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center border border-slate-200 group-hover:bg-teal-50 group-hover:border-teal-200 transition-colors">
+              <QrCode className="w-4 h-4 text-slate-600 group-hover:text-teal-700 transition-colors" />
+            </div>
+            <div className="flex flex-col items-start">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 group-hover:text-teal-600">Open Pass</span>
+              <span className="text-sm font-black text-slate-900">Digital Pass</span>
+            </div>
+          </button>
+        </div>
 
+        {/* Instructions Box */}
+        <div className="mb-6 p-4 bg-white border border-slate-300 rounded-xl flex items-start gap-3 shadow-sm">
+          <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center shrink-0 border border-slate-200">
+            <AlertCircle className="w-4 h-4 text-slate-500" />
+          </div>
+          <div>
+            <h4 className="text-slate-900 font-bold text-xs uppercase tracking-widest mb-1">Collection Instructions</h4>
+            <p className="text-slate-600 text-xs leading-relaxed">
+              After receiving admin approval, please proceed to the lab. Carry your physical ID and show your Digital Pass to collect the component.
+            </p>
+          </div>
+        </div>
+
+        {/* Tab Navigation & Filters */}
+        <div className="flex flex-col lg:flex-row gap-4 mb-8">
+          <div className="flex gap-2 bg-white p-1.5 border border-slate-300 shadow-sm w-fit">
             <button
-              onClick={() => setShowQRModal(true)}
-              className="group flex items-center justify-center gap-3 px-6 py-3.5 bg-zinc-900/80 backdrop-blur-xl border border-white/10 hover:border-violet-500/50 hover:bg-violet-500/10 rounded-2xl transition-all duration-500 shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
+              onClick={() => setActiveTab('CURRENT')}
+              className={`px-5 py-2 text-xs font-bold transition-all uppercase tracking-widest flex items-center gap-2 ${activeTab === 'CURRENT' ? 'bg-slate-100 text-teal-800 border border-slate-200 shadow-sm' : 'bg-transparent text-slate-500 hover:text-slate-900 border border-transparent'}`}
             >
-              <div className="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center border border-violet-500/30 group-hover:scale-110 transition-transform">
-                <QrCode className="w-4 h-4 text-violet-400" />
-              </div>
-              <div className="flex flex-col items-start">
-                <span className="text-xs font-bold uppercase tracking-widest text-zinc-500 group-hover:text-violet-300">Open Digital ID</span>
-                <span className="text-sm font-black text-white">Digital Pass</span>
-              </div>
+              <span>Active & Pending</span>
+              <span className={`px-2 py-0.5 rounded-none text-[10px] ${activeTab === 'CURRENT' ? 'bg-teal-700 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                {currentGroups.length}
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveTab('COMPLETED')}
+              className={`px-5 py-2 text-xs font-bold transition-all uppercase tracking-widest flex items-center gap-2 ${activeTab === 'COMPLETED' ? 'bg-slate-100 text-teal-800 border border-slate-200 shadow-sm' : 'bg-transparent text-slate-500 hover:text-slate-900 border border-transparent'}`}
+            >
+              <span>Completed</span>
+              <span className={`px-2 py-0.5 rounded-none text-[10px] ${activeTab === 'COMPLETED' ? 'bg-teal-700 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                {completedGroups.length}
+              </span>
             </button>
           </div>
 
-          {/* Instructions Box */}
-          <div className="mb-6 p-4 bg-white/3 border border-white/8 rounded-2xl flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center shrink-0">
-              <svg className="w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <div className="flex-1 flex flex-col sm:flex-row gap-3">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                placeholder="Search by component, project, or ID..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full h-full bg-white border border-slate-300 text-sm text-slate-900 px-10 py-3 focus:outline-none focus:border-teal-700 shadow-sm transition-colors rounded-none"
+              />
+              <svg className="w-4 h-4 absolute left-4 top-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            <div>
-              <h4 className="text-zinc-300 font-semibold text-xs mb-1">Collection Instructions</h4>
-              <p className="text-zinc-500 text-xs leading-relaxed">
-                After receiving admin approval, please proceed to the lab. Carry your physical ID and show your Digital Pass to collect the component.
-              </p>
-            </div>
+            <select
+              value={dateFilter}
+              onChange={e => setDateFilter(e.target.value as any)}
+              className="bg-white border border-slate-300 text-sm font-bold text-slate-600 px-5 py-3 focus:outline-none focus:border-teal-700 cursor-pointer shadow-sm transition-colors min-w-[160px] rounded-none appearance-none"
+            >
+              <option value="ALL">ALL TIME</option>
+              <option value="WEEK">THIS WEEK</option>
+              <option value="MONTH_1">PAST 1 MONTH</option>
+              <option value="MONTH_3">PAST 3 MONTHS</option>
+              <option value="MONTH_6">PAST 6 MONTHS</option>
+              <option value="MONTH_12">PAST 12 MONTHS</option>
+            </select>
           </div>
+        </div>
 
-          {/* Tab Navigation & Filters */}
-          <div className="flex flex-col lg:flex-row gap-4 mb-8">
-            <div className="flex gap-3 bg-black/40 p-2 rounded-2xl w-fit border border-white/5 backdrop-blur-xl shadow-2xl">
-              <button
-                onClick={() => setActiveTab('CURRENT')}
-                className={`relative px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${activeTab === 'CURRENT' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-              >
-                {activeTab === 'CURRENT' && <motion.div layoutId="tab-bg" className="absolute inset-0 bg-white/10 border border-white/10 rounded-xl" />}
-                <span className="relative z-10">Active & Pending</span>
-                <span className={`relative z-10 px-2 py-0.5 rounded-md text-[10px] ${activeTab === 'CURRENT' ? 'bg-cyan-500/20 text-cyan-300' : 'bg-zinc-800 text-zinc-400'}`}>
-                  {currentGroups.length}
-                </span>
-              </button>
-              <button
-                onClick={() => setActiveTab('COMPLETED')}
-                className={`relative px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${activeTab === 'COMPLETED' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-              >
-                {activeTab === 'COMPLETED' && <motion.div layoutId="tab-bg" className="absolute inset-0 bg-white/10 border border-white/10 rounded-xl" />}
-                <span className="relative z-10">Completed</span>
-                <span className={`relative z-10 px-2 py-0.5 rounded-md text-[10px] ${activeTab === 'COMPLETED' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-zinc-800 text-zinc-400'}`}>
-                  {completedGroups.length}
-                </span>
-              </button>
-            </div>
-
-            <div className="flex-1 flex flex-col sm:flex-row gap-3">
-              <div className="flex-1 relative">
-                <input
-                  type="text"
-                  placeholder="Search by component, project, or ID..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full h-full bg-black/40 border border-white/5 text-sm text-white px-10 py-3 rounded-2xl focus:outline-none focus:border-cyan-500/50 backdrop-blur-xl transition-all"
-                />
-                <svg className="w-4 h-4 absolute left-4 top-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+        {/* Loading Overlay */}
+        <AnimatePresence>
+          {uploading && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[120] flex items-center justify-center bg-white/80 backdrop-blur-sm">
+              <div className="flex flex-col items-center">
+                <div className="w-10 h-10 border-4 border-slate-200 border-t-teal-700 rounded-full animate-spin mb-4"></div>
+                <p className="text-teal-700 font-mono font-bold tracking-widest uppercase">Processing Request...</p>
               </div>
-              <select
-                value={dateFilter}
-                onChange={e => setDateFilter(e.target.value as any)}
-                className="bg-black/40 border border-white/5 text-sm text-white px-5 py-3 rounded-2xl focus:outline-none focus:border-cyan-500/50 cursor-pointer appearance-none backdrop-blur-xl transition-all min-w-[160px]"
-              >
-                <option value="ALL" className="bg-zinc-900 text-white">All Time</option>
-                <option value="WEEK" className="bg-zinc-900 text-white">This Week</option>
-                <option value="MONTH_1" className="bg-zinc-900 text-white">Past 1 Month</option>
-                <option value="MONTH_3" className="bg-zinc-900 text-white">Past 3 Months</option>
-                <option value="MONTH_6" className="bg-zinc-900 text-white">Past 6 Months</option>
-                <option value="MONTH_12" className="bg-zinc-900 text-white">Past 12 Months</option>
-              </select>
-            </div>
-          </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-          {/* Loading Overlay */}
-          <AnimatePresence>
-            {uploading && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 backdrop-blur-md">
-                <div className="flex flex-col items-center">
-                  <div className="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                  <p className="text-cyan-400 font-mono font-bold tracking-widest uppercase animate-pulse">Processing...</p>
+        {/* Reservations Grid */}
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-24 gap-3">
+            <div className="w-8 h-8 border-2 border-slate-300 border-t-teal-700 rounded-full animate-spin" />
+            <p className="text-xs font-mono text-slate-500 uppercase tracking-widest">Retrieving Request Data...</p>
+          </div>
+        ) : displayedGroups.length === 0 ? (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="py-24 flex flex-col items-center justify-center border-2 border-dashed border-slate-300 bg-white shadow-sm">
+            <Package className="w-12 h-12 text-slate-300 mb-4" />
+            <p className="text-slate-500 font-mono uppercase tracking-widest text-xs font-bold">
+              No {activeTab === 'CURRENT' ? 'active' : 'completed'} requests found.
+            </p>
+          </motion.div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {displayedGroups.map((group, i) => {
+              const firstRes = group[0];
+              
+              return (
+              <motion.div
+                key={firstRes.reservation_id}
+                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: i * 0.05 }}
+                className="bg-white border border-slate-300 shadow-sm hover:shadow-md hover:border-teal-500 transition-all flex flex-col relative overflow-hidden group/card rounded-xl"
+              >
+                <div className="absolute top-0 left-0 right-0 h-1 bg-slate-200 group-hover/card:bg-teal-500 transition-colors" />
+                <div className="p-5 flex-1 flex flex-col z-10">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center gap-2">
+                       <div className="p-1.5 bg-slate-50 border border-slate-200 rounded-md">
+                         <FileText className="w-3.5 h-3.5 text-slate-600" />
+                       </div>
+                       <span className="text-slate-900 font-bold text-sm uppercase tracking-wide">{firstRes.project_title || 'Hardware Request'}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-bold tracking-widest bg-slate-50 px-2 py-1 border border-slate-200 uppercase">{new Date(firstRes.created_at).toLocaleDateString()}</span>
+                  </div>
+                  
+                  {firstRes.due_date && (
+                    <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-widest text-rose-700 mb-4 bg-rose-50 px-2 py-1 border border-rose-200 w-fit uppercase">
+                      <AlertCircle className="w-3 h-3" /> Due {new Date(firstRes.due_date).toLocaleDateString()}
+                    </div>
+                  )}
+
+                  <details className="mt-1 group/res">
+                    <summary className="flex items-center gap-2 cursor-pointer list-none [&::-webkit-details-marker]:hidden text-[10px] font-bold text-slate-500 hover:text-teal-700 uppercase tracking-widest mb-3 transition-colors">
+                      <ChevronRight className="w-3.5 h-3.5 transition-transform group-open/res:rotate-90" />
+                      View {group.length} Component{group.length !== 1 ? 's' : ''}
+                    </summary>
+                    <div className="flex flex-col gap-3">
+                      {group.map(res => (
+                         <div key={res.reservation_id} className="bg-slate-50 p-4 border border-slate-200 flex flex-col gap-3 rounded-lg">
+                            <div className="flex justify-between items-start">
+                               <div>
+                                  <h4 className="text-sm font-bold text-slate-900 mb-1">{res.components?.name || 'Unknown'}</h4>
+                                  <div className="flex flex-wrap gap-2">
+                                     <span className="text-[10px] bg-white px-2 py-0.5 border border-slate-200 text-slate-600 font-mono font-bold uppercase tracking-widest">{res.components?.department}</span>
+                                     {res.assignedAssetId && (
+                                       <span className="text-[10px] bg-teal-50 px-2 py-0.5 border border-teal-200 text-teal-700 font-mono font-bold uppercase tracking-widest">ID: {res.assignedAssetId}</span>
+                                     )}
+                                  </div>
+                               </div>
+                               <div>{getStatusBadge(res.status)}</div>
+                            </div>
+                            
+                            {(res.status === 'APPROVED' || res.status === 'PENDING_APPROVAL' || res.status === 'CHECKED_OUT' || res.status === 'READY_FOR_PICKUP') && (
+                              <div className="flex flex-wrap gap-2 mt-2 pt-3 border-t border-slate-200">
+                                 {res.status === 'APPROVED' && (
+                                    <>
+                                       {res.components?.value_tier === 'LOW' ? (
+                                         <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-1 border border-emerald-200 uppercase tracking-widest">Collect at Lab</span>
+                                       ) : (
+                                         <button onClick={() => handleCollectClick(res.reservation_id)} className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] font-bold uppercase tracking-widest transition-colors">Collect</button>
+                                       )}
+                                       <button onClick={() => handleWithdraw(res.reservation_id)} className="px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-700 border border-slate-200 hover:border-rose-200 text-[10px] font-bold uppercase tracking-widest transition-colors">Withdraw</button>
+                                    </>
+                                 )}
+                                 {res.status === 'READY_FOR_PICKUP' && (
+                                    <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-1 border border-emerald-200 uppercase tracking-widest">Ready at Admin Desk</span>
+                                 )}
+                                 {res.status === 'PENDING_APPROVAL' && (
+                                    <button onClick={() => handleWithdraw(res.reservation_id)} className="px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-700 border border-slate-200 hover:border-rose-200 text-[10px] font-bold uppercase tracking-widest transition-colors">Withdraw</button>
+                                 )}
+                                 {res.status === 'CHECKED_OUT' && (
+                                    <>
+                                       <button onClick={() => handleReturnClick(res.reservation_id)} className="px-4 py-1.5 bg-teal-700 hover:bg-teal-800 text-white border border-teal-800 text-[10px] font-bold uppercase tracking-widest transition-colors shadow-sm">Return Item</button>
+                                       {!res.extension_requested ? (
+                                          <button onClick={() => openExtensionModal(res.reservation_id)} className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-[10px] font-bold uppercase tracking-widest transition-colors shadow-sm">Extend</button>
+                                       ) : (
+                                          <span className="text-[10px] text-slate-600 font-bold bg-slate-100 px-2 py-1 border border-slate-300 uppercase tracking-widest">Ext. {res.extension_status || 'Pending'}</span>
+                                       )}
+                                    </>
+                                 )}
+                              </div>
+                            )}
+                         </div>
+                      ))}
+                    </div>
+                  </details>
+                </div>
+
+                <div className="px-5 py-4 border-t border-slate-200 bg-slate-50">
+                  <button
+                    onClick={() => {
+                      const durationDays = firstRes.due_date ? getWorkingDaysCount(firstRes.created_at, firstRes.due_date) : 1;
+                      
+                      const itemsMap: Record<string, number> = {};
+                      group.forEach(g => {
+                         const name = g.components?.name || 'Component';
+                         itemsMap[name] = (itemsMap[name] || 0) + 1;
+                      });
+                      const reqItems = Object.entries(itemsMap).map(([name, qty]) => ({ name, quantity: qty }));
+
+                      setInspectData({
+                        studentName: studentName,
+                        usn: studentUsn || '',
+                        department: firstRes.components?.department || 'EDL',
+                        items: reqItems,
+                        requestDate: firstRes.created_at,
+                        duration: durationDays,
+                        status: group.every(g => g.status === firstRes.status) ? firstRes.status : 'MIXED',
+                        teamMembers: firstRes.team_members,
+                        signatureUrl: firstRes.signature_url,
+                        projectTitle: firstRes.project_title,
+                        projectType: firstRes.project_type,
+                        projectPurpose: firstRes.project_purpose,
+                        hackathonDate: firstRes.hackathon_date,
+                        hackathonVenue: firstRes.hackathon_venue
+                      });
+                      setShowInspectModal(true);
+                    }}
+                    className="w-full py-2.5 bg-white hover:bg-slate-100 text-slate-600 border border-slate-300 font-bold uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 transition-colors shadow-sm"
+                  >
+                    <Eye className="w-3.5 h-3.5" /> Inspect Letter
+                  </button>
                 </div>
               </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Reservations Grid */}
-          {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-64 rounded-3xl border border-white/5 bg-white/5" />)}
-            </div>
-          ) : displayedGroups.length === 0 ? (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="py-32 flex flex-col items-center justify-center border-2 border-dashed border-white/10 rounded-3xl bg-black/40 backdrop-blur-sm">
-              <Package className="w-16 h-16 text-zinc-600 mb-6" />
-              <p className="text-zinc-400 font-mono uppercase tracking-widest text-sm font-bold">
-                No {activeTab === 'CURRENT' ? 'active' : 'completed'} requests found.
-              </p>
-            </motion.div>
-          ) : (
-            <AnimatePresence mode="wait">
-              <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.3 }} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {displayedGroups.map((group, i) => {
-                  const firstRes = group[0];
-                  
-                  return (
-                  <motion.div
-                    key={firstRes.reservation_id}
-                    initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: i * 0.05 }}
-                    className="bg-zinc-900/60 border border-white/8 hover:border-white/15 rounded-xl overflow-hidden transition-all duration-200 flex flex-col"
-                  >
-                    <div className="p-3 flex-1 flex flex-col z-10">
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex items-center gap-1.5">
-                           <FileText className="w-3.5 h-3.5 text-cyan-400" />
-                           <span className="text-white font-semibold text-xs">{firstRes.project_title || 'Hardware Request'}</span>
-                        </div>
-                        <span className="text-[10px] text-zinc-500 font-mono bg-white/5 px-1.5 py-0.5 rounded border border-white/10">{new Date(firstRes.created_at).toLocaleDateString()}</span>
-                      </div>
-                      
-                      {firstRes.due_date && (
-                        <div className="flex items-center gap-1.5 text-xs text-rose-400 font-medium mb-2 bg-rose-500/10 px-2 py-1 rounded border border-rose-500/20 w-fit">
-                          <AlertCircle className="w-3 h-3" /> Due {new Date(firstRes.due_date).toLocaleDateString()}
-                        </div>
-                      )}
-
-                      <div className="flex flex-col gap-2 mt-1.5">
-                        {group.map(res => (
-                           <div key={res.reservation_id} className="bg-white/4 p-2.5 rounded-lg border border-white/8 flex flex-col gap-1.5">
-                              <div className="flex justify-between items-start">
-                                 <div>
-                                    <h4 className="text-xs font-semibold text-zinc-200">{res.components?.name || 'Unknown'}</h4>
-                                    <div className="flex flex-wrap gap-1.5 mt-1">
-                                       <span className="text-[10px] bg-white/5 px-2 py-0.5 rounded-md text-zinc-400 border border-white/10 font-mono">{res.components?.department}</span>
-                                       {res.assignedAssetId && (
-                                         <span className="text-[10px] bg-cyan-500/10 px-2 py-0.5 rounded-md text-cyan-400 border border-cyan-500/30 font-mono">ID: {res.assignedAssetId}</span>
-                                       )}
-                                    </div>
-                                 </div>
-                                 <div>{getStatusBadge(res.status)}</div>
-                              </div>
-                              
-                              {(res.status === 'APPROVED' || res.status === 'PENDING_APPROVAL' || res.status === 'CHECKED_OUT' || res.status === 'READY_FOR_PICKUP') && (
-                                <div className="flex flex-wrap gap-2 mt-1 pt-3 border-t border-white/5">
-                                   {res.status === 'APPROVED' && (
-                                      <>
-                                         {res.components?.value_tier === 'LOW' ? (
-                                           <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-1 rounded-md border border-emerald-500/20">Collect</span>
-                                         ) : (
-                                           <button onClick={() => handleCollectClick(res.reservation_id)} className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-black rounded-lg text-xs font-bold transition-all border border-emerald-500/30">Collect</button>
-                                         )}
-                                         <button onClick={() => handleWithdraw(res.reservation_id)} className="px-3 py-1.5 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded-lg text-xs font-bold transition-all border border-rose-500/30">Withdraw</button>
-                                      </>
-                                   )}
-                                   {res.status === 'READY_FOR_PICKUP' && (
-                                      <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-1 rounded-md border border-emerald-500/20">Ready at Admin Desk</span>
-                                   )}
-                                   {res.status === 'PENDING_APPROVAL' && (
-                                      <button onClick={() => handleWithdraw(res.reservation_id)} className="px-3 py-1.5 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded-lg text-xs font-bold transition-all border border-rose-500/30">Withdraw</button>
-                                   )}
-                                   {res.status === 'CHECKED_OUT' && (
-                                      <>
-                                         <button onClick={() => handleReturnClick(res.reservation_id)} className="px-3 py-1.5 bg-amber-500/20 text-amber-500 hover:bg-amber-500 hover:text-black rounded-lg text-xs font-bold transition-all border border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.2)]">Return Item</button>
-                                         {!res.extension_requested ? (
-                                            <button onClick={() => openExtensionModal(res.reservation_id)} className="px-3 py-1.5 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 rounded-lg text-xs font-bold transition-all border border-blue-500/20">Extend</button>
-                                         ) : (
-                                            <span className="text-[10px] text-blue-400 font-bold bg-blue-500/10 px-2 py-1 rounded-md border border-blue-500/20">Ext. {res.extension_status || 'Pending'}</span>
-                                         )}
-                                      </>
-                                   )}
-                                </div>
-                              )}
-                           </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="px-3 md:px-4 py-3 border-t border-white/8 flex flex-col gap-2 bg-white/2">
-                      <button
-                        onClick={() => {
-                          const durationDays = firstRes.due_date ? getWorkingDaysCount(firstRes.created_at, firstRes.due_date) : 1;
-                          
-                          // Aggregate quantities for same component names, or just map them
-                          const itemsMap: Record<string, number> = {};
-                          group.forEach(g => {
-                             const name = g.components?.name || 'Component';
-                             itemsMap[name] = (itemsMap[name] || 0) + 1;
-                          });
-                          const reqItems = Object.entries(itemsMap).map(([name, qty]) => ({ name, quantity: qty }));
-
-                          setInspectData({
-                            studentName: studentName,
-                            usn: studentUsn || '',
-                            department: firstRes.components?.department || 'EDL',
-                            items: reqItems,
-                            requestDate: firstRes.created_at,
-                            duration: durationDays,
-                            status: group.every(g => g.status === firstRes.status) ? firstRes.status : 'MIXED',
-                            teamMembers: firstRes.team_members,
-                            signatureUrl: firstRes.signature_url,
-                            projectTitle: firstRes.project_title,
-                            projectType: firstRes.project_type,
-                            projectPurpose: firstRes.project_purpose,
-                            hackathonDate: firstRes.hackathon_date,
-                            hackathonVenue: firstRes.hackathon_venue
-                          });
-                          setShowInspectModal(true);
-                        }}
-                        className="w-full py-2 bg-white/5 hover:bg-white/8 text-zinc-400 hover:text-zinc-200 border border-white/8 rounded-lg font-medium text-[11px] flex items-center justify-center gap-1.5 transition-colors"
-                      >
-                        <Eye className="w-3.5 h-3.5" /> Inspect Letter
-                      </button>
-                    </div>
-                  </motion.div>
-                  )
-                })}
-              </motion.div>
-            </AnimatePresence>
-          )}
-        </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Requisition Inspection Modal */}
       <AnimatePresence>
         {showInspectModal && inspectData && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xl p-4 overflow-y-auto" onClick={() => setShowInspectModal(false)}>
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} onClick={(e) => e.stopPropagation()} className="relative bg-white p-2 rounded-3xl w-full max-w-4xl mx-auto my-8 shadow-2xl">
-              <button onClick={() => setShowInspectModal(false)} className="absolute -top-12 right-0 text-white hover:text-zinc-300 bg-white/10 p-2 rounded-full backdrop-blur-md">
-                <X className="w-6 h-6" />
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto" onClick={() => setShowInspectModal(false)}>
+            <div onClick={(e) => e.stopPropagation()} className="relative bg-white p-2 w-full max-w-4xl mx-auto my-8 shadow-xl border border-slate-300">
+              <button onClick={() => setShowInspectModal(false)} className="absolute -top-10 right-0 text-slate-600 hover:text-slate-900 bg-white p-1.5 border border-slate-300 shadow-sm">
+                <X className="w-5 h-5" />
               </button>
-              <div className="max-h-[85vh] overflow-y-auto rounded-2xl scrollbar-hide">
+              <div className="max-h-[85vh] overflow-y-auto">
                 <RequisitionLetter {...inspectData} />
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
       </AnimatePresence>
 
       {/* Digital Pass QR Modal */}
       <AnimatePresence>
         {showQRModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-xl p-4" onClick={() => setShowQRModal(false)}>
-            <motion.div initial={{ scale: 0.8, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.8, y: 20 }} onClick={(e) => e.stopPropagation()} className="relative bg-white p-8 rounded-3xl shadow-[0_0_50px_rgba(139,92,246,0.4)] flex flex-col items-center max-w-sm w-full">
-              <button onClick={() => setShowQRModal(false)} className="absolute top-4 right-4 p-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-600 hover:text-black rounded-full transition-colors">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4" onClick={() => setShowQRModal(false)}>
+            <div onClick={(e) => e.stopPropagation()} className="relative bg-white p-8 shadow-xl border border-slate-300 flex flex-col items-center max-w-sm w-full">
+              <button onClick={() => setShowQRModal(false)} className="absolute top-4 right-4 p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 transition-colors">
                 <X className="w-5 h-5" />
               </button>
-              <h3 className={`${spaceGrotesk.className} text-3xl font-black text-black mb-1`}>DIGITAL PASS</h3>
-              <p className="text-zinc-500 font-mono text-xs uppercase tracking-widest mb-8">Scan at Admin Desk</p>
+              <div className="w-12 h-12 bg-teal-800 text-white flex items-center justify-center mb-4">
+                <QrCode className="w-6 h-6" />
+              </div>
+              <h3 className={`text-2xl font-black text-slate-900 mb-1 uppercase tracking-tight`}>DIGITAL PASS</h3>
+              <p className="text-slate-500 font-bold text-[10px] uppercase tracking-widest mb-8">Scan at Admin Desk</p>
               
-              <div className="bg-white p-4 border-4 border-dashed border-violet-500/30 rounded-3xl">
-                <QRCode value={studentUsn || 'PENDING'} size={240} level="H" className="rounded-xl" fgColor="#000000" bgColor="#ffffff" />
+              <div className="bg-white p-4 border-2 border-slate-900">
+                <QRCode value={studentUsn || 'PENDING'} size={240} level="H" fgColor="#000000" bgColor="#ffffff" />
               </div>
               
-              <div className="mt-8 pt-6 border-t border-zinc-200 w-full text-center">
-                <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Student USN</p>
-                <p className="font-mono text-2xl font-bold text-violet-600">{studentUsn || 'N/A'}</p>
+              <div className="mt-8 pt-6 border-t border-slate-200 w-full text-center">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">USN</p>
+                <p className="font-mono text-2xl font-bold text-teal-800">{studentUsn || 'N/A'}</p>
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
       </AnimatePresence>
 
       {/* Image Preview Modal */}
       <AnimatePresence>
         {previewModalOpen && previewImgUrl && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-xl p-4" onClick={() => setPreviewModalOpen(false)}>
-            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} onClick={(e) => e.stopPropagation()} className="relative bg-zinc-900 p-2 rounded-2xl max-w-2xl w-full shadow-[0_0_50px_rgba(16,185,129,0.2)] border border-white/10">
-              <button onClick={() => setPreviewModalOpen(false)} className="absolute -top-12 right-0 text-white hover:text-zinc-300 bg-white/10 p-2 rounded-full backdrop-blur-md">
-                <X className="w-6 h-6" />
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4" onClick={() => setPreviewModalOpen(false)}>
+            <div onClick={(e) => e.stopPropagation()} className="relative bg-white p-2 max-w-2xl w-full shadow-xl border border-slate-300">
+              <button onClick={() => setPreviewModalOpen(false)} className="absolute -top-10 right-0 text-slate-600 hover:text-slate-900 bg-white p-1.5 border border-slate-300 shadow-sm">
+                <X className="w-5 h-5" />
               </button>
-              <img src={previewImgUrl} alt="Proof" className="w-full rounded-xl object-contain max-h-[80vh]" />
-            </motion.div>
-          </motion.div>
+              <img src={previewImgUrl} alt="Proof" className="w-full object-contain max-h-[80vh]" />
+            </div>
+          </div>
         )}
       </AnimatePresence>
 
       {/* Return Modal */}
       <AnimatePresence>
         {returnModalOpen && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-xl p-4">
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-zinc-950 border border-white/10 p-8 rounded-3xl max-w-sm w-full shadow-2xl relative">
-              <h3 className={`${spaceGrotesk.className} text-2xl font-black text-white mb-2`}>Return Component</h3>
-              <p className="text-sm text-zinc-400 mb-6">Report condition & capture proof.</p>
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+            <div className="bg-white border border-slate-300 p-8 max-w-sm w-full shadow-xl relative">
+              <h3 className={`text-xl font-black text-slate-900 mb-2 uppercase`}>Return Component</h3>
+              <p className="text-xs text-slate-500 mb-6 font-medium">Report condition & confirm return.</p>
 
-              <div className="space-y-3 mb-6">
-                <label className={`flex items-center gap-4 p-4 border rounded-xl cursor-pointer transition-all ${returnCondition === 'WORKING' ? 'border-emerald-500 bg-emerald-500/10' : 'border-white/10 hover:bg-white/5'}`}>
-                  <input type="radio" value="WORKING" checked={returnCondition === 'WORKING'} onChange={() => setReturnCondition('WORKING')} className="text-emerald-500 w-4 h-4" />
-                  <span className="text-emerald-400 font-bold text-sm">Working Perfectly</span>
+              <div className="space-y-3 mb-8">
+                <label className={`flex items-center gap-4 p-4 border cursor-pointer transition-all ${returnCondition === 'WORKING' ? 'border-emerald-600 bg-emerald-50' : 'border-slate-200 hover:bg-slate-50'}`}>
+                  <input type="radio" value="WORKING" checked={returnCondition === 'WORKING'} onChange={() => setReturnCondition('WORKING')} className="text-emerald-600 w-4 h-4" />
+                  <span className="text-emerald-800 font-bold text-xs uppercase tracking-widest">Working Perfectly</span>
                 </label>
-                <label className={`flex items-center gap-4 p-4 border rounded-xl cursor-pointer transition-all ${returnCondition === 'DAMAGED' ? 'border-rose-500 bg-rose-500/10' : 'border-white/10 hover:bg-white/5'}`}>
-                  <input type="radio" value="DAMAGED" checked={returnCondition === 'DAMAGED'} onChange={() => setReturnCondition('DAMAGED')} className="text-rose-500 w-4 h-4" />
-                  <span className="text-rose-400 font-bold text-sm">Damaged</span>
+                <label className={`flex items-center gap-4 p-4 border cursor-pointer transition-all ${returnCondition === 'DAMAGED' ? 'border-rose-600 bg-rose-50' : 'border-slate-200 hover:bg-slate-50'}`}>
+                  <input type="radio" value="DAMAGED" checked={returnCondition === 'DAMAGED'} onChange={() => setReturnCondition('DAMAGED')} className="text-rose-600 w-4 h-4" />
+                  <span className="text-rose-800 font-bold text-xs uppercase tracking-widest">Damaged</span>
                 </label>
-              </div>
-
-              <div className="mb-8">
-                
               </div>
 
               <div className="flex gap-3">
-                <button onClick={() => setReturnModalOpen(false)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold text-sm transition-colors">Cancel</button>
-                <button onClick={submitReturn}  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-black disabled:opacity-50 transition-all text-sm">Submit</button>
+                <button onClick={() => setReturnModalOpen(false)} className="flex-1 py-3 bg-white hover:bg-slate-50 border border-slate-300 text-slate-600 font-bold text-[10px] uppercase tracking-widest transition-colors shadow-sm">Cancel</button>
+                <button onClick={submitReturn}  className="flex-1 py-3 bg-teal-700 hover:bg-teal-800 text-white font-bold text-[10px] uppercase tracking-widest transition-colors shadow-sm">Submit Return</button>
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
       </AnimatePresence>
 
       {/* Extension Modal */}
       <AnimatePresence>
         {extensionModalOpen && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-xl p-4">
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-zinc-950 border border-white/10 p-8 rounded-3xl max-w-sm w-full shadow-2xl relative">
-              <h3 className={`${spaceGrotesk.className} text-2xl font-black text-white mb-2`}>Request Extension</h3>
-              <div className="p-3 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-xl text-xs font-bold mb-6">
-                Note: Submitting this request does not guarantee an extension. It is subject to Admin approval.
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+            <div className="bg-white border border-slate-300 p-8 max-w-sm w-full shadow-xl relative">
+              <h3 className={`text-xl font-black text-slate-900 mb-2 uppercase`}>Request Extension</h3>
+              <div className="p-3 bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-bold uppercase tracking-widest mb-6">
+                Note: Subject to Admin approval.
               </div>
 
-              <div className="space-y-4 mb-6">
+              <div className="space-y-4 mb-8">
                 <div>
-                  <label className="block text-zinc-400 text-xs font-bold uppercase tracking-widest mb-2">Days Required</label>
+                  <label className="block text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-2">Days Required</label>
                   <select 
                     value={extensionDays} 
                     onChange={(e) => setExtensionDays(parseInt(e.target.value, 10))}
-                    className="w-full bg-zinc-900 border border-zinc-800 text-white p-3 rounded-xl focus:border-blue-500/50 outline-none"
+                    className="w-full bg-white border border-slate-300 text-slate-900 p-3 focus:border-teal-700 outline-none text-sm font-bold shadow-sm"
                   >
                     {[1, 2, 3, 4, 5, 6, 7].map(d => (
                       <option key={d} value={d}>{d} Day{d > 1 ? 's' : ''}</option>
@@ -746,31 +722,31 @@ export default function MyReservations() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-zinc-400 text-xs font-bold uppercase tracking-widest mb-2">Proper Reason</label>
+                  <label className="block text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-2">Proper Reason</label>
                   <textarea 
                     value={extensionReason}
                     onChange={(e) => setExtensionReason(e.target.value)}
                     placeholder="Why do you need more time?"
-                    className="w-full bg-zinc-900 border border-zinc-800 text-white p-3 rounded-xl focus:border-blue-500/50 outline-none resize-none h-24"
+                    className="w-full bg-white border border-slate-300 text-slate-900 p-3 focus:border-teal-700 outline-none resize-none h-24 text-sm shadow-sm"
                   />
                 </div>
               </div>
 
               <div className="flex gap-3">
-                <button onClick={() => setExtensionModalOpen(false)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold text-sm transition-colors">Cancel</button>
+                <button onClick={() => setExtensionModalOpen(false)} className="flex-1 py-3 bg-white hover:bg-slate-50 border border-slate-300 text-slate-600 font-bold text-[10px] uppercase tracking-widest transition-colors shadow-sm">Cancel</button>
                 <button 
                   onClick={submitExtensionRequest} 
                   disabled={!extensionReason.trim() || isSubmittingExtension} 
-                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-black disabled:opacity-50 transition-all text-sm flex justify-center items-center gap-2"
+                  className="flex-1 py-3 bg-slate-900 hover:bg-black text-white font-bold disabled:opacity-50 transition-colors text-[10px] uppercase tracking-widest flex justify-center items-center shadow-sm"
                 >
-                  {isSubmittingExtension ? 'Submitting...' : 'Submit'}
+                  {isSubmittingExtension ? 'Submitting...' : 'Submit Request'}
                 </button>
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
       </AnimatePresence>
 
-    </>
+    </div>
   );
 }

@@ -149,10 +149,10 @@ export default function AdminDashboard() {
   const [showCropper, setShowCropper] = useState(false);
   const [selectedAnalyticsMonth, setSelectedAnalyticsMonth] = useState('2026-09');
   const [hoveredAnalyticsIdx, setHoveredAnalyticsIdx] = useState<number | null>(null);
-  const [newDevice, setNewDevice] = useState({
+  const [newDevice, setNewDevice] = useState<any>({
     name: '',
     department: 'EDL',
-    total: 1,
+    total: '',
     desc: '',
     location: 'Main Lab',
     photoUrl: '',
@@ -877,7 +877,7 @@ export default function AdminDashboard() {
         setNewDevice({
           name: '',
           department: adminDept || 'EDL',
-          total: 1,
+          total: '',
           desc: '',
           location: 'Main Lab',
           photoUrl: '',
@@ -1759,7 +1759,7 @@ export default function AdminDashboard() {
                 setNewDevice({
                   name: '',
                   department: adminDept || 'EDL',
-                  total: 1,
+                  total: '',
                   desc: '',
                   location: 'Main Lab',
                   photoUrl: '',
@@ -2498,7 +2498,7 @@ export default function AdminDashboard() {
                       min="1"
                       required
                       value={newDevice.total}
-                      onChange={e => setNewDevice({ ...newDevice, total: parseInt(e.target.value) || 1 })}
+                      onChange={e => setNewDevice({ ...newDevice, total: e.target.value === '' ? '' : parseInt(e.target.value) || '' })}
                       className="w-full bg-white border border-slate-200 focus:border-cyan-500/80 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 transition-all font-mono"
                     />
                   </div>
