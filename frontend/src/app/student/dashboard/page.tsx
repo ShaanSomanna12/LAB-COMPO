@@ -4,12 +4,11 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Space_Grotesk } from 'next/font/google';
-import ParticleNetwork from '@/components/ui/ParticleNetwork';
 import { siteConfig } from '@/config/site';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LogOut, User, Microchip, Clock, ChevronRight,
-  QrCode, Eye, FileCheck, X, Home, AlertTriangle, Zap
+  QrCode, Eye, FileCheck, X, Home, AlertTriangle, Zap, Sparkles
 } from 'lucide-react';
 import QRCode from 'react-qr-code';
 
@@ -24,11 +23,21 @@ const NAV_ITEMS = [
 ];
 
 const QUICK_ACTIONS = [
-  { id: 'hardware', label: 'Hardware\nRequest', icon: Microchip, path: '/student/checkout', gradient: 'from-cyan-500/10 to-transparent', border: 'border-white/5 hover:border-cyan-500/30', glow: 'hover:shadow-[0_8px_32px_-8px_rgba(6,182,212,0.25)]', iconColor: 'text-cyan-400', iconBg: 'bg-cyan-500/10', badge: null, desc: 'Browse and reserve lab components' },
-  { id: 'reservations', label: 'My\nReservations', icon: Clock, path: '/student/reservations', gradient: 'from-violet-500/10 to-transparent', border: 'border-white/5 hover:border-violet-500/30', glow: 'hover:shadow-[0_8px_32px_-8px_rgba(139,92,246,0.25)]', iconColor: 'text-violet-400', iconBg: 'bg-violet-500/10', badge: 'pending', desc: 'Track your active and pending orders' },
-  { id: 'no-dues', label: 'No Dues\nCertificate', icon: FileCheck, path: '/student/no-dues', gradient: 'from-emerald-500/10 to-transparent', border: 'border-white/5 hover:border-emerald-500/30', glow: 'hover:shadow-[0_8px_32px_-8px_rgba(16,185,129,0.25)]', iconColor: 'text-emerald-400', iconBg: 'bg-emerald-500/10', badge: null, desc: 'Download your lab clearance certificate' },
-  { id: 'profile', label: 'Student\nProfile', icon: User, path: '/student/profile', gradient: 'from-indigo-500/10 to-transparent', border: 'border-white/5 hover:border-indigo-500/30', glow: 'hover:shadow-[0_8px_32px_-8px_rgba(99,102,241,0.25)]', iconColor: 'text-indigo-400', iconBg: 'bg-indigo-500/10', badge: null, desc: 'View and update your student info' },
+  { id: 'hardware', label: 'Hardware\nRequest', icon: Microchip, path: '/student/checkout', gradient: 'from-sky-400 to-cyan-500', bg: 'bg-sky-50 hover:bg-sky-100/80', border: 'border-sky-200 hover:border-sky-300', iconBg: 'bg-sky-100', iconColor: 'text-sky-600', glow: 'hover:shadow-[0_8px_32px_-4px_rgba(14,165,233,0.25)]', badge: null, desc: 'Browse and reserve lab components' },
+  { id: 'reservations', label: 'My\nReservations', icon: Clock, path: '/student/reservations', gradient: 'from-violet-400 to-purple-500', bg: 'bg-violet-50 hover:bg-violet-100/80', border: 'border-violet-200 hover:border-violet-300', iconBg: 'bg-violet-100', iconColor: 'text-violet-600', glow: 'hover:shadow-[0_8px_32px_-4px_rgba(139,92,246,0.25)]', badge: 'pending', desc: 'Track your active and pending orders' },
+  { id: 'no-dues', label: 'No Dues\nCertificate', icon: FileCheck, path: '/student/no-dues', gradient: 'from-emerald-400 to-teal-500', bg: 'bg-emerald-50 hover:bg-emerald-100/80', border: 'border-emerald-200 hover:border-emerald-300', iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', glow: 'hover:shadow-[0_8px_32px_-4px_rgba(16,185,129,0.25)]', badge: null, desc: 'Download your lab clearance certificate' },
+  { id: 'profile', label: 'Student\nProfile', icon: User, path: '/student/profile', gradient: 'from-rose-400 to-pink-500', bg: 'bg-rose-50 hover:bg-rose-100/80', border: 'border-rose-200 hover:border-rose-300', iconBg: 'bg-rose-100', iconColor: 'text-rose-600', glow: 'hover:shadow-[0_8px_32px_-4px_rgba(244,63,94,0.25)]', badge: null, desc: 'View and update your student info' },
 ];
+
+function FloatingBlob({ className, delay = 0 }: { className: string; delay?: number }) {
+  return (
+    <motion.div
+      className={`absolute rounded-full blur-3xl pointer-events-none ${className}`}
+      animate={{ x: [0, 30, -20, 10, 0], y: [0, -20, 30, -10, 0], scale: [1, 1.08, 0.95, 1.05, 1] }}
+      transition={{ duration: 18, delay, repeat: Infinity, ease: 'easeInOut' }}
+    />
+  );
+}
 
 export default function StudentDashboard() {
   const router = useRouter();
@@ -66,19 +75,27 @@ export default function StudentDashboard() {
     fetchData();
   }, []);
 
+  const METRICS = [
+    { label: 'Active', value: metrics.active, color: 'text-slate-700', bg: 'bg-slate-50', border: 'border-slate-200' },
+    { label: 'Pending', value: metrics.pending, color: 'text-sky-600', bg: 'bg-sky-50', border: 'border-sky-200' },
+    { label: 'Borrowed', value: metrics.borrowed, color: 'text-violet-600', bg: 'bg-violet-50', border: 'border-violet-200' },
+    { label: 'Due Soon', value: metrics.dueSoon, color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200' },
+  ];
+
   const QrModal = (
     <AnimatePresence>
       {showQr && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-xl p-4" onClick={() => setShowQr(false)}>
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-xl p-4" onClick={() => setShowQr(false)}>
           <motion.div initial={{ scale: 0.85, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.85, y: 20 }}
-            onClick={e => e.stopPropagation()} className="relative bg-white p-8 rounded-3xl shadow-[0_0_60px_rgba(139,92,246,0.5)] flex flex-col items-center max-w-xs w-full">
-            <button onClick={() => setShowQr(false)} className="absolute top-4 right-4 p-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-600 rounded-full"><X className="w-5 h-5" /></button>
-            <h3 className={`${spaceGrotesk.className} text-2xl font-black text-black mb-1`}>DIGITAL PASS</h3>
-            <p className="text-zinc-500 font-mono text-[10px] uppercase tracking-widest mb-6">Scan at Admin Desk</p>
-            <div className="bg-white p-3 border-4 border-dashed border-violet-400/40 rounded-2xl"><QRCode value={profile?.usn || 'PENDING'} size={200} level="H" fgColor="#000000" bgColor="#ffffff" /></div>
-            <div className="mt-6 pt-5 border-t border-zinc-200 w-full text-center">
-              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Student USN</p>
+            onClick={e => e.stopPropagation()} className="relative bg-white p-8 rounded-3xl shadow-2xl border border-violet-100 flex flex-col items-center max-w-xs w-full">
+            <button onClick={() => setShowQr(false)} className="absolute top-4 right-4 p-2 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-full"><X className="w-5 h-5" /></button>
+            <div className="w-12 h-12 bg-violet-100 rounded-2xl flex items-center justify-center mb-3"><QrCode className="w-6 h-6 text-violet-600" /></div>
+            <h3 className={`${spaceGrotesk.className} text-2xl font-black text-slate-900 mb-1`}>DIGITAL PASS</h3>
+            <p className="text-slate-400 font-mono text-[10px] uppercase tracking-widest mb-6">Scan at Admin Desk</p>
+            <div className="bg-white p-3 border-2 border-dashed border-violet-200 rounded-2xl"><QRCode value={profile?.usn || 'PENDING'} size={200} level="H" fgColor="#1e1b4b" bgColor="#ffffff" /></div>
+            <div className="mt-6 pt-5 border-t border-slate-100 w-full text-center">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Student USN</p>
               <p className="font-mono text-xl font-bold text-violet-600">{profile?.usn || 'N/A'}</p>
             </div>
           </motion.div>
@@ -88,29 +105,30 @@ export default function StudentDashboard() {
   );
 
   const LabIdCard = ({ size }: { size: 'sm' | 'lg' }) => (
-    <div className="relative bg-zinc-900/60 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden" style={{ padding: size === 'lg' ? '1.25rem' : '1rem' }}>
-      {size === 'lg' && <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-4">Digital Lab ID</p>}
+    <div className="relative bg-white/80 backdrop-blur-xl border border-slate-200 rounded-2xl overflow-hidden shadow-sm" style={{ padding: size === 'lg' ? '1.25rem' : '1rem' }}>
+      <div className="absolute inset-0 bg-gradient-to-br from-violet-50/50 via-transparent to-sky-50/50 pointer-events-none" />
+      {size === 'lg' && <p className="relative text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Digital Lab ID</p>}
       <div className={`relative z-10 ${size === 'lg' ? 'flex flex-col items-center' : 'flex items-center gap-4'}`}>
-        <div className={`relative bg-white rounded-xl p-2 overflow-hidden border-2 border-zinc-700 ${size === 'lg' ? 'mb-4' : 'shrink-0'}`}>
-          <div className={`${size === 'lg' ? 'blur-md opacity-50' : 'blur-md opacity-50'}`}><QRCode value={profile?.usn || 'PENDING'} size={size === 'lg' ? 100 : 72} level="M" fgColor="#000" bgColor="#fff" /></div>
+        <div className={`relative bg-white rounded-xl p-2 overflow-hidden border-2 border-slate-100 shadow-sm ${size === 'lg' ? 'mb-4' : 'shrink-0'}`}>
+          <div className="blur-md opacity-40"><QRCode value={profile?.usn || 'PENDING'} size={size === 'lg' ? 100 : 72} level="M" fgColor="#1e1b4b" bgColor="#fff" /></div>
           <div className="absolute inset-0 flex items-center justify-center">
-            <button onClick={() => setShowQr(true)} className="flex items-center gap-1 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-full transition-all active:scale-95"><Eye className="w-3 h-3" /> Show</button>
+            <button onClick={() => setShowQr(true)} className="flex items-center gap-1 bg-violet-600 hover:bg-violet-700 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-full transition-all active:scale-95 shadow-md"><Eye className="w-3 h-3" /> Show</button>
           </div>
         </div>
         <div className={size === 'lg' ? 'text-center' : 'flex-1 min-w-0'}>
           <div className={`flex items-center gap-1.5 mb-0.5 ${size === 'lg' ? 'justify-center' : ''}`}>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Active</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Active</span>
           </div>
-          <p className={`font-bold text-white ${size === 'sm' ? 'text-base truncate' : 'text-base'}`}>{profile?.name || 'Loading...'}</p>
-          <p className="font-mono text-sm text-cyan-400 font-bold">{profile?.usn || '—'}</p>
-          <p className="text-[11px] text-zinc-400 mt-0.5">{profile?.department}{profile?.section && ` · ${profile.section}`}</p>
+          <p className={`font-bold text-slate-800 ${size === 'sm' ? 'text-base truncate' : 'text-base'}`}>{profile?.name || 'Loading...'}</p>
+          <p className="font-mono text-sm text-violet-600 font-bold">{profile?.usn || '---'}</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">{profile?.department}{profile?.section && ` - ${profile.section}`}</p>
         </div>
-        {size === 'sm' && <div className="shrink-0 w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center"><QrCode className="w-4 h-4 text-zinc-300" /></div>}
+        {size === 'sm' && <div className="shrink-0 w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center"><QrCode className="w-4 h-4 text-slate-400" /></div>}
       </div>
-      <div className="relative z-10 mt-3 pt-3 border-t border-white/8 flex items-center gap-2">
-        <div className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center shrink-0"><Zap className="w-3 h-3 text-zinc-400" /></div>
-        <p className="text-[11px] text-zinc-400 leading-tight">Tap <span className="font-bold text-white">Show</span> and present your QR to the admin.</p>
+      <div className="relative z-10 mt-3 pt-3 border-t border-slate-100 flex items-center gap-2">
+        <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center shrink-0"><Zap className="w-3 h-3 text-violet-500" /></div>
+        <p className="text-[11px] text-slate-500 leading-tight">Tap <span className="font-bold text-slate-700">Show</span> and present your QR to the admin.</p>
       </div>
     </div>
   );
@@ -118,29 +136,30 @@ export default function StudentDashboard() {
   return (
     <>
       {QrModal}
-      <div className={`${spaceGrotesk.className} min-h-screen bg-[#020617] text-zinc-100 overflow-x-hidden selection:bg-cyan-500/30`}>
-        <div className="fixed inset-0 pointer-events-none">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[120vw] h-[40vh] bg-gradient-to-b from-indigo-900/10 to-transparent" />
-          <div className="absolute top-[-20%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-cyan-600/5 blur-[120px]" />
-          <div className="absolute bottom-[0%] left-[-15%] w-[60vw] h-[60vw] rounded-full bg-violet-600/5 blur-[120px]" />
+      <div className={`${spaceGrotesk.className} min-h-screen bg-gradient-to-br from-slate-50 via-white to-violet-50/40 text-slate-800 overflow-x-hidden selection:bg-violet-200`}>
+        <div className="fixed inset-0 pointer-events-none overflow-hidden">
+          <FloatingBlob className="top-[-10%] left-[-5%] w-[45vw] h-[45vw] bg-violet-200/30" delay={0} />
+          <FloatingBlob className="bottom-[-10%] right-[-5%] w-[40vw] h-[40vw] bg-sky-200/25" delay={4} />
+          <FloatingBlob className="top-[40%] left-[50%] w-[28vw] h-[28vw] bg-rose-100/20" delay={8} />
+          <div className="absolute inset-0 opacity-[0.025]" style={{ backgroundImage: 'radial-gradient(#6366f1 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
         </div>
-        <ParticleNetwork />
 
-        {/* ── DESKTOP SIDEBAR ── */}
-        <aside className="hidden lg:flex fixed top-0 left-0 h-full w-64 z-50 flex-col bg-[#020617]/95 backdrop-blur-2xl border-r border-white/8">
-          <div className="flex items-center gap-3 px-6 py-5 border-b border-white/8">
-            <img src={siteConfig.logoUrl} alt="Logo" className="w-9 h-9 object-contain" />
+        <aside className="hidden lg:flex fixed top-0 left-0 h-full w-64 z-50 flex-col bg-white/85 backdrop-blur-2xl border-r border-slate-200/80 shadow-sm">
+          <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-100">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-md">
+              <img src={siteConfig.logoUrl} alt="Logo" className="w-6 h-6 object-contain brightness-0 invert" />
+            </div>
             <div>
-              <p className="text-sm font-black text-white tracking-wide">{siteConfig.appName}</p>
-              <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">Student Portal</p>
+              <p className="text-sm font-black text-slate-800 tracking-wide">{siteConfig.appName}</p>
+              <p className="text-[10px] text-slate-400 font-mono uppercase tracking-widest">Student Portal</p>
             </div>
           </div>
           {profile && (
-            <div className="mx-4 mt-4 p-3 bg-white/5 border border-white/8 rounded-2xl">
-              <div className="flex items-center gap-2 mb-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /><span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Active</span></div>
-              <p className="text-sm font-bold text-white truncate">{profile.name}</p>
-              <p className="font-mono text-xs text-cyan-400 font-bold">{profile.usn}</p>
-              <p className="text-[11px] text-zinc-500 mt-0.5">{profile.department}{profile.section && ` · Sec ${profile.section}`}</p>
+            <div className="mx-4 mt-4 p-3 bg-gradient-to-br from-violet-50 to-sky-50/50 border border-violet-100 rounded-2xl">
+              <div className="flex items-center gap-2 mb-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /><span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Active</span></div>
+              <p className="text-sm font-bold text-slate-800 truncate">{profile.name}</p>
+              <p className="font-mono text-xs text-violet-600 font-bold">{profile.usn}</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">{profile.department}{profile.section && ` - Sec ${profile.section}`}</p>
             </div>
           )}
           <nav className="flex-1 px-3 py-4 flex flex-col gap-1">
@@ -148,52 +167,62 @@ export default function StudentDashboard() {
               const Icon = item.icon; const active = pathname === item.path;
               return (
                 <button key={item.path} onClick={() => router.push(item.path)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 text-left ${active ? 'bg-white/10 text-white border border-white/20' : 'text-zinc-400 hover:bg-white/5 hover:text-white border border-transparent'}`}>
-                  <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-zinc-300' : ''}`} />{item.label}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 text-left ${active ? 'bg-violet-600 text-white shadow-[0_4px_14px_-2px_rgba(124,58,237,0.35)]' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}>
+                  <Icon className="w-5 h-5 shrink-0" />{item.label}
                 </button>
               );
             })}
           </nav>
-          <div className="p-4 border-t border-white/8">
-            <button onClick={async () => { await supabase.auth.signOut(); router.push('/'); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all">
+          <div className="p-4 border-t border-slate-100">
+            <button onClick={async () => { await supabase.auth.signOut(); router.push('/'); }}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-rose-500 hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-all">
               <LogOut className="w-5 h-5" />Sign Out
             </button>
           </div>
         </aside>
 
-        {/* ── MOBILE TOP BAR ── */}
-        <header className="lg:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 bg-[#020617]/85 backdrop-blur-xl border-b border-white/5"
+        <header className="lg:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 bg-white/85 backdrop-blur-xl border-b border-slate-200/80 shadow-sm"
           style={{ paddingTop: 'calc(0.625rem + env(safe-area-inset-top, 0px))', paddingBottom: '0.625rem' }}>
-          <div className="flex items-center gap-2.5"><img src={siteConfig.logoUrl} alt="Logo" className="w-8 h-8 object-contain" /><span className="text-base font-bold tracking-wider text-white">{siteConfig.appName}</span></div>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-sm">
+              <img src={siteConfig.logoUrl} alt="Logo" className="w-5 h-5 object-contain brightness-0 invert" />
+            </div>
+            <span className="text-base font-bold tracking-tight text-slate-800">{siteConfig.appName}</span>
+          </div>
           <div className="flex items-center gap-2">
-            {profile && <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs text-zinc-300"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />{profile.usn}</div>}
-            <button onClick={async () => { await supabase.auth.signOut(); router.push('/'); }} className="p-2 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-colors"><LogOut className="w-4 h-4" /></button>
+            {profile && <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-50 border border-violet-100 text-xs text-violet-600 font-bold"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />{profile.usn}</div>}
+            <button onClick={async () => { await supabase.auth.signOut(); router.push('/'); }} className="p-2 rounded-full bg-rose-50 border border-rose-100 text-rose-500 hover:bg-rose-100 transition-colors"><LogOut className="w-4 h-4" /></button>
           </div>
         </header>
 
-        {/* ── MAIN ── */}
         <main className="relative z-10 lg:ml-64" style={{ paddingTop: 'calc(3.75rem + env(safe-area-inset-top, 0px))', paddingBottom: 'calc(5.5rem + env(safe-area-inset-bottom, 0px))' }}>
           <div className="max-w-5xl mx-auto px-4 lg:px-8 lg:pt-8 lg:pb-12">
             <div className="lg:grid lg:grid-cols-3 lg:gap-8">
-
-              {/* Left column */}
               <div className="lg:col-span-2">
-                <motion.section initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} className="mt-5 mb-6 lg:mt-0">
-                  <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest mb-1">{new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' })}</p>
-                  <h1 className="text-[1.75rem] lg:text-4xl font-black text-white tracking-tight leading-tight">
-                    Hello, {profile?.name?.split(' ')[0] || 'Student'}
+                <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="mt-5 mb-6 lg:mt-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <motion.div animate={{ rotate: [0, 15, -10, 15, 0] }} transition={{ duration: 1.5, delay: 0.8, repeat: Infinity, repeatDelay: 5 }}>
+                      <Sparkles className="w-4 h-4 text-violet-400" />
+                    </motion.div>
+                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' })}</p>
+                  </div>
+                  <h1 className="text-[1.75rem] lg:text-4xl font-black text-slate-900 tracking-tight leading-tight">
+                    Hello, <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-indigo-500">{profile?.name?.split(' ')[0] || 'Student'}</span>
                   </h1>
-                  {profile && <p className="text-sm text-zinc-400 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1"><span className="font-mono bg-white/5 px-2 py-0.5 rounded text-cyan-200 border border-white/10 text-xs">{profile.usn}</span><span className="text-xs">{profile.department}{profile.section && ` · Sec ${profile.section}`}</span></p>}
+                  {profile && <p className="text-sm text-slate-400 mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="font-mono bg-violet-50 border border-violet-100 px-2 py-0.5 rounded-lg text-violet-600 text-xs font-bold">{profile.usn}</span>
+                    <span className="text-xs text-slate-400">{profile.department}{profile.section && ` - Sec ${profile.section}`}</span>
+                  </p>}
                 </motion.section>
 
                 <AnimatePresence>
                   {urgentReturn && (
                     <motion.div initial={{ opacity: 0, height: 0, marginBottom: 0 }} animate={{ opacity: 1, height: 'auto', marginBottom: '1rem' }} exit={{ opacity: 0, height: 0, marginBottom: 0 }}>
-                      <button onClick={() => router.push('/student/reservations')} className="w-full flex items-center gap-3 bg-rose-500/10 border border-rose-500/30 rounded-2xl p-3.5 active:scale-[0.98] transition-transform text-left">
-                        <div className="w-9 h-9 rounded-xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center shrink-0"><AlertTriangle className="w-4 h-4 text-rose-400 animate-pulse" /></div>
+                      <button onClick={() => router.push('/student/reservations')} className="w-full flex items-center gap-3 bg-rose-50 border border-rose-200 rounded-2xl p-3.5 active:scale-[0.98] transition-all hover:bg-rose-100 text-left shadow-sm">
+                        <div className="w-9 h-9 rounded-xl bg-rose-100 border border-rose-200 flex items-center justify-center shrink-0"><AlertTriangle className="w-4 h-4 text-rose-500 animate-pulse" /></div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Return {urgentReturn.diffDays <= 0 ? 'Overdue!' : urgentReturn.diffDays === 1 ? 'Due Tomorrow' : `Due in ${urgentReturn.diffDays} Days`}</p>
-                          <p className="text-sm font-bold text-white truncate">{urgentReturn.components?.name || 'Component'}</p>
+                          <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest">{urgentReturn.diffDays <= 0 ? 'Return Overdue!' : urgentReturn.diffDays === 1 ? 'Due Tomorrow' : `Due in ${urgentReturn.diffDays} Days`}</p>
+                          <p className="text-sm font-bold text-slate-800 truncate">{urgentReturn.components?.name || 'Component'}</p>
                         </div>
                         <ChevronRight className="w-4 h-4 text-rose-400 shrink-0" />
                       </button>
@@ -202,112 +231,111 @@ export default function StudentDashboard() {
                 </AnimatePresence>
 
                 <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mb-6 grid grid-cols-4 gap-2 lg:gap-3">
-                  {[{ label: 'Active', value: metrics.active, color: 'text-white' }, { label: 'Pending', value: metrics.pending, color: 'text-cyan-400' }, { label: 'Borrowed', value: metrics.borrowed, color: 'text-violet-400' }, { label: 'Due Soon', value: metrics.dueSoon, color: 'text-rose-400' }].map((m, i) => (
-                    <motion.div key={m.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 + i * 0.04 }} className="bg-zinc-900/60 border border-white/8 rounded-2xl py-3 lg:py-4 px-1 flex flex-col items-center justify-center text-center backdrop-blur-xl">
+                  {METRICS.map((m, i) => (
+                    <motion.div key={m.label}
+                      initial={{ opacity: 0, y: 14, scale: 0.93 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ delay: 0.12 + i * 0.07, type: 'spring', stiffness: 400, damping: 24 }}
+                      className={`${m.bg} border ${m.border} rounded-2xl py-3 lg:py-4 px-1 flex flex-col items-center justify-center text-center shadow-sm`}>
                       <span className={`text-xl lg:text-2xl font-black ${m.color} leading-none`}>{m.value}</span>
-                      <span className="text-[8px] lg:text-[10px] font-bold text-zinc-500 uppercase tracking-wide mt-1 leading-tight">{m.label}</span>
+                      <span className="text-[8px] lg:text-[10px] font-bold text-slate-400 uppercase tracking-wide mt-1 leading-tight">{m.label}</span>
                     </motion.div>
                   ))}
                 </motion.section>
 
-                {/* Mobile-only Lab ID card — above actions */}
                 <div className="lg:hidden mb-5">
-                  <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-3">Digital Lab ID</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Digital Lab ID</p>
                   <LabIdCard size="sm" />
                 </div>
 
                 <section className="mb-6">
-                  <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-3">Actions</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Quick Actions</p>
                   <div className="grid grid-cols-2 gap-3">
                     {QUICK_ACTIONS.map((action, i) => {
-                      const Icon = action.icon; const badgeCount = action.badge === 'pending' ? metrics.pending : 0;
+                      const Icon = action.icon;
+                      const badgeCount = action.badge === 'pending' ? metrics.pending : 0;
                       return (
-                        <motion.button key={action.id} initial={{ opacity: 0, scale: 0.93 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.18 + i * 0.07 }} onClick={() => router.push(action.path)}
-                          className={`relative group bg-zinc-900/40 hover:bg-zinc-900/60 backdrop-blur-xl border ${action.border} ${action.glow} rounded-2xl p-4 lg:p-5 flex flex-col items-start text-left transition-all duration-500 active:scale-95 overflow-hidden`}>
-                          <div className={`absolute inset-0 bg-gradient-to-br ${action.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
-                          <div className="absolute inset-0 bg-white/0 group-hover:bg-white/[0.02] transition-colors duration-500" />
-                          {badgeCount > 0 && <span className="absolute top-3 right-3 min-w-[20px] h-5 px-1.5 bg-rose-500/90 text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-[0_0_12px_rgba(244,63,94,0.5)] z-10">{badgeCount}</span>}
-                          <div className={`w-11 h-11 ${action.iconBg} rounded-xl flex items-center justify-center mb-3 border border-white/5 group-hover:scale-110 group-hover:rotate-3 transition-transform duration-500 z-10`}><Icon className={`w-5 h-5 ${action.iconColor}`} /></div>
-                          <p className="text-sm font-bold text-white leading-snug whitespace-pre-line z-10">{action.label}</p>
-                          <p className="text-[11px] text-zinc-500 mt-1 leading-snug z-10 group-hover:text-zinc-400 transition-colors">{action.desc}</p>
-                          <div className="mt-2 w-6 h-6 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-white/10 transition-colors z-10"><ChevronRight className={`w-3 h-3 text-zinc-500 group-hover:${action.iconColor} transition-colors`} /></div>
+                        <motion.button key={action.id}
+                          initial={{ opacity: 0, scale: 0.92, y: 12 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          transition={{ delay: 0.2 + i * 0.09, type: 'spring', stiffness: 350, damping: 26 }}
+                          whileHover={{ y: -3, transition: { duration: 0.2 } }}
+                          whileTap={{ scale: 0.97 }}
+                          onClick={() => router.push(action.path)}
+                          className={`relative group ${action.bg} border ${action.border} ${action.glow} rounded-2xl p-4 lg:p-5 flex flex-col items-start text-left transition-all duration-300 overflow-hidden shadow-sm`}>
+                          <div className={`absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r ${action.gradient} opacity-70`} />
+                          {badgeCount > 0 && <span className="absolute top-3 right-3 min-w-[20px] h-5 px-1.5 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-md z-10">{badgeCount}</span>}
+                          <div className={`w-11 h-11 ${action.iconBg} rounded-xl flex items-center justify-center mb-3 border border-white shadow-sm group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 z-10`}>
+                            <Icon className={`w-5 h-5 ${action.iconColor}`} />
+                          </div>
+                          <p className="text-sm font-bold text-slate-800 leading-snug whitespace-pre-line z-10">{action.label}</p>
+                          <p className="text-[11px] text-slate-400 mt-1 leading-snug z-10 group-hover:text-slate-500 transition-colors">{action.desc}</p>
+                          <div className="mt-2 w-6 h-6 rounded-full bg-white border border-slate-200 flex items-center justify-center z-10 shadow-sm group-hover:shadow-md transition-all">
+                            <ChevronRight className={`w-3 h-3 ${action.iconColor}`} />
+                          </div>
                         </motion.button>
                       );
                     })}
                   </div>
                 </section>
-
-
               </div>
 
-              {/* Right column (desktop only) */}
               <div className="hidden lg:flex lg:flex-col lg:gap-5">
-
-                {/* Profile Card — top */}
                 {profile && (
                   <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
-                    className="bg-zinc-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-5 relative overflow-hidden group">
-                    {/* Subtle gradient accent */}
-                    <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-zinc-500/0 via-zinc-400/20 to-zinc-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
-
-                    <div className="flex items-center justify-between mb-5">
-                      <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Student Profile</p>
-                      <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider">Active</span>
+                    className="bg-white border border-slate-200 rounded-2xl p-5 relative overflow-hidden shadow-sm">
+                    <div className="absolute inset-0 bg-gradient-to-br from-violet-50/40 via-transparent to-sky-50/40 pointer-events-none" />
+                    <div className="relative flex items-center justify-between mb-5">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Student Profile</p>
+                      <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider">Active</span>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-4 mb-5">
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-white/10 to-white/5 border border-white/10 flex items-center justify-center shrink-0 shadow-inner">
-                        <span className="text-lg font-bold text-zinc-200">{profile.name.charAt(0)}</span>
+                    <div className="relative flex items-center gap-4 mb-5">
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-md">
+                        <span className="text-lg font-bold text-white">{profile.name.charAt(0)}</span>
                       </div>
                       <div className="min-w-0">
-                        <p className="text-base font-bold text-white truncate leading-tight">{profile.name}</p>
-                        <p className="font-mono text-xs text-zinc-400 mt-1">{profile.usn}</p>
+                        <p className="text-base font-bold text-slate-800 truncate leading-tight">{profile.name}</p>
+                        <p className="font-mono text-xs text-violet-600 mt-1 font-bold">{profile.usn}</p>
                       </div>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-3 mb-5">
-                      <div className="bg-white/[0.03] border border-white/5 rounded-xl p-3 flex flex-col gap-1">
-                        <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Department</span>
-                        <span className="text-xs text-zinc-200 font-semibold truncate">{profile.department}</span>
+                    <div className="relative grid grid-cols-2 gap-3 mb-5">
+                      <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 flex flex-col gap-1">
+                        <span className="text-[9px] text-slate-400 uppercase tracking-widest font-bold">Department</span>
+                        <span className="text-xs text-slate-700 font-semibold truncate">{profile.department}</span>
                       </div>
-                      <div className="bg-white/[0.03] border border-white/5 rounded-xl p-3 flex flex-col gap-1">
-                        <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Year / Sec</span>
-                        <span className="text-xs text-zinc-200 font-semibold truncate">
-                          {profile.branch || 'N/A'}{profile.section && ` — ${profile.section}`}
-                        </span>
+                      <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 flex flex-col gap-1">
+                        <span className="text-[9px] text-slate-400 uppercase tracking-widest font-bold">Year / Sec</span>
+                        <span className="text-xs text-slate-700 font-semibold truncate">{profile.branch || 'N/A'}{profile.section && ` - ${profile.section}`}</span>
                       </div>
                     </div>
-
                     <button onClick={() => router.push('/student/profile')}
-                      className="w-full py-2.5 flex items-center justify-center gap-2 text-xs font-bold text-zinc-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 rounded-xl transition-all">
+                      className="relative w-full py-2.5 flex items-center justify-center gap-2 text-xs font-bold text-violet-600 hover:text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-100 hover:border-violet-200 rounded-xl transition-all">
                       View Full Profile <ChevronRight className="w-3.5 h-3.5" />
                     </button>
                   </motion.div>
                 )}
-
-                {/* Digital Lab ID — bottom */}
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
                   <LabIdCard size="lg" />
                 </motion.div>
               </div>
-
-
             </div>
           </div>
         </main>
 
-        {/* ── MOBILE BOTTOM NAV ── */}
-        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#020617]/92 backdrop-blur-2xl border-t border-white/8 flex items-stretch" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-2xl border-t border-slate-200 flex items-stretch shadow-[0_-4px_20px_-4px_rgba(0,0,0,0.07)]"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
           {NAV_ITEMS.map(item => {
             const Icon = item.icon; const active = pathname === item.path;
             return (
-              <button key={item.path} onClick={() => router.push(item.path)} className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 transition-all duration-200 relative ${active ? 'text-violet-400' : 'text-zinc-500 hover:text-zinc-300 active:text-zinc-200'}`}>
-                {active && <motion.div layoutId="bottom-nav-pill" className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-gradient-to-r from-violet-400 to-fuchsia-400 rounded-full" transition={{ type: 'spring', stiffness: 500, damping: 35 }} />}
-                <Icon className={`w-5 h-5 transition-transform duration-200 ${active ? 'scale-110' : ''}`} />
-                <span className="text-[9px] font-bold uppercase tracking-wide leading-none">{item.label}</span>
+              <button key={item.path} onClick={() => router.push(item.path)}
+                className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 transition-all duration-200 relative ${active ? 'text-violet-600' : 'text-slate-400 hover:text-slate-600'}`}>
+                {active && <motion.div layoutId="bottom-nav-pill" className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full" transition={{ type: 'spring', stiffness: 500, damping: 35 }} />}
+                {active && <motion.div className="absolute inset-0 bg-violet-50/70" layoutId="bottom-nav-bg" transition={{ type: 'spring', stiffness: 500, damping: 35 }} />}
+                <Icon className={`w-5 h-5 transition-transform duration-200 relative z-10 ${active ? 'scale-110' : ''}`} />
+                <span className="text-[9px] font-bold uppercase tracking-wide leading-none relative z-10">{item.label}</span>
               </button>
             );
           })}
