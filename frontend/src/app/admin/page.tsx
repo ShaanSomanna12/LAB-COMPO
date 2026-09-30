@@ -1577,11 +1577,7 @@ export default function AdminDashboard() {
                                 </button>
                               )}
                               {req.status === 'APPROVED' && (
-                                req.valueTier === 'LOW' ? (
-                                  <button onClick={() => handleCheckout(req.id)} className="px-4 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-black rounded-lg text-[10px] font-black transition-colors shadow-[0_0_10px_rgba(6,182,212,0.3)]">Confirm Handover</button>
-                                ) : (
-                                  <button disabled className="px-4 py-1.5 bg-slate-100/50 text-slate-500 rounded-lg text-[10px] font-bold cursor-not-allowed border border-slate-200">Awaiting Photo</button>
-                                )
+                                <button onClick={() => handleCheckout(req.id)} className="px-4 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-black rounded-lg text-[10px] font-black transition-colors shadow-[0_0_10px_rgba(6,182,212,0.3)]">Confirm Handover</button>
                               )}
                               {req.status === 'READY_FOR_PICKUP' && (
                                 <button onClick={() => handleCheckout(req.id)} className="px-4 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-black rounded-lg text-[10px] font-black transition-colors shadow-[0_0_10px_rgba(6,182,212,0.3)]">Confirm Handover</button>
