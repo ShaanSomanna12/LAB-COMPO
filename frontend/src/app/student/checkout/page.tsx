@@ -388,20 +388,20 @@ export default function StudentCheckout() {
             <div className="flex-1 flex flex-col gap-4">
               
               {/* Top Bar (Flipkart Style Search + Cart) */}
-              <div className="bg-white border border-slate-300 p-3 flex items-center gap-3 sticky top-0 z-20 shadow-sm">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <div className="flex items-center gap-3 sticky top-0 z-20 -mt-2">
+                <div className="relative flex-1 sm:max-w-md">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                   <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                    placeholder="Search for components..." className="w-full pl-9 pr-4 py-2 sm:py-2.5 bg-slate-50 border border-slate-300 text-sm focus:outline-none focus:border-teal-700 transition-colors text-slate-900 rounded-none" />
+                    placeholder="Search for components..." className="w-full pl-9 pr-4 py-1.5 bg-white border border-slate-300 text-xs focus:outline-none focus:border-teal-700 transition-colors text-slate-900 rounded-md shadow-sm" />
                 </div>
                 
                 <button 
                   onClick={() => setIsMobileCartOpen(!isMobileCartOpen)}
-                  className="lg:hidden relative p-2 text-slate-600 hover:text-teal-700 transition-colors border border-transparent hover:bg-slate-50"
+                  className="lg:hidden relative p-1.5 bg-white border border-slate-300 text-slate-600 hover:text-teal-700 transition-colors rounded-md shadow-sm"
                 >
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
                   {cart.length > 0 && (
-                    <span className="absolute top-0 right-0 bg-teal-700 text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
+                    <span className="absolute -top-1 -right-1 bg-teal-700 text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
                       {cart.length}
                     </span>
                   )}
