@@ -318,7 +318,7 @@ export default function StudentCheckout() {
           <div className="absolute bottom-0 left-0 w-32 h-0.5 bg-teal-700" />
           <div>
             <button onClick={() => step === 'department' ? router.push('/student/dashboard') : setStep(step === 'form' ? 'components' : 'department')}
-              className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-teal-700 transition-colors mb-4 uppercase tracking-widest">
+              className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-teal-700 transition-colors mb-4 uppercase tracking-widest py-2 pr-4 -ml-2 pl-2">
               <ArrowLeft className="w-4 h-4" /> {step === 'department' ? 'Back to Dashboard' : 'Go Back'}
             </button>
             <div className="flex items-center gap-4">
@@ -497,11 +497,11 @@ export default function StudentCheckout() {
                           <p className="text-[11px] font-bold text-slate-900 line-clamp-2 leading-tight mb-2 uppercase tracking-tight">{item.name}</p>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center bg-white border border-slate-300">
-                              <button onClick={() => handleUpdateQty(item.id, -1)} className="w-6 h-6 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors"><Minus className="w-3 h-3" /></button>
+                              <button onClick={() => handleUpdateQty(item.id, -1)} className="w-8 h-8 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors"><Minus className="w-3.5 h-3.5" /></button>
                               <span className="text-[10px] font-bold font-mono w-6 text-center border-l border-r border-slate-300">{item.requestedQty}</span>
-                              <button onClick={() => handleUpdateQty(item.id, 1)} className="w-6 h-6 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors"><Plus className="w-3 h-3" /></button>
+                              <button onClick={() => handleUpdateQty(item.id, 1)} className="w-8 h-8 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors"><Plus className="w-3.5 h-3.5" /></button>
                             </div>
-                            <button onClick={() => handleRemoveFromCart(item.id)} className="text-slate-400 hover:text-red-700 p-1 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => handleRemoveFromCart(item.id)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-700 transition-colors"><Trash2 className="w-4 h-4" /></button>
                           </div>
                         </div>
                       ))}

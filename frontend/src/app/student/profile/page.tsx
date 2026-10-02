@@ -198,7 +198,7 @@ export default function MyProfile() {
           <div className="absolute bottom-0 left-0 w-32 h-0.5 bg-teal-700" />
           <div>
             <button onClick={() => router.push('/student/dashboard')}
-              className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-teal-700 transition-colors mb-4 uppercase tracking-widest">
+              className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-teal-700 transition-colors mb-4 uppercase tracking-widest py-2 pr-4 -ml-2 pl-2">
               <ArrowLeft className="w-4 h-4" /> Back to Dashboard
             </button>
             <div className="flex items-center gap-4">
