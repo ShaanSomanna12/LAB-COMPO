@@ -307,7 +307,7 @@ export default function AdminDashboard() {
       const data = await res.json();
       setRequests(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error('Failed to fetch requests:', err);
+      console.warn('Failed to fetch requests:', err);
     }
   };
 
@@ -352,7 +352,7 @@ export default function AdminDashboard() {
       .then(res => res.json())
       .then(data => setInventory(Array.isArray(data) ? data : []))
       .catch(err => {
-        console.error('Failed to fetch inventory:', err);
+        console.warn('Failed to fetch inventory:', err);
         setInventory([]);
       });
 

@@ -161,7 +161,7 @@ export default function RequisitionLetter({
           </p>
           <p>
             <strong>Undertaking:</strong> I hereby declare that I will bear full responsibility for the components issued to me. 
-            In the event of any damage, loss, or delay in returning the components, I agree to pay the standard penalty fees as per department regulations or replace the component.
+            In the event of any damage, loss, or delay in returning the components, I agree to pay the standard penalty fees as per department regulations or replace the specific component on time. I understand that failing to do so may lead to issues in my hallticket issuing.
           </p>
           <p>Thanking you,</p>
         </div>

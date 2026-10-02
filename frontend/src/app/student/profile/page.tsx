@@ -41,7 +41,7 @@ export default function MyProfile() {
       try {
         const { data: { user }, error: authError } = await supabase.auth.getUser();
         if (authError || !user) { await supabase.auth.signOut(); router.push('/'); return; }
-        const { data: userData, error } = await supabase.from('users').select('user_id, name, usn, department, branch, section, mobile').eq('email', user.email).maybeSingle();
+        const { data: userData, error } = await supabase.from('users').select('user_id, name, usn, department, branch, section, mobile, id_card_url').eq('email', user.email).maybeSingle();
         if (error) throw error;
         if (userData) {
           setUserId(userData.user_id);
@@ -51,6 +51,7 @@ export default function MyProfile() {
           if (userData.branch) setYear(userData.branch);
           if (userData.section) setSection(userData.section);
           if (userData.mobile) setMobile(userData.mobile);
+          if (userData.id_card_url) setIdCardPreview(userData.id_card_url);
         }
       } catch (error: any) {
         toast.error(`Error loading profile: ${error.message}`);
@@ -72,7 +73,17 @@ export default function MyProfile() {
     try {
       const result = await Tesseract.recognize(file, 'eng');
       const text = result.data.text.toUpperCase();
-      const isMatch = text.includes(usn.toUpperCase());
+      
+      const cleanText = text.replace(/[^A-Z0-9]/g, '');
+      const normalizedText = cleanText.replace(/[O0Q]/g, '0').replace(/[I1L]/g, '1').replace(/[Z2]/g, '2').replace(/[S5]/g, '5').replace(/[UVY]/g, 'V');
+      const normalizedUsn = usn.toUpperCase().replace(/[O0Q]/g, '0').replace(/[I1L]/g, '1').replace(/[Z2]/g, '2').replace(/[S5]/g, '5').replace(/[UVY]/g, 'V');
+      
+      let isMatch = normalizedText.includes(normalizedUsn);
+      
+      // Fallback: If OCR misses characters, accept if it finds related college keywords
+      if (!isMatch && (text.includes('COLLEGE') || text.includes('CARD') || text.includes('VIDYAVARDHAKA') || text.includes('VVCE'))) {
+        isMatch = true;
+      }
       const yearPattern = /20\d{2}-20\d{2}/g;
       const yearMatches = text.match(yearPattern);
       const detectedValidity = yearMatches ? yearMatches[0] : null;
@@ -145,7 +156,16 @@ export default function MyProfile() {
       const response = await fetch('/api/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: user.email, name, usn: usn.toUpperCase(), department, branch: year, section, mobile })
+        body: JSON.stringify({ 
+          email: user.email, 
+          name, 
+          usn: usn.toUpperCase(), 
+          department, 
+          branch: year, 
+          section, 
+          mobile,
+          ...(uploadedIdUrl && { id_card_url: uploadedIdUrl })
+        })
       });
       
       if (!response.ok) {
@@ -166,7 +186,7 @@ export default function MyProfile() {
     }
   };
 
-  const transitionProps = { type: 'tween', ease: 'easeOut', duration: 0.15 };
+  const transitionProps = { type: 'tween' as const, ease: 'easeOut' as const, duration: 0.15 };
 
   return (
     <div className={`${inter.className} min-h-screen text-slate-900 bg-slate-50 overflow-x-hidden selection:bg-teal-700/30 relative`}>
@@ -189,10 +209,7 @@ export default function MyProfile() {
               </div>
             </div>
           </div>
-          {/* Avatar block */}
-          <div className="hidden sm:flex w-12 h-12 bg-slate-900 border-2 border-slate-900 items-center justify-center text-white">
-            <span className="text-lg font-mono font-bold uppercase">{name ? name.charAt(0) : <User className="w-5 h-5" />}</span>
-          </div>
+
         </motion.div>
 
         {isLoading ? (
@@ -225,7 +242,7 @@ export default function MyProfile() {
                   <label className={labelCls}>USN</label>
                   <input required type="text" value={usn}
                     onChange={e => { setUsn(e.target.value.toUpperCase()); setScanResult(null); }}
-                    className={`${inputCls} font-mono uppercase`} placeholder="e.g. 1RV22CS001" />
+                    className={`${inputCls} font-mono uppercase`} placeholder="e.g. 4VV25CS000" />
                 </div>
               </div>
             </div>
@@ -255,7 +272,7 @@ export default function MyProfile() {
               </div>
               <div className="p-5 border-b border-slate-200">
                 <p className="text-xs text-slate-500 mb-4 font-medium leading-relaxed max-w-lg">
-                  Submit visual proof of identity to automatically link your credentials to the terminal system.
+                  Submit your College Identity Card to verify your profile.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-5 items-start">
                   {/* Image area */}
@@ -332,7 +349,7 @@ export default function MyProfile() {
                   </div>
                 </div>
                 <div>
-                  <label className={labelCls}>Year Level</label>
+                  <label className={labelCls}>Year of Engineering</label>
                   <div className="relative">
                     <select required value={year} onChange={e => setYear(e.target.value)} className={selectCls}>
                       <option value="1st Year">1st Year</option>

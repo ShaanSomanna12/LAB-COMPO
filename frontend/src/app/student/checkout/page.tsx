@@ -11,7 +11,8 @@ import { isWorkingDay, getWorkingDaysCount } from '@/lib/dateValidator';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronRight, ArrowLeft, Search, Plus, Minus, Trash2, 
-  Calendar, Clock, AlertCircle, Upload, CheckCircle2, ShieldCheck, User, Zap, Box, Info
+  Calendar, Clock, AlertCircle, Upload, CheckCircle2, ShieldCheck, User, Zap, Box, Info,
+  Cpu, Radio, Building2, Wrench
 } from 'lucide-react';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -34,11 +35,11 @@ interface CartItem extends InventoryItem {
 }
 
 const DEPARTMENTS = [
-  { id: 'EDL', title: 'Engineering Development LAB (InUnity)', desc: 'Core components, microcontrollers, and embedded systems.' },
-  { id: 'ECE', title: 'Electronics & Comm.', desc: 'Communication modules, signal processing tools, and RF.' },
-  { id: 'EEE', title: 'Electrical Engineering', desc: 'High-voltage testing tools, multimeters, and analyzers.' },
-  { id: 'CIVIL', title: 'Civil Engineering', desc: 'Surveying tools, structural testing, and building models.' },
-  { id: 'MECH', title: 'Mechanical Engineering', desc: 'Motors, actuators, robotics chassis, and physical tools.' }
+  { id: 'EDL', title: 'Eng. Development LAB (InUnity)', desc: 'Core components, microcontrollers, and embedded systems.', icon: Cpu, color: 'from-blue-500 to-indigo-600', shadow: 'shadow-indigo-500/20' },
+  { id: 'ECE', title: 'Electronics & Comm.', desc: 'Communication modules, signal processing tools, and RF.', icon: Radio, color: 'from-emerald-400 to-teal-600', shadow: 'shadow-teal-500/20' },
+  { id: 'EEE', title: 'Electrical Engineering', desc: 'High-voltage testing tools, multimeters, and analyzers.', icon: Zap, color: 'from-amber-400 to-orange-500', shadow: 'shadow-orange-500/20' },
+  { id: 'CIVIL', title: 'Civil Engineering', desc: 'Surveying tools, structural testing, and building models.', icon: Building2, color: 'from-stone-500 to-stone-700', shadow: 'shadow-stone-500/20' },
+  { id: 'MECH', title: 'Mechanical Engineering', desc: 'Motors, actuators, robotics chassis, and physical tools.', icon: Wrench, color: 'from-rose-500 to-red-600', shadow: 'shadow-rose-500/20' }
 ];
 
 export default function StudentCheckout() {
@@ -63,6 +64,8 @@ export default function StudentCheckout() {
   const [mobile, setMobile] = useState('');
   const [year, setYear] = useState('');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [agreedToUndertaking, setAgreedToUndertaking] = useState(false);
+  const [signatureFile, setSignatureFile] = useState<File | null>(null);
   const [minDate, setMinDate] = useState('');
   
   const [projectType, setProjectType] = useState('Course Assignment / Lab Work');
@@ -83,7 +86,7 @@ export default function StudentCheckout() {
       
       const { data: userData } = await supabase
         .from('users')
-        .select('name, usn, department, branch, section, mobile')
+        .select('name, usn, department, branch, section, mobile, id_card_url')
         .eq('email', user.email)
         .maybeSingle();
 
@@ -95,8 +98,11 @@ export default function StudentCheckout() {
         setSection(userData.section || '');
         setMobile(userData.mobile || '');
         
-        // Check if ID card was verified and saved in local storage by profile page
-        if (userData.usn) {
+        // Prioritize DB id_card_url, fallback to local storage
+        if (userData.id_card_url) {
+          setStudentIdCardUrl(userData.id_card_url);
+          setHasVerifiedProfileId(true);
+        } else if (userData.usn) {
           const cachedIdUrl = localStorage.getItem('id_card_' + userData.usn.toUpperCase());
           if (cachedIdUrl) {
             setStudentIdCardUrl(cachedIdUrl);
@@ -203,6 +209,8 @@ export default function StudentCheckout() {
     if (!hasVerifiedProfileId && !idCardFile && !studentIdCardUrl) return toast.error("Please upload your ID Card");
     if (cart.length === 0) return toast.error("Cart is empty");
     if (!agreedToTerms) return toast.error("You must agree to the Terms & Conditions");
+    if (!agreedToUndertaking) return toast.error("You must agree to the undertaking");
+    if (agreedToUndertaking && !signatureFile) return toast.error("Please upload your signature for the undertaking");
     
     if (!isWorkingDay(date)) return toast.error('Pickup date must be a working day (Mon-Sat)');
 
@@ -218,6 +226,15 @@ export default function StudentCheckout() {
         if (uploadError) throw new Error("Failed to upload ID Card");
         const { data: publicUrlData } = supabase.storage.from('id_cards').getPublicUrl(filePath);
         finalIdCardUrl = publicUrlData.publicUrl;
+      }
+
+      let finalSignatureUrl = null;
+      if (signatureFile) {
+        const sigPath = `signatures/${usn}-${Date.now()}.png`;
+        const { error: sigUploadError } = await supabase.storage.from('id_cards').upload(sigPath, signatureFile);
+        if (sigUploadError) throw new Error("Failed to upload Signature");
+        const { data: sigUrlData } = supabase.storage.from('id_cards').getPublicUrl(sigPath);
+        finalSignatureUrl = sigUrlData.publicUrl;
       }
 
       // Check max value limit
@@ -244,6 +261,7 @@ export default function StudentCheckout() {
         duration: getWorkingDaysCount(date, returnDate),
         status: initialStatus,
         id_card_url: finalIdCardUrl,
+        signature_url: finalSignatureUrl,
         project_title: projectTitle || projectType,
         project_description: projectPurpose,
         is_team_project: false
@@ -310,22 +328,46 @@ export default function StudentCheckout() {
 
         {/* STEP 1: Select Department */}
         {step === 'department' && (
-          <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={transitionProps} className="grid grid-cols-1 gap-6 max-w-4xl mx-auto">
-            {DEPARTMENTS.map((dept) => (
-              <button key={dept.id} onClick={() => loadInventory(dept.id)}
-                className="group relative text-left p-8 md:p-10 bg-white border border-slate-300 hover:border-teal-700 transition-all shadow-sm hover:shadow-md hover:-translate-y-1 overflow-hidden">
-                <div className="absolute top-0 left-0 bottom-0 w-2 bg-slate-200 group-hover:bg-teal-700 transition-colors" />
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 pl-2">
-                  <div>
-                    <h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight">{dept.title}</h3>
-                    <p className="text-sm text-slate-500 leading-relaxed max-w-2xl">{dept.desc}</p>
+          <motion.div 
+            variants={{ hidden: {opacity:0}, show: {opacity:1, transition:{staggerChildren:0.1}} }} 
+            initial="hidden" animate="show" 
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto"
+          >
+            {DEPARTMENTS.map((dept) => {
+              const Icon = dept.icon;
+              return (
+                <motion.button 
+                  key={dept.id} 
+                  onClick={() => loadInventory(dept.id)}
+                  variants={{ hidden: {opacity:0, y:20}, show: {opacity:1, y:0, transition:{type:'spring', stiffness: 300, damping: 24}} }}
+                  className="relative group bg-white rounded-[1.5rem] p-6 text-left shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)] hover:-translate-y-1.5 transition-all duration-300 overflow-hidden flex flex-col h-full min-h-[240px]"
+                >
+                  {/* Background Blob Effect */}
+                  <div className={`absolute -right-12 -top-12 w-48 h-48 bg-gradient-to-br ${dept.color} rounded-full opacity-[0.05] group-hover:opacity-[0.12] group-hover:scale-150 transition-all duration-700 blur-2xl`} />
+                  
+                  {/* Icon Block */}
+                  <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${dept.color} ${dept.shadow} shadow-lg flex items-center justify-center text-white mb-5 transform group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 z-10`}>
+                    <Icon className="w-6 h-6" />
                   </div>
-                  <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 group-hover:text-teal-700 transition-colors whitespace-nowrap bg-slate-50 group-hover:bg-teal-50 px-4 py-2 border border-slate-200 group-hover:border-teal-200">
-                    Access Inventory <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+
+                  {/* Text Content */}
+                  <div className="z-10 flex-1">
+                    <h3 className="text-lg font-black text-slate-900 mb-2 tracking-tight">{dept.title}</h3>
+                    <p className="text-xs text-slate-500 leading-relaxed font-medium">{dept.desc}</p>
                   </div>
-                </div>
-              </button>
-            ))}
+
+                  {/* Call to Action Button */}
+                  <div className="mt-6 flex items-center justify-between z-10 border-t border-slate-100 pt-4">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 group-hover:text-slate-900 transition-colors">
+                      Enter
+                    </span>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center bg-slate-50 border border-slate-200 group-hover:bg-slate-900 group-hover:border-slate-900 group-hover:text-white transition-all duration-300`}>
+                      <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                    </div>
+                  </div>
+                </motion.button>
+              );
+            })}
           </motion.div>
         )}
 
@@ -467,7 +509,7 @@ export default function StudentCheckout() {
                     {['CSE', 'ISE', 'ECE', 'EEE', 'MECH', 'CIVIL', 'AI_ML'].map(d => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
-                <div><label className={labelCls}>Year / Branch</label><input required type="text" value={year} onChange={e => setYear(e.target.value)} className={inputCls} /></div>
+                <div><label className={labelCls}>Year of Engineering</label><input required type="text" value={year} onChange={e => setYear(e.target.value)} className={inputCls} /></div>
                 <div><label className={labelCls}>Section</label><input required type="text" value={section} onChange={e => setSection(e.target.value)} className={inputCls} /></div>
                 <div><label className={labelCls}>Mobile No.</label><input required type="tel" value={mobile} onChange={e => setMobile(e.target.value)} className={inputCls} /></div>
               </div>
@@ -524,13 +566,23 @@ export default function StudentCheckout() {
               <div className="space-y-4 pt-4 border-t border-slate-200">
                 <label className={labelCls}>Identity Verification</label>
                 {hasVerifiedProfileId ? (
-                  <div className="bg-teal-50 border border-teal-200 p-4 flex items-center gap-3">
-                    <div className="w-8 h-8 bg-teal-100 flex items-center justify-center shrink-0 border border-teal-200">
-                      <ShieldCheck className="w-4 h-4 text-teal-700" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-teal-900 uppercase tracking-wide">ID Card Verified</p>
-                      <p className="text-xs text-teal-700 mt-0.5">We'll use the ID card uploaded in your profile.</p>
+                  <div className="bg-teal-50 border border-teal-200 p-4 flex flex-col sm:flex-row items-center gap-4">
+                    {studentIdCardUrl ? (
+                      <div className="w-24 h-16 border border-teal-200 overflow-hidden bg-white shrink-0">
+                        <img src={studentIdCardUrl} alt="Verified ID" className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <div className="w-12 h-12 bg-teal-100 flex items-center justify-center shrink-0 border border-teal-200">
+                        <ShieldCheck className="w-6 h-6 text-teal-700" />
+                      </div>
+                    )}
+                    <div className="text-center sm:text-left">
+                      <p className="text-sm font-bold text-teal-900 uppercase tracking-wide flex items-center justify-center sm:justify-start gap-1">
+                        <CheckCircle2 className="w-4 h-4" /> ID Card Verified
+                      </p>
+                      <p className="text-xs text-teal-700 mt-1 leading-relaxed">
+                        Your identity has been verified through your profile. This image will be attached to your requisition.
+                      </p>
                     </div>
                   </div>
                 ) : (
@@ -550,15 +602,44 @@ export default function StudentCheckout() {
                 )}
               </div>
 
-              <div className="bg-slate-100 border border-slate-300 p-4">
+              <div className="bg-slate-100 border border-slate-300 p-4 space-y-4">
                 <label className="flex items-start gap-3 cursor-pointer">
                   <input type="checkbox" required checked={agreedToTerms} onChange={e => setAgreedToTerms(e.target.checked)}
-                    className="mt-1 rounded-sm border-slate-400 text-teal-700 focus:ring-teal-700 w-4 h-4 bg-white" />
+                    className="mt-1 rounded-sm border-slate-400 text-teal-700 focus:ring-teal-700 w-4 h-4 bg-white shrink-0" />
                   <span className="text-xs text-slate-700 leading-relaxed font-medium">
                     I acknowledge responsibility for all requested components. I agree to return them in working condition by the specified return date or accept liability for damages.
                   </span>
                 </label>
+                
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input type="checkbox" required checked={agreedToUndertaking} onChange={e => setAgreedToUndertaking(e.target.checked)}
+                    className="mt-1 rounded-sm border-slate-400 text-teal-700 focus:ring-teal-700 w-4 h-4 bg-white shrink-0" />
+                  <span className="text-xs text-slate-700 leading-relaxed font-medium">
+                    I give my consent to the undertaking that I will replace the specific component on time, failing which I understand I may face issues in my hallticket issuing.
+                  </span>
+                </label>
               </div>
+
+              <AnimatePresence>
+                {agreedToUndertaking && (
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="space-y-4 border-slate-200 overflow-hidden">
+                    <label className={labelCls}>Undertaking Signature</label>
+                    <div className="border-2 border-dashed border-slate-300 p-6 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-slate-100 transition-colors">
+                      <input type="file" id="sigUpload" className="hidden" accept="image/*" onChange={e => {
+                        if (e.target.files && e.target.files[0]) setSignatureFile(e.target.files[0]);
+                      }} />
+                      <label htmlFor="sigUpload" className="cursor-pointer flex flex-col items-center w-full">
+                        <div className="w-10 h-10 bg-white border border-slate-300 flex items-center justify-center text-slate-600 mb-3">
+                          <Upload className="w-4 h-4" />
+                        </div>
+                        <p className="text-sm font-bold text-slate-800 mb-1 uppercase tracking-wide">Upload Signature</p>
+                        <p className="text-xs text-slate-500">Please provide a clear image of your signature for the undertaking letter</p>
+                        {signatureFile && <p className="text-xs font-mono font-bold text-teal-700 mt-3 flex items-center justify-center gap-1"><CheckCircle2 className="w-3 h-3" /> {signatureFile.name}</p>}
+                      </label>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               <button type="submit" disabled={isLoading}
                 className="w-full py-4 bg-teal-800 hover:bg-teal-900 disabled:bg-slate-300 disabled:text-slate-500 text-white font-bold text-sm uppercase tracking-widest transition-colors flex justify-center items-center gap-2">

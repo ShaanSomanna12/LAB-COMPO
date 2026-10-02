@@ -172,7 +172,7 @@ export default function HodDashboard() {
       const data = await res.json();
       setRequests(Array.isArray(data) ? data : []);
     } catch (e) {
-      console.error('Failed to fetch requests', e);
+      console.warn('Failed to fetch requests', e);
       setRequests([]);
     } finally {
       if (showLoading) setLoading(false);
@@ -185,7 +185,7 @@ export default function HodDashboard() {
       const data = await res.json();
       setInventory(Array.isArray(data) ? data : []);
     } catch (e) {
-      console.error('Failed to fetch inventory', e);
+      console.warn('Failed to fetch inventory', e);
       setInventory([]);
     }
   };
