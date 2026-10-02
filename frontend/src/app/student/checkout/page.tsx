@@ -314,18 +314,18 @@ export default function StudentCheckout() {
       <div className="relative z-10 max-w-5xl mx-auto px-4 py-8 md:py-12">
         
         {/* Header */}
-        <div className="flex items-start justify-between mb-8 pb-6 border-b-2 border-slate-300 relative">
+        <div className="flex items-start justify-between mb-6 pb-4 border-b-2 border-slate-300 relative">
           <div className="absolute bottom-0 left-0 w-32 h-0.5 bg-teal-700" />
-          <div>
+          <div className="flex items-center gap-4">
             <button onClick={() => step === 'department' ? router.push('/student/dashboard') : setStep(step === 'form' ? 'components' : 'department')}
-              className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-teal-700 transition-colors mb-4 uppercase tracking-widest py-2 pr-4 -ml-2 pl-2">
-              <ArrowLeft className="w-4 h-4" /> {step === 'department' ? 'Back to Dashboard' : 'Go Back'}
+              className="flex items-center justify-center w-10 h-10 bg-white border border-slate-300 rounded-full text-slate-500 hover:text-teal-700 hover:border-teal-700 transition-colors shadow-sm shrink-0">
+              <ArrowLeft className="w-5 h-5" />
             </button>
-            <div className="flex items-center gap-4">
-              <img src="/vvce-logo.png" alt="VVCE Logo" className="h-10 w-auto object-contain shrink-0" />
+            <div className="flex items-center gap-3">
+              <img src="/vvce-logo.png" alt="VVCE Logo" className="h-8 w-auto object-contain shrink-0" />
               <div>
-                <h1 className="text-lg md:text-xl font-black text-slate-900 tracking-tight leading-none mb-1 uppercase">Hardware Requisition</h1>
-                <p className="text-xs text-slate-500 font-medium">Select components for your project</p>
+                <h1 className="text-sm md:text-base font-black text-slate-900 tracking-tight leading-none mb-1 uppercase">Hardware Request</h1>
+                <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest hidden sm:block">Select components for your project</p>
               </div>
             </div>
           </div>
@@ -386,17 +386,69 @@ export default function StudentCheckout() {
 
         {/* STEP 2: Select Components */}
         {step === 'components' && (
-          <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={transitionProps} className="flex flex-col-reverse lg:flex-row gap-6">
-            <div className="flex-1">
-              <div className="bg-white border border-slate-300 mb-6 relative">
-                <div className="absolute top-0 left-0 right-0 h-1 bg-teal-700" />
-                <div className="p-4 border-b border-slate-200 flex gap-3 items-center">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                      placeholder="Search component index..." className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-300 text-sm focus:outline-none focus:border-teal-700 focus:ring-1 focus:ring-teal-700 transition-colors text-slate-900 rounded-none" />
-                  </div>
+          <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={transitionProps} className="flex flex-col lg:flex-row gap-6 relative">
+            <div className="flex-1 flex flex-col gap-4">
+              
+              {/* Top Bar (Flipkart Style Search + Cart) */}
+              <div className="bg-white border border-slate-300 p-3 flex items-center gap-3 sticky top-0 z-20 shadow-sm">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                    placeholder="Search for components..." className="w-full pl-9 pr-4 py-2 sm:py-2.5 bg-slate-50 border border-slate-300 text-sm focus:outline-none focus:border-teal-700 transition-colors text-slate-900 rounded-none" />
                 </div>
+                
+                <button 
+                  onClick={() => setIsMobileCartOpen(!isMobileCartOpen)}
+                  className="lg:hidden relative p-2 text-slate-600 hover:text-teal-700 transition-colors border border-transparent hover:bg-slate-50"
+                >
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                  {cart.length > 0 && (
+                    <span className="absolute top-0 right-0 bg-teal-700 text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
+                      {cart.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* Mobile Cart Dropdown */}
+              <AnimatePresence>
+                {isMobileCartOpen && (
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="lg:hidden bg-white border border-slate-300 p-4 overflow-hidden shadow-sm">
+                    <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center justify-between border-b border-slate-200 pb-2">
+                      Requisition Cart
+                    </h3>
+                    
+                    {cart.length === 0 ? (
+                      <div className="py-6 text-center border-2 border-dashed border-slate-300 bg-slate-50 text-slate-400 text-xs font-mono uppercase tracking-widest">
+                        Cart is empty.
+                      </div>
+                    ) : (
+                      <div className="space-y-3 mb-6 max-h-[40vh] overflow-y-auto pr-1">
+                        {cart.map(item => (
+                          <div key={item.id} className="p-3 border border-slate-300 bg-slate-50">
+                            <p className="text-[11px] font-bold text-slate-900 line-clamp-2 leading-tight mb-2 uppercase tracking-tight">{item.name}</p>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center bg-white border border-slate-300">
+                                <button onClick={() => handleUpdateQty(item.id, -1)} className="w-8 h-8 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors"><Minus className="w-3.5 h-3.5" /></button>
+                                <span className="text-[10px] font-bold font-mono w-6 text-center border-l border-r border-slate-300">{item.requestedQty}</span>
+                                <button onClick={() => handleUpdateQty(item.id, 1)} className="w-8 h-8 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors"><Plus className="w-3.5 h-3.5" /></button>
+                              </div>
+                              <button onClick={() => handleRemoveFromCart(item.id)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-700 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <button onClick={() => setStep('form')} disabled={cart.length === 0}
+                      className="w-full py-3 bg-teal-800 hover:bg-teal-900 disabled:bg-slate-300 disabled:text-slate-500 text-white font-bold text-xs uppercase tracking-widest transition-colors">
+                      Proceed to Form
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="bg-white border border-slate-300 relative">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-teal-700" />
                 
                 <div className="p-4 max-h-[60vh] overflow-y-auto">
                   {isLoadingInventory ? (
@@ -412,7 +464,7 @@ export default function StudentCheckout() {
                         <div key={item.id} className="flex flex-col border border-slate-300 bg-white hover:border-teal-700 transition-colors shadow-sm group">
                           <div className="h-20 sm:h-28 md:h-32 bg-slate-100 flex items-center justify-center relative overflow-hidden border-b border-slate-200">
                             {item.photo_url ? (
-                              <img src={item.photo_url} alt={item.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                              <img src={item.photo_url} alt={item.name} className="w-full h-full object-contain p-2 transition-transform duration-500 group-hover:scale-105" />
                             ) : (
                               <Box className="w-8 h-8 text-slate-300" />
                             )}
@@ -444,16 +496,9 @@ export default function StudentCheckout() {
                             )}
                             
                             <div className="flex flex-col gap-2 mt-auto pt-2 border-t border-slate-200">
-                              <div className="flex items-center justify-end">
-                                <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest">
-                                  <span className="text-slate-400">QTY: </span>
-                                  <span className={item.available > 0 ? "text-teal-700" : "text-red-700"}>{item.available}</span> 
-                                  <span className="text-slate-400">/{item.total}</span>
-                                </p>
-                              </div>
                               <button onClick={() => handleAddToCart(item)} disabled={item.available <= 0}
                                 className="w-full py-1.5 sm:py-2 bg-slate-50 hover:bg-teal-50 text-slate-700 hover:text-teal-800 font-bold text-[9px] sm:text-[10px] uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-1.5 transition-colors border border-slate-300 hover:border-teal-300">
-                                <Plus className="w-3.5 h-3.5" /> Add
+                                <Plus className="w-3.5 h-3.5" /> {item.available > 0 ? 'Add' : 'Out of Stock'}
                               </button>
                             </div>
                           </div>
@@ -465,27 +510,14 @@ export default function StudentCheckout() {
               </div>
             </div>
             
-            <div className="w-full lg:w-80">
-              <div className="bg-white border border-slate-300 p-3 sm:p-5 sticky top-8">
-                {/* Mobile Cart Toggle */}
-                <button 
-                  onClick={() => setIsMobileCartOpen(!isMobileCartOpen)}
-                  className="w-full flex lg:hidden items-center justify-between font-bold text-[11px] uppercase tracking-widest text-slate-500 mb-2 pb-2 border-b border-slate-200"
-                >
-                  Requisition Cart
-                  <div className="flex items-center gap-2">
-                    <span className="bg-slate-900 text-white px-2 py-0.5 text-[9px]">{cart.length}</span>
-                    <ChevronRight className={`w-4 h-4 transition-transform ${isMobileCartOpen ? 'rotate-90' : ''}`} />
-                  </div>
-                </button>
-                
-                {/* Desktop Cart Header */}
-                <h3 className="hidden lg:flex text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-4 items-center justify-between border-b border-slate-200 pb-2">
+            <div className="hidden lg:block w-80">
+              <div className="bg-white border border-slate-300 p-5 sticky top-8 shadow-sm">
+                <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center justify-between border-b border-slate-200 pb-2">
                   Requisition Cart
                   <span className="bg-slate-900 text-white px-2 py-0.5 text-[9px]">{cart.length}</span>
                 </h3>
                 
-                <div className={`lg:block ${isMobileCartOpen ? 'block' : 'hidden'}`}>
+                <div>
                   {cart.length === 0 ? (
                     <div className="py-6 sm:py-8 text-center border-2 border-dashed border-slate-300 bg-slate-50 text-slate-400 text-xs font-mono uppercase tracking-widest">
                       Cart is empty.
