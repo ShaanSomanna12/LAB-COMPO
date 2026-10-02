@@ -316,19 +316,17 @@ export default function StudentCheckout() {
         {/* Header */}
         <div className="flex items-start justify-between mb-6 pb-4 border-b-2 border-slate-300 relative">
           <div className="absolute bottom-0 left-0 w-32 h-0.5 bg-teal-700" />
-          <div className="flex items-center gap-4">
-            <button onClick={() => step === 'department' ? router.push('/student/dashboard') : setStep(step === 'form' ? 'components' : 'department')}
-              className="flex items-center justify-center w-10 h-10 bg-white border border-slate-300 rounded-full text-slate-500 hover:text-teal-700 hover:border-teal-700 transition-colors shadow-sm shrink-0">
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div className="flex items-center gap-3">
-              <img src="/vvce-logo.png" alt="VVCE Logo" className="h-8 w-auto object-contain shrink-0" />
-              <div>
-                <h1 className="text-sm md:text-base font-black text-slate-900 tracking-tight leading-none mb-1 uppercase">Hardware Request</h1>
-                <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest hidden sm:block">Select components for your project</p>
-              </div>
+          <div className="flex items-center gap-3">
+            <img src="/vvce-logo.png" alt="VVCE Logo" className="h-8 w-auto object-contain shrink-0" />
+            <div>
+              <h1 className="text-sm md:text-base font-black text-slate-900 tracking-tight leading-none mb-1 uppercase">Hardware Request</h1>
+              <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest hidden sm:block">Select components for your project</p>
             </div>
           </div>
+          <button onClick={() => step === 'department' ? router.push('/student/dashboard') : setStep(step === 'form' ? 'components' : 'department')}
+            className="flex items-center justify-center w-8 h-8 bg-white border border-slate-300 rounded text-slate-500 hover:text-teal-700 hover:border-teal-700 transition-colors shadow-sm shrink-0">
+            <ArrowLeft className="w-4 h-4" />
+          </button>
           
           <div className="hidden sm:flex items-center gap-2 mt-8">
             <div className={`w-6 h-6 flex items-center justify-center font-mono font-bold text-[10px] ${step === 'department' ? 'bg-teal-700 text-white' : 'bg-slate-200 text-slate-600'}`}>1</div>
@@ -483,17 +481,17 @@ export default function StudentCheckout() {
                           
                           <div className="p-2 sm:p-3 flex flex-col flex-1">
                             <h4 className="text-xs sm:text-sm font-bold text-slate-900 mb-1 uppercase tracking-tight line-clamp-2">{item.name}</h4>
-                            
-                            {item.desc ? (
-                              <details className="hidden sm:block mb-3 flex-1 group/details">
-                                <summary className="text-[10px] text-teal-700 font-bold cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center gap-1.5 hover:text-teal-800 uppercase tracking-widest border-b border-transparent hover:border-teal-200 pb-1 w-fit transition-all">
-                                  <Info className="w-3.5 h-3.5" /> Component Details
-                                </summary>
-                                <p className="text-xs text-slate-600 mt-2 leading-relaxed bg-slate-50 p-2.5 border border-slate-200">{item.desc}</p>
-                              </details>
-                            ) : (
-                              <p className="hidden sm:block text-[10px] text-slate-400 font-bold italic mb-3 flex-1 uppercase tracking-widest">No details available</p>
-                            )}
+                            <details className="mb-3 flex-1 group">
+                              <summary className="text-[9px] sm:text-[10px] text-teal-700 font-bold cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center gap-1 hover:text-teal-800 uppercase tracking-widest w-fit transition-colors">
+                                <span className="group-open:hidden">More Info</span>
+                                <span className="hidden group-open:block">Less Info</span>
+                                <svg className="w-3 h-3 group-open:rotate-180 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                              </summary>
+                              <div className="mt-2 text-[10px] sm:text-xs text-slate-600 leading-relaxed bg-slate-50 p-2 border border-slate-200">
+                                <p className="font-bold text-slate-900 mb-1 pb-1 border-b border-slate-200">{item.name}</p>
+                                {item.desc ? <p>{item.desc}</p> : <p className="italic text-slate-400 mt-1">No additional details</p>}
+                              </div>
+                            </details>
                             
                             <div className="flex flex-col gap-2 mt-auto pt-2 border-t border-slate-200">
                               <button onClick={() => handleAddToCart(item)} disabled={item.available <= 0}
