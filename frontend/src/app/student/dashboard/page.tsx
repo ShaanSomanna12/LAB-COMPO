@@ -218,7 +218,10 @@ export default function StudentDashboard() {
             <div className="md:hidden flex items-center justify-between mb-8 pb-4 border-b border-slate-300">
               <div className="flex items-center gap-3">
                 <img src="/vvce-logo.png" alt="VVCE Logo" className="h-8 w-auto object-contain" />
-                <h1 className="text-lg font-black text-slate-900 tracking-tight uppercase">STUDENT PORTAL</h1>
+                <div className="flex flex-col">
+                  <h1 className="text-sm font-black text-slate-900 tracking-tight uppercase line-clamp-1">{profile?.name || 'Loading...'}</h1>
+                  <p className="text-[10px] font-mono font-bold text-slate-500">{profile?.usn || '---'}</p>
+                </div>
               </div>
               <button onClick={() => setShowQr(true)} className="bg-slate-100 hover:bg-slate-200 transition-colors p-2 border border-slate-200 cursor-pointer">
                 <User className="w-5 h-5 text-slate-700" />
@@ -274,26 +277,26 @@ export default function StudentDashboard() {
                   <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
                     <LayoutDashboard className="w-3 h-3" /> Dashboard Overview
                   </h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition-shadow">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-3 flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition-shadow">
                       <div className="absolute top-0 left-0 right-0 h-1 bg-slate-200 group-hover:bg-blue-500 transition-colors" />
-                      <p className="text-slate-600 text-[10px] font-bold uppercase tracking-widest mb-4 mt-1">Active Req.</p>
-                      <p className="text-3xl font-mono font-bold text-blue-700">{metrics.active}</p>
+                      <p className="text-slate-600 text-[9px] font-bold uppercase tracking-widest mb-2 mt-0.5">Active Req.</p>
+                      <p className="text-2xl font-mono font-bold text-blue-700">{metrics.active}</p>
                     </div>
-                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition-shadow">
+                    <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-3 flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition-shadow">
                       <div className="absolute top-0 left-0 right-0 h-1 bg-slate-200 group-hover:bg-amber-500 transition-colors" />
-                      <p className="text-slate-600 text-[10px] font-bold uppercase tracking-widest mb-4 mt-1">Pending</p>
-                      <p className="text-3xl font-mono font-bold text-amber-600">{metrics.pending}</p>
+                      <p className="text-slate-600 text-[9px] font-bold uppercase tracking-widest mb-2 mt-0.5">Pending</p>
+                      <p className="text-2xl font-mono font-bold text-amber-600">{metrics.pending}</p>
                     </div>
-                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl shadow-sm p-4 flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition-shadow">
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg shadow-sm p-3 flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition-shadow">
                       <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-500" />
-                      <p className="text-emerald-800 text-[10px] font-bold uppercase tracking-widest mb-4 mt-1">In Session</p>
-                      <p className="text-3xl font-mono font-bold text-emerald-700">{metrics.borrowed}</p>
+                      <p className="text-emerald-800 text-[9px] font-bold uppercase tracking-widest mb-2 mt-0.5">In Session</p>
+                      <p className="text-2xl font-mono font-bold text-emerald-700">{metrics.borrowed}</p>
                     </div>
-                    <div className={`p-4 rounded-xl shadow-sm flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition-shadow ${metrics.dueSoon > 0 ? 'bg-rose-50 border border-rose-200' : 'bg-white border border-slate-200'}`}>
+                    <div className={`p-3 rounded-lg shadow-sm flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition-shadow ${metrics.dueSoon > 0 ? 'bg-rose-50 border border-rose-200' : 'bg-white border border-slate-200'}`}>
                       <div className={`absolute top-0 left-0 right-0 h-1 ${metrics.dueSoon > 0 ? 'bg-rose-500' : 'bg-slate-200 group-hover:bg-slate-400'}`} />
-                      <p className={`text-[10px] font-bold uppercase tracking-widest mb-4 mt-1 ${metrics.dueSoon > 0 ? 'text-rose-800' : 'text-slate-600'}`}>Critical</p>
-                      <p className={`text-3xl font-mono font-bold ${metrics.dueSoon > 0 ? 'text-rose-700' : 'text-slate-700'}`}>{metrics.dueSoon}</p>
+                      <p className={`text-[9px] font-bold uppercase tracking-widest mb-2 mt-0.5 ${metrics.dueSoon > 0 ? 'text-rose-800' : 'text-slate-600'}`}>Critical</p>
+                      <p className={`text-2xl font-mono font-bold ${metrics.dueSoon > 0 ? 'text-rose-700' : 'text-slate-700'}`}>{metrics.dueSoon}</p>
                     </div>
                   </div>
                 </section>
