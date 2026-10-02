@@ -16,28 +16,34 @@ export async function POST(request: Request) {
     const { name, usn, department, branch, section, mobile, id_card_url } = await request.json();
 
     // ── Input validation ──────────────────────────────────────────────────
-    if (usn && !/^[1-4][A-Z]{2}[0-9]{2}[A-Z]{2,3}[0-9]{2,3}$/.test(usn.toUpperCase())) {
-      return NextResponse.json({ error: 'Invalid USN format' }, { status: 400 });
+    const updates: any = {};
+    if (name !== undefined) {
+      if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 100) {
+        return NextResponse.json({ error: 'Name must be 2–100 characters' }, { status: 400 });
+      }
+      updates.name = name.trim();
     }
-    if (mobile && !/^[6-9]\d{9}$/.test(mobile)) {
-      return NextResponse.json({ error: 'Invalid mobile number' }, { status: 400 });
+    if (usn !== undefined) {
+      if (typeof usn !== 'string' || !/^[1-4][A-Z]{2}[0-9]{2}[A-Z]{2,3}[0-9]{2,3}$/.test(usn.toUpperCase())) {
+        return NextResponse.json({ error: 'Invalid USN format' }, { status: 400 });
+      }
+      updates.usn = usn.toUpperCase();
     }
-    if (name && (name.trim().length < 2 || name.trim().length > 100)) {
-      return NextResponse.json({ error: 'Name must be 2–100 characters' }, { status: 400 });
+    if (mobile !== undefined) {
+      if (typeof mobile !== 'string' || !/^[6-9]\d{9}$/.test(mobile)) {
+        return NextResponse.json({ error: 'Invalid mobile number' }, { status: 400 });
+      }
+      updates.mobile = mobile;
     }
+    if (department !== undefined) updates.department = department;
+    if (branch !== undefined) updates.branch = branch;
+    if (section !== undefined) updates.section = section;
+    if (id_card_url !== undefined) updates.id_card_url = id_card_url;
 
     // ── Update — scoped strictly to the authenticated user's email ────────
     const { data, error } = await supabase
       .from('users')
-      .update({
-        ...(name      !== undefined && { name: name.trim() }),
-        ...(usn       !== undefined && { usn: usn.toUpperCase() }),
-        ...(department !== undefined && { department }),
-        ...(branch    !== undefined && { branch }),
-        ...(section   !== undefined && { section }),
-        ...(mobile    !== undefined && { mobile }),
-        ...(id_card_url !== undefined && { id_card_url }),
-      })
+      .update(updates)
       .eq('email', payload.email!)   // use JWT email — not request body
       .select();
 

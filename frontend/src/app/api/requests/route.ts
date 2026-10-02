@@ -175,6 +175,31 @@ export async function PATCH(request: Request) {
     if (status === 'RETURNED') updates.returned_at = new Date().toISOString();
     if (status === 'RETURN_REQUESTED' && images?.length > 0) updates.after_img_url = images[0];
 
+    // ── Atomic inventory release via RPC ─────────────────────────────────
+    if (currentReservation) {
+      const oldStatus = currentReservation.status;
+      const isReleasing =
+        ['RETURNED', 'REJECTED', 'CANCELLED'].includes(status) &&
+        !['RETURNED', 'REJECTED', 'CANCELLED'].includes(oldStatus);
+
+      const totalToRelease = isReleasing
+        ? currentReservation.quantity || 1
+        : quantityDiff > 0 && !['REJECTED', 'CANCELLED'].includes(status)
+        ? quantityDiff
+        : 0;
+
+      if (totalToRelease > 0) {
+        const { error: incError } = await supabase.rpc('increment_inventory', {
+          p_component_id: currentReservation.component_id,
+          p_qty: totalToRelease,
+        });
+        if (incError) {
+          console.error('[requests PATCH] increment error:', incError);
+          return NextResponse.json({ error: 'Failed to release inventory' }, { status: 500 });
+        }
+      }
+    }
+
     const { data, error } = await supabase
       .from('reservations')
       .update(updates)
@@ -209,26 +234,7 @@ export async function PATCH(request: Request) {
       }
     }
 
-    // ── Atomic inventory release via RPC ─────────────────────────────────
-    if (currentReservation) {
-      const oldStatus = currentReservation.status;
-      const isReleasing =
-        ['RETURNED', 'REJECTED', 'CANCELLED'].includes(status) &&
-        !['RETURNED', 'REJECTED', 'CANCELLED'].includes(oldStatus);
 
-      const totalToRelease = isReleasing
-        ? currentReservation.quantity || 1
-        : quantityDiff > 0 && !['REJECTED', 'CANCELLED'].includes(status)
-        ? quantityDiff
-        : 0;
-
-      if (totalToRelease > 0) {
-        await supabase.rpc('increment_inventory', {
-          p_component_id: currentReservation.component_id,
-          p_qty: totalToRelease,
-        });
-      }
-    }
 
     return NextResponse.json({ success: true, item: data });
   } catch (err) {
@@ -285,7 +291,7 @@ export async function POST(request: Request) {
       if (!item.name || typeof item.name !== 'string') {
         return NextResponse.json({ error: 'Each item must have a valid name' }, { status: 400 });
       }
-      if (item.quantity !== undefined && (item.quantity < 1 || item.quantity > 50)) {
+      if (item.quantity !== undefined && (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 50)) {
         return NextResponse.json({ error: `Invalid quantity for ${item.name}` }, { status: 400 });
       }
     }
@@ -332,33 +338,49 @@ export async function POST(request: Request) {
       }
     }
 
-    // ── Create reservations ─────────────────────────────────────────────────
-    const newReservations = [];
+    // ── Phase 1: Atomic decrement of all items ──────────────────────────────
+    const successfulDecrements: Array<{ component_id: string; reqQty: number }> = [];
+    try {
+      for (const item of items) {
+        const component = componentMap.get(item.name)!;
+        const reqQty = item.quantity || 1;
+
+        const { data: decremented, error: rpcError } = await supabase.rpc('decrement_inventory', {
+          p_component_id: component.component_id,
+          p_qty: reqQty,
+        });
+
+        if (rpcError) throw rpcError;
+        if (!decremented) {
+          throw new Error(`Insufficient stock for "${item.name}". Another user may have just booked the last unit.`);
+        }
+        successfulDecrements.push({ component_id: component.component_id, reqQty });
+      }
+    } catch (decrementErr: any) {
+      // Rollback successful decrements
+      for (const { component_id, reqQty } of successfulDecrements) {
+        await supabase.rpc('increment_inventory', {
+          p_component_id: component_id,
+          p_qty: reqQty,
+        });
+      }
+      return NextResponse.json({ error: decrementErr.message }, { status: 409 });
+    }
+
+    // ── Phase 2: Create reservations ────────────────────────────────────────
+    const newReservations: any[] = [];
     const status = cartRequiresApproval ? 'PENDING_APPROVAL' : 'APPROVED';
 
     for (const item of items) {
       const component = componentMap.get(item.name)!;
       const reqQty = item.quantity || 1;
 
-      // ── Atomic decrement — race-condition safe ──────────────────────────
-      const { data: decremented, error: rpcError } = await supabase.rpc('decrement_inventory', {
-        p_component_id: component.component_id,
-        p_qty: reqQty,
-      });
-
-      if (rpcError) throw rpcError;
-      if (!decremented) {
-        return NextResponse.json({
-          error: `Insufficient stock for "${item.name}". Another user may have just booked the last unit.`,
-        }, { status: 409 });
-      }
-
       const collectionDate = date ? new Date(date) : new Date();
       let dueDate: Date | null = new Date(collectionDate);
       if (duration === null || duration === undefined) {
         dueDate = null;
       } else {
-        dueDate.setDate(dueDate.getDate() + (duration || 7));
+        dueDate.setDate(dueDate.getDate() + (duration ?? 7));
         dueDate = getNextWorkingDay(dueDate);
       }
 
@@ -387,11 +409,21 @@ export async function POST(request: Request) {
         .single();
 
       if (resError) {
-        // Roll back the inventory decrement on reservation failure
-        await supabase.rpc('increment_inventory', {
-          p_component_id: component.component_id,
-          p_qty: reqQty,
-        });
+        // Since Phase 1 succeeded, a failure here is extremely rare but must be handled.
+        // In a true system, we'd roll back EVERYTHING (all reservations so far + all decrements).
+        // Since we are creating them iteratively without a true transaction, we try our best:
+        for (const { component_id, reqQty } of successfulDecrements) {
+          await supabase.rpc('increment_inventory', {
+            p_component_id: component_id,
+            p_qty: reqQty,
+          });
+        }
+        if (newReservations.length > 0) {
+          await supabase
+            .from('reservations')
+            .delete()
+            .in('reservation_id', newReservations.map(r => r.reservation_id));
+        }
         throw resError;
       }
 

@@ -67,6 +67,7 @@ export default function StudentCheckout() {
   const [agreedToUndertaking, setAgreedToUndertaking] = useState(false);
   const [signatureFile, setSignatureFile] = useState<File | null>(null);
   const [minDate, setMinDate] = useState('');
+  const [maxDate, setMaxDate] = useState('');
   
   const [projectType, setProjectType] = useState('Course Assignment / Lab Work');
   const [projectTitle, setProjectTitle] = useState('');
@@ -127,13 +128,20 @@ export default function StudentCheckout() {
     const todayStr = today.toISOString().split('T')[0];
     setMinDate(todayStr);
     setDate(todayStr);
+
+    const maxD = new Date(today);
+    maxD.setDate(maxD.getDate() + 30);
+    setMaxDate(maxD.toISOString().split('T')[0]);
   }, [router]);
 
   useEffect(() => {
     if (date) {
       const start = new Date(date);
-      start.setDate(start.getDate() + 7);
-      setReturnDate(start.toISOString().split('T')[0]);
+      const currentReturn = returnDate ? new Date(returnDate) : null;
+      if (!currentReturn || currentReturn <= start) {
+        start.setDate(start.getDate() + 7); // Provide a 7-day default, but don't force it
+        setReturnDate(start.toISOString().split('T')[0]);
+      }
     }
   }, [date]);
 
@@ -233,7 +241,7 @@ export default function StudentCheckout() {
       if (idCardFile && !hasVerifiedProfileId) {
         const filePath = `student-ids/${usn}-${Date.now()}.png`;
         const { error: uploadError } = await supabase.storage.from('id_cards').upload(filePath, idCardFile);
-        if (uploadError) throw new Error("Failed to upload ID Card");
+        if (uploadError) throw new Error(`Failed to upload ID Card: ${uploadError.message}`);
         const { data: publicUrlData } = supabase.storage.from('id_cards').getPublicUrl(filePath);
         finalIdCardUrl = publicUrlData.publicUrl;
       }
@@ -242,7 +250,7 @@ export default function StudentCheckout() {
       if (signatureFile) {
         const sigPath = `signatures/${usn}-${Date.now()}.png`;
         const { error: sigUploadError } = await supabase.storage.from('id_cards').upload(sigPath, signatureFile);
-        if (sigUploadError) throw new Error("Failed to upload Signature");
+        if (sigUploadError) throw new Error(`Failed to upload Signature: ${sigUploadError.message}`);
         const { data: sigUrlData } = supabase.storage.from('id_cards').getPublicUrl(sigPath);
         finalSignatureUrl = sigUrlData.publicUrl;
       }
@@ -396,6 +404,8 @@ export default function StudentCheckout() {
                 
                 <button 
                   onClick={() => setIsMobileCartOpen(!isMobileCartOpen)}
+                  aria-expanded={isMobileCartOpen}
+                  aria-controls="mobile-cart-contents"
                   className="lg:hidden relative p-1.5 bg-white border border-slate-300 text-slate-600 hover:text-teal-700 transition-colors rounded-md shadow-sm"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
@@ -410,7 +420,7 @@ export default function StudentCheckout() {
               {/* Mobile Cart Dropdown */}
               <AnimatePresence>
                 {isMobileCartOpen && (
-                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="lg:hidden bg-white border border-slate-300 p-4 overflow-hidden shadow-sm">
+                  <motion.div id="mobile-cart-contents" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="lg:hidden bg-white border border-slate-300 p-4 overflow-hidden shadow-sm">
                     <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center justify-between border-b border-slate-200 pb-2">
                       Requisition Cart
                     </h3>
@@ -603,7 +613,11 @@ export default function StudentCheckout() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className={labelCls}>Pickup Date</label>
-                  <input type="date" required min={minDate} value={date} onChange={e => setDate(e.target.value)} className={inputCls} />
+                  <input type="date" required min={minDate} max={maxDate} value={date} onChange={e => setDate(e.target.value)} className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Return Date</label>
+                  <input type="date" required min={date} max={maxDate} value={returnDate} onChange={e => setReturnDate(e.target.value)} className={inputCls} />
                 </div>
                 <div>
                   <label className={labelCls}>Pickup Time</label>
@@ -614,14 +628,6 @@ export default function StudentCheckout() {
                     <option value="04:00 PM">04:00 PM</option>
                   </select>
                 </div>
-              </div>
-
-              <div className="bg-slate-50 border border-slate-300 p-4">
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Return Policy</p>
-                <p className="text-sm font-medium text-slate-900 mt-2">
-                  {date ? `Components must be returned by ${new Date(returnDate).toLocaleDateString('en-GB')}` : 'Select a pickup date first'}
-                </p>
-                <p className="text-xs text-slate-500 mt-1">Maximum borrowing duration is 7 working days.</p>
               </div>
 
               <div className="space-y-4 pt-4 border-t border-slate-200">
@@ -649,7 +655,15 @@ export default function StudentCheckout() {
                 ) : (
                   <div className="border-2 border-dashed border-slate-300 p-6 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-slate-100 transition-colors">
                     <input type="file" id="idUpload" className="hidden" accept="image/*" onChange={e => {
-                      if (e.target.files && e.target.files[0]) setIdCardFile(e.target.files[0]);
+                      if (e.target.files && e.target.files[0]) {
+                        const file = e.target.files[0];
+                        if (file.size > 50 * 1024) {
+                          toast.error(`File is too large (${(file.size / 1024).toFixed(1)}KB). Maximum allowed size is 50KB.`);
+                          e.target.value = '';
+                          return;
+                        }
+                        setIdCardFile(file);
+                      }
                     }} />
                     <label htmlFor="idUpload" className="cursor-pointer flex flex-col items-center">
                       <div className="w-10 h-10 bg-white border border-slate-300 flex items-center justify-center text-slate-600 mb-3">
@@ -700,7 +714,15 @@ export default function StudentCheckout() {
                     <label className={labelCls}>Undertaking Signature</label>
                     <div className="border-2 border-dashed border-slate-300 p-6 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-slate-100 transition-colors">
                       <input type="file" id="sigUpload" className="hidden" accept="image/*" onChange={e => {
-                        if (e.target.files && e.target.files[0]) setSignatureFile(e.target.files[0]);
+                        if (e.target.files && e.target.files[0]) {
+                          const file = e.target.files[0];
+                          if (file.size > 50 * 1024) {
+                            toast.error(`File is too large (${(file.size / 1024).toFixed(1)}KB). Maximum allowed size is 50KB.`);
+                            e.target.value = '';
+                            return;
+                          }
+                          setSignatureFile(file);
+                        }
                       }} />
                       <label htmlFor="sigUpload" className="cursor-pointer flex flex-col items-center w-full">
                         <div className="w-10 h-10 bg-white border border-slate-300 flex items-center justify-center text-slate-600 mb-3">

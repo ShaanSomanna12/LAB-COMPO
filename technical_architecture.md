@@ -20,7 +20,7 @@ The platform utilizes a modern, hybrid architecture designed for scalability, se
 ## Architectural Patterns
 
 1. **API Encapsulation:** Next.js API routes (`/api/*`) act as a secure gateway, encapsulating sensitive operations (like sending emails or processing OTPs) away from the client browser.
-2. **Relational Integrity:** Unlike NoSQL document stores, PostgreSQL was selected to enforce strict ACID properties, complex joins, and foreign key constraints essential for a hardware reservation system to prevent overlapping bookings.
+2. **Relational Integrity:** Unlike NoSQL document stores, PostgreSQL was selected to enforce atomic row-level locks (e.g., `SELECT FOR UPDATE`) and specific data invariants, which are essential for a hardware reservation system to safely decrement stock and prevent overlapping bookings.
 3. **Event-Driven Workflows:** State transitions (e.g., from `PENDING_APPROVAL` to `CHECKED_OUT`) trigger updates in real-time, often leveraging Supabase's real-time subscriptions or background cron jobs for overdue notifications.
 
 ## System Interfaces

@@ -18,6 +18,25 @@ const inputCls = "w-full bg-white border border-slate-300 rounded-none px-4 py-3
 const selectCls = "w-full bg-white border border-slate-300 rounded-none px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-teal-700 focus:ring-1 focus:ring-teal-700 appearance-none transition-colors";
 const labelCls = "block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-widest";
 
+const getLevenshteinDistance = (a: string, b: string): number => {
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  const matrix = Array(a.length + 1).fill(null).map(() => Array(b.length + 1).fill(null));
+  for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+  for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+    }
+  }
+  return matrix[a.length][b.length];
+};
+
 export default function MyProfile() {
   const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
@@ -65,6 +84,13 @@ export default function MyProfile() {
   const handleIdCardUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.size > 50 * 1024) {
+      toast.error(`File is too large (${(file.size / 1024).toFixed(1)}KB). Maximum allowed size is 50KB.`);
+      e.target.value = '';
+      return;
+    }
+
     setIdCardFile(file);
     setIdCardPreview(URL.createObjectURL(file));
     setScanResult(null);
@@ -87,26 +113,22 @@ export default function MyProfile() {
         isMatch = true;
         detectedUsn = sanitizedUsn;
       } else if (sanitizedUsn.length >= 8) {
-        // 2. Fuzzy Match (allow up to 2 typos in the USN string)
-        for (let i = 0; i <= normalizedText.length - normalizedUsn.length; i++) {
-          const sub = normalizedText.substring(i, i + normalizedUsn.length);
-          let diffs = 0;
-          for (let j = 0; j < normalizedUsn.length; j++) {
-            if (sub[j] !== normalizedUsn[j]) diffs++;
+        // 2. Fuzzy Match with Levenshtein distance (allow up to 2 typos, insertions, or deletions)
+        let foundMatch = false;
+        for (let len = Math.max(1, normalizedUsn.length - 2); len <= normalizedUsn.length + 2; len++) {
+          for (let i = 0; i <= normalizedText.length - len; i++) {
+            const sub = normalizedText.substring(i, i + len);
+            if (getLevenshteinDistance(sub, normalizedUsn) <= 2) {
+              isMatch = true;
+              detectedUsn = sanitizedUsn;
+              foundMatch = true;
+              break;
+            }
           }
-          if (diffs <= 2) {
-            isMatch = true;
-            detectedUsn = sanitizedUsn; // Accept it
-            break;
-          }
+          if (foundMatch) break;
         }
       }
       
-      // 3. Fallback Keyword Match (if USN completely missed)
-      if (!isMatch && (cleanText.includes('COLLEGE') || cleanText.includes('CARD') || cleanText.includes('VIDYAVARDHAKA') || cleanText.includes('VVCE') || cleanText.includes('STUDENT') || cleanText.includes('LIBRARY'))) {
-        isMatch = true;
-        detectedUsn = 'Matched via College Keywords';
-      }
 
       // Try to find year validity (e.g., 2021-2025)
       const yearPattern = /20\d{2}-20\d{2}/g;
@@ -202,6 +224,8 @@ export default function MyProfile() {
 
       if (uploadedIdUrl) {
         localStorage.setItem(`id_card_${usn.toUpperCase()}`, uploadedIdUrl);
+      } else if (!idCardPreview) {
+        localStorage.removeItem(`id_card_${usn.toUpperCase()}`);
       }
 
       toast.success('Profile updated successfully!');
@@ -365,9 +389,9 @@ export default function MyProfile() {
               </div>
               <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
-                  <label className={labelCls}>Department</label>
+                  <label htmlFor="department" className={labelCls}>Department</label>
                   <div className="relative">
-                    <select required value={department} onChange={e => setDepartment(e.target.value)} className={selectCls}>
+                    <select id="department" required value={department} onChange={e => setDepartment(e.target.value)} className={selectCls}>
                       <option value="" disabled>Select Department</option>
                       {['CSE','ISE','ECE','EEE','MECH','CIVIL','AI_ML'].map(d => (
                         <option key={d} value={d}>{d}</option>
@@ -379,9 +403,9 @@ export default function MyProfile() {
                   </div>
                 </div>
                 <div>
-                  <label className={labelCls}>Year of Engineering</label>
+                  <label htmlFor="year" className={labelCls}>Year of Engineering</label>
                   <div className="relative">
-                    <select required value={year} onChange={e => setYear(e.target.value)} className={selectCls}>
+                    <select id="year" required value={year} onChange={e => setYear(e.target.value)} className={selectCls}>
                       <option value="1st Year">1st Year</option>
                       <option value="2nd Year">2nd Year</option>
                       <option value="3rd Year">3rd Year</option>
@@ -393,9 +417,9 @@ export default function MyProfile() {
                   </div>
                 </div>
                 <div>
-                  <label className={labelCls}>Section</label>
+                  <label htmlFor="section" className={labelCls}>Section</label>
                   <div className="relative">
-                    <select required value={section} onChange={e => setSection(e.target.value)} className={selectCls}>
+                    <select id="section" required value={section} onChange={e => setSection(e.target.value)} className={selectCls}>
                       <option value="" disabled>Select Section</option>
                       {['A','B','C','D','E','F','G','H','I','J','K','L','M'].map(s => (
                         <option key={s} value={s}>Section {s}</option>
