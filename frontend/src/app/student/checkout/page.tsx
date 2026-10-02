@@ -315,7 +315,6 @@ export default function StudentCheckout() {
         
         {/* Header */}
         <div className="flex items-start justify-between mb-6 pb-4 border-b-2 border-slate-300 relative">
-          <div className="absolute bottom-0 left-0 w-32 h-0.5 bg-teal-700" />
           <div className="flex items-center gap-3">
             <img src="/vvce-logo.png" alt="VVCE Logo" className="h-8 w-auto object-contain shrink-0" />
             <div>
@@ -446,9 +445,7 @@ export default function StudentCheckout() {
               </AnimatePresence>
 
               <div className="bg-white border border-slate-300 relative">
-                <div className="absolute top-0 left-0 right-0 h-1 bg-teal-700" />
-                
-                <div className="p-4 max-h-[60vh] overflow-y-auto">
+                <div className="p-4">
                   {isLoadingInventory ? (
                     <div className="py-12 flex flex-col items-center justify-center gap-3">
                       <div className="w-8 h-8 border-2 border-slate-200 border-t-teal-700 rounded-full animate-spin" />
