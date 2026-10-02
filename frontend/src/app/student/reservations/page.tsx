@@ -367,95 +367,92 @@ export default function MyReservations() {
       <div className="w-full max-w-5xl mx-auto px-4 py-8 md:py-12 relative z-10">
         
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:justify-between md:items-end mb-10 pb-6 border-b-2 border-slate-300 relative">
-          <div className="absolute bottom-0 left-0 w-32 h-0.5 bg-teal-700" />
-          <div>
-            <button onClick={() => router.push('/student/dashboard')}
-              className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-teal-700 transition-colors mb-4 uppercase tracking-widest">
-              <ArrowLeft className="w-4 h-4" /> Back to Dashboard
-            </button>
-            <div className="flex items-center gap-4">
-              <img src="/vvce-logo.png" alt="VVCE Logo" className="h-10 w-auto object-contain shrink-0" />
-              <div>
-                <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-none mb-1 uppercase">My Reservations</h1>
-                <p className="text-xs text-slate-500 font-medium">Track your hardware requests, proofs, and timelines.</p>
-              </div>
+        <div className="flex items-center justify-between mb-6 pb-4 border-b-2 border-slate-300 relative">
+          <div className="flex items-center gap-3">
+            <img src="/vvce-logo.png" alt="VVCE Logo" className="h-8 w-auto object-contain shrink-0" />
+            <div>
+              <h1 className="text-sm md:text-base font-black text-slate-900 tracking-tight leading-none mb-1 uppercase">My Reservations</h1>
+              <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest hidden sm:block">Track your hardware requests</p>
             </div>
           </div>
-          <button
-            onClick={() => setShowQRModal(true)}
-            className="group mt-6 md:mt-0 flex items-center justify-center gap-3 px-6 py-3 bg-white border border-slate-300 hover:border-teal-700 rounded-xl transition-all shadow-sm hover:shadow-md"
-          >
-            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center border border-slate-200 group-hover:bg-teal-50 group-hover:border-teal-200 transition-colors">
-              <QrCode className="w-4 h-4 text-slate-600 group-hover:text-teal-700 transition-colors" />
-            </div>
-            <div className="flex flex-col items-start">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 group-hover:text-teal-600">Open Pass</span>
-              <span className="text-sm font-black text-slate-900">Digital Pass</span>
-            </div>
-          </button>
+          
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowQRModal(true)}
+              className="flex items-center justify-center w-8 h-8 bg-teal-50 border border-teal-200 rounded text-teal-700 hover:bg-teal-100 transition-colors shadow-sm shrink-0"
+              title="Open Digital Pass"
+            >
+              <QrCode className="w-4 h-4" />
+            </button>
+            <button onClick={() => router.push('/student/dashboard')}
+              className="flex items-center justify-center w-8 h-8 bg-white border border-slate-300 rounded text-slate-500 hover:text-teal-700 hover:border-teal-700 transition-colors shadow-sm shrink-0"
+              title="Back to Dashboard"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Instructions Box */}
-        <div className="mb-6 p-4 bg-white border border-slate-300 rounded-xl flex items-start gap-3 shadow-sm">
-          <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center shrink-0 border border-slate-200">
-            <AlertCircle className="w-4 h-4 text-slate-500" />
+        <div className="mb-6 p-2 sm:p-3 bg-white border border-slate-300 rounded flex items-start gap-2 shadow-sm max-w-3xl">
+          <div className="w-6 h-6 rounded bg-slate-50 flex items-center justify-center shrink-0 border border-slate-200 mt-0.5">
+            <AlertCircle className="w-3.5 h-3.5 text-slate-500" />
           </div>
           <div>
-            <h4 className="text-slate-900 font-bold text-xs uppercase tracking-widest mb-1">Collection Instructions</h4>
-            <p className="text-slate-600 text-xs leading-relaxed">
-              After receiving admin approval, please proceed to the lab. Carry your physical ID and show your Digital Pass to collect the component.
+            <h4 className="text-slate-900 font-bold text-[10px] uppercase tracking-widest mb-0.5">Collection Instructions</h4>
+            <p className="text-slate-600 text-[10px] leading-relaxed">
+              After receiving admin approval, proceed to the lab. Carry your physical ID and show your Digital Pass (QR icon) to collect the component.
             </p>
           </div>
         </div>
 
         {/* Tab Navigation & Filters */}
-        <div className="flex flex-col lg:flex-row gap-4 mb-8">
-          <div className="flex gap-2 bg-white p-1.5 border border-slate-300 shadow-sm w-fit">
+        <div className="flex flex-col lg:flex-row gap-3 mb-6">
+          <div className="flex gap-2 bg-white p-1 border border-slate-300 shadow-sm w-fit rounded">
             <button
               onClick={() => setActiveTab('CURRENT')}
-              className={`px-5 py-2 text-xs font-bold transition-all uppercase tracking-widest flex items-center gap-2 ${activeTab === 'CURRENT' ? 'bg-slate-100 text-teal-800 border border-slate-200 shadow-sm' : 'bg-transparent text-slate-500 hover:text-slate-900 border border-transparent'}`}
+              className={`px-3 py-1.5 text-[10px] font-bold transition-all uppercase tracking-widest flex items-center gap-1.5 rounded-sm ${activeTab === 'CURRENT' ? 'bg-slate-100 text-teal-800 shadow-sm' : 'bg-transparent text-slate-500 hover:text-slate-900'}`}
             >
-              <span>Active & Pending</span>
-              <span className={`px-2 py-0.5 rounded-none text-[10px] ${activeTab === 'CURRENT' ? 'bg-teal-700 text-white' : 'bg-slate-200 text-slate-600'}`}>
+              <span>Active</span>
+              <span className={`px-1.5 py-0.5 rounded-sm text-[9px] ${activeTab === 'CURRENT' ? 'bg-teal-700 text-white' : 'bg-slate-200 text-slate-600'}`}>
                 {currentGroups.length}
               </span>
             </button>
             <button
               onClick={() => setActiveTab('COMPLETED')}
-              className={`px-5 py-2 text-xs font-bold transition-all uppercase tracking-widest flex items-center gap-2 ${activeTab === 'COMPLETED' ? 'bg-slate-100 text-teal-800 border border-slate-200 shadow-sm' : 'bg-transparent text-slate-500 hover:text-slate-900 border border-transparent'}`}
+              className={`px-3 py-1.5 text-[10px] font-bold transition-all uppercase tracking-widest flex items-center gap-1.5 rounded-sm ${activeTab === 'COMPLETED' ? 'bg-slate-100 text-teal-800 shadow-sm' : 'bg-transparent text-slate-500 hover:text-slate-900'}`}
             >
-              <span>Completed</span>
-              <span className={`px-2 py-0.5 rounded-none text-[10px] ${activeTab === 'COMPLETED' ? 'bg-teal-700 text-white' : 'bg-slate-200 text-slate-600'}`}>
+              <span>Done</span>
+              <span className={`px-1.5 py-0.5 rounded-sm text-[9px] ${activeTab === 'COMPLETED' ? 'bg-teal-700 text-white' : 'bg-slate-200 text-slate-600'}`}>
                 {completedGroups.length}
               </span>
             </button>
           </div>
 
-          <div className="flex-1 flex flex-col sm:flex-row gap-3">
-            <div className="flex-1 relative">
+          <div className="flex-1 flex gap-2">
+            <div className="flex-1 relative max-w-sm">
               <input
                 type="text"
-                placeholder="Search by component, project, or ID..."
+                placeholder="Search components or ID..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-full bg-white border border-slate-300 text-sm text-slate-900 px-10 py-3 focus:outline-none focus:border-teal-700 shadow-sm transition-colors rounded-none"
+                className="w-full bg-white border border-slate-300 text-xs text-slate-900 pl-8 pr-3 py-1.5 focus:outline-none focus:border-teal-700 shadow-sm rounded transition-colors"
               />
-              <svg className="w-4 h-4 absolute left-4 top-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
             <select
               value={dateFilter}
               onChange={e => setDateFilter(e.target.value as any)}
-              className="bg-white border border-slate-300 text-sm font-bold text-slate-600 px-5 py-3 focus:outline-none focus:border-teal-700 cursor-pointer shadow-sm transition-colors min-w-[160px] rounded-none appearance-none"
+              className="bg-white border border-slate-300 text-[10px] font-bold text-slate-600 px-2 py-1.5 focus:outline-none focus:border-teal-700 cursor-pointer shadow-sm transition-colors rounded appearance-none"
             >
               <option value="ALL">ALL TIME</option>
               <option value="WEEK">THIS WEEK</option>
               <option value="MONTH_1">PAST 1 MONTH</option>
               <option value="MONTH_3">PAST 3 MONTHS</option>
               <option value="MONTH_6">PAST 6 MONTHS</option>
-              <option value="MONTH_12">PAST 12 MONTHS</option>
+              <option value="MONTH_12">PAST YEAR</option>
             </select>
           </div>
         </div>
