@@ -466,17 +466,6 @@ export default function StudentCheckout() {
                             ) : (
                               <Box className="w-8 h-8 text-slate-300" />
                             )}
-                            {item.value_tier && (
-                              <div className="absolute top-2 right-2 sm:top-3 sm:right-3">
-                                <span className={`px-1.5 sm:px-2 py-0.5 sm:py-1 text-[8px] sm:text-[9px] font-bold tracking-widest uppercase shadow-sm border ${
-                                  item.value_tier === 'CRITICAL' ? 'bg-red-50 text-red-700 border-red-200' :
-                                  item.value_tier === 'HIGH' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                  'bg-white text-slate-600 border-slate-300'
-                                }`}>
-                                  {item.value_tier}
-                                </span>
-                              </div>
-                            )}
                           </div>
                           
                           <div className="p-2 sm:p-3 flex flex-col flex-1">
