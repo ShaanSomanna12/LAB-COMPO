@@ -445,7 +445,7 @@ export default function StudentCheckout() {
               </AnimatePresence>
 
               <div className="bg-white border border-slate-300 relative">
-                <div className="p-4">
+                <div className="p-3 sm:p-4 min-h-[60vh] max-h-[75vh] overflow-y-auto">
                   {isLoadingInventory ? (
                     <div className="py-12 flex flex-col items-center justify-center gap-3">
                       <div className="w-8 h-8 border-2 border-slate-200 border-t-teal-700 rounded-full animate-spin" />
