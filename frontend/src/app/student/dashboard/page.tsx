@@ -223,9 +223,14 @@ export default function StudentDashboard() {
                   <p className="text-[10px] font-mono font-bold text-slate-500">{profile?.usn || '---'}</p>
                 </div>
               </div>
-              <button onClick={() => setShowQr(true)} className="bg-slate-100 hover:bg-slate-200 transition-colors p-2 border border-slate-200 cursor-pointer">
-                <User className="w-5 h-5 text-slate-700" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowQr(true)} className="bg-slate-100 hover:bg-slate-200 transition-colors p-2 border border-slate-200 cursor-pointer text-slate-700" title="Digital Pass">
+                  <QrCode className="w-5 h-5" />
+                </button>
+                <button onClick={async () => { await supabase.auth.signOut(); router.push('/'); }} className="bg-slate-100 hover:bg-red-50 hover:text-red-700 hover:border-red-200 transition-colors p-2 border border-slate-200 cursor-pointer text-slate-700" title="Logout">
+                  <LogOut className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Desktop Header */}

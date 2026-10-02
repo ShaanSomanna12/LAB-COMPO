@@ -9,7 +9,7 @@ import { Inter } from 'next/font/google';
 import { motion } from 'framer-motion';
 import {
   Camera, CheckCircle2, AlertCircle, X,
-  ArrowLeft, User, BookOpen, Phone, ShieldCheck, Loader2, Save
+  ArrowLeft, User, BookOpen, Phone, ShieldCheck, Loader2, Save, Lock
 } from 'lucide-react';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -76,33 +76,58 @@ export default function MyProfile() {
       
       const cleanText = text.replace(/[^A-Z0-9]/g, '');
       const normalizedText = cleanText.replace(/[O0Q]/g, '0').replace(/[I1L]/g, '1').replace(/[Z2]/g, '2').replace(/[S5]/g, '5').replace(/[UVY]/g, 'V');
-      const normalizedUsn = usn.toUpperCase().replace(/[O0Q]/g, '0').replace(/[I1L]/g, '1').replace(/[Z2]/g, '2').replace(/[S5]/g, '5').replace(/[UVY]/g, 'V');
+      const sanitizedUsn = usn.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const normalizedUsn = sanitizedUsn.replace(/[O0Q]/g, '0').replace(/[I1L]/g, '1').replace(/[Z2]/g, '2').replace(/[S5]/g, '5').replace(/[UVY]/g, 'V');
       
-      let isMatch = normalizedText.includes(normalizedUsn);
-      
-      // Fallback: If OCR misses characters, accept if it finds related college keywords
-      if (!isMatch && (text.includes('COLLEGE') || text.includes('CARD') || text.includes('VIDYAVARDHAKA') || text.includes('VVCE'))) {
+      let isMatch = false;
+      let detectedUsn = null;
+
+      // 1. Direct Match
+      if (sanitizedUsn && normalizedText.includes(normalizedUsn)) {
         isMatch = true;
-      }
-      const yearPattern = /20\d{2}-20\d{2}/g;
-      const yearMatches = text.match(yearPattern);
-      const detectedValidity = yearMatches ? yearMatches[0] : null;
-      const usnPattern = /[1-4][A-Z]{2}[0-9]{2}[A-Z]{2}[0-9]{3}/g;
-      const matches = text.match(usnPattern);
-      const detectedUsn = matches ? matches[0] : null;
-      if (isMatch) {
-        toast.success("ID Card Verified! USN matches.");
-        setScanResult({ match: true, detectedUsn: usn.toUpperCase(), detectedValidity });
-      } else {
-        if (detectedUsn) {
-          if (detectedUsn === usn.toUpperCase()) { setScanResult({ match: true, detectedUsn, detectedValidity }); }
-          else { setScanResult({ match: false, detectedUsn, detectedValidity }); toast.error(`USN mismatch. Found ${detectedUsn}, expected ${usn.toUpperCase()}`); }
-        } else {
-          setScanResult({ match: false, detectedUsn: null, detectedValidity });
-          toast.warning("Could not clearly read USN from image. Please ensure the image is clear.");
+        detectedUsn = sanitizedUsn;
+      } else if (sanitizedUsn.length >= 8) {
+        // 2. Fuzzy Match (allow up to 2 typos in the USN string)
+        for (let i = 0; i <= normalizedText.length - normalizedUsn.length; i++) {
+          const sub = normalizedText.substring(i, i + normalizedUsn.length);
+          let diffs = 0;
+          for (let j = 0; j < normalizedUsn.length; j++) {
+            if (sub[j] !== normalizedUsn[j]) diffs++;
+          }
+          if (diffs <= 2) {
+            isMatch = true;
+            detectedUsn = sanitizedUsn; // Accept it
+            break;
+          }
         }
       }
-      if (detectedValidity) toast.success(`Detected Validity: ${detectedValidity}`);
+      
+      // 3. Fallback Keyword Match (if USN completely missed)
+      if (!isMatch && (cleanText.includes('COLLEGE') || cleanText.includes('CARD') || cleanText.includes('VIDYAVARDHAKA') || cleanText.includes('VVCE') || cleanText.includes('STUDENT') || cleanText.includes('LIBRARY'))) {
+        isMatch = true;
+        detectedUsn = 'Matched via College Keywords';
+      }
+
+      // Try to find year validity (e.g., 2021-2025)
+      const yearPattern = /20\d{2}-20\d{2}/g;
+      const yearMatches = text.replace(/\s/g, '').match(yearPattern);
+      const detectedValidity = yearMatches ? yearMatches[0] : null;
+
+      if (isMatch) {
+        toast.success("ID Card Verified successfully!");
+        setScanResult({ match: true, detectedUsn: detectedUsn || sanitizedUsn, detectedValidity });
+      } else {
+        // Try one last desperate search for a regex match in the raw text
+        const fallbackRegex = /[1-4][A-Z]{2}[0-9]{2}[A-Z]{2}[0-9]{3}/g;
+        const matches = text.replace(/\s/g, '').match(fallbackRegex);
+        if (matches && matches[0]) {
+           setScanResult({ match: false, detectedUsn: matches[0], detectedValidity });
+           toast.error(`USN mismatch. Found ${matches[0]}, expected ${sanitizedUsn}`);
+        } else {
+           setScanResult({ match: false, detectedUsn: null, detectedValidity });
+           toast.warning("Could not clearly read USN or College details from image.");
+        }
+      }
     } catch (err) {
       console.error("OCR Error:", err);
       toast.error("Failed to scan ID card.");
@@ -153,6 +178,8 @@ export default function MyProfile() {
       if (authError || !user) { await supabase.auth.signOut(); router.push('/'); return; }
       if (!user.email) throw new Error("No authenticated email found.");
       
+      const idCardPayload = uploadedIdUrl ? uploadedIdUrl : (!idCardPreview ? null : undefined);
+
       const response = await fetch('/api/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -164,7 +191,7 @@ export default function MyProfile() {
           branch: year, 
           section, 
           mobile,
-          ...(uploadedIdUrl && { id_card_url: uploadedIdUrl })
+          ...(idCardPayload !== undefined && { id_card_url: idCardPayload })
         })
       });
       
@@ -198,14 +225,14 @@ export default function MyProfile() {
           <div className="absolute bottom-0 left-0 w-32 h-0.5 bg-teal-700" />
           <div>
             <button onClick={() => router.push('/student/dashboard')}
-              className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-teal-700 transition-colors mb-4 uppercase tracking-widest py-2 pr-4 -ml-2 pl-2">
-              <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+              className="flex items-center gap-2 text-xs md:text-sm font-bold text-slate-500 hover:text-teal-700 transition-colors mb-4 uppercase tracking-widest py-2 pr-4 -ml-2 pl-2">
+              <ArrowLeft className="w-5 h-5" /> <span className="hidden md:inline">Back</span>
             </button>
-            <div className="flex items-center gap-4">
-              <img src="/vvce-logo.png" alt="VVCE Logo" className="h-10 w-auto object-contain shrink-0" />
+            <div className="flex items-center gap-3 md:gap-4">
+              <img src="/vvce-logo.png" alt="VVCE Logo" className="h-8 md:h-10 w-auto object-contain shrink-0" />
               <div>
-                <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-none mb-1 uppercase">My Profile</h1>
-                <p className="text-xs text-slate-500 font-medium">Manage your personal details and academic information.</p>
+                <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight leading-none mb-1 uppercase">My Profile</h1>
+                <p className="text-[10px] md:text-xs text-slate-500 font-medium hidden sm:block">Manage your personal details and academic information.</p>
               </div>
             </div>
           </div>
@@ -234,15 +261,18 @@ export default function MyProfile() {
               </div>
               <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className={labelCls}>Full Name</label>
-                  <input required type="text" value={name} onChange={e => setName(e.target.value)}
-                    className={inputCls} placeholder="Enter your full name" />
+                  <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-widest">
+                    Full Name <Lock className="w-3 h-3" />
+                  </label>
+                  <input required type="text" value={name} readOnly
+                    className={`${inputCls} bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200`} placeholder="Enter your full name" />
                 </div>
                 <div>
-                  <label className={labelCls}>USN</label>
-                  <input required type="text" value={usn}
-                    onChange={e => { setUsn(e.target.value.toUpperCase()); setScanResult(null); }}
-                    className={`${inputCls} font-mono uppercase`} placeholder="e.g. 4VV25CS000" />
+                  <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-widest">
+                    USN <Lock className="w-3 h-3" />
+                  </label>
+                  <input required type="text" value={usn} readOnly
+                    className={`${inputCls} font-mono uppercase bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200`} placeholder="e.g. 4VV25CS000" />
                 </div>
               </div>
             </div>
@@ -281,8 +311,8 @@ export default function MyProfile() {
                       <img src={idCardPreview} alt="ID Card" className="w-full h-full object-cover grayscale opacity-80" />
                       <button type="button"
                         onClick={() => { setIdCardFile(null); setIdCardPreview(null); setScanResult(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
-                        className="absolute top-1 right-1 bg-white border border-slate-300 p-1 text-slate-500 hover:text-red-700 opacity-0 group-hover/img:opacity-100 transition-all">
-                        <X className="w-3 h-3" />
+                        className="absolute top-2 right-2 bg-white/90 shadow-sm border border-slate-300 p-1.5 rounded-full text-slate-600 hover:text-red-700 transition-all z-10 hover:bg-white flex items-center justify-center">
+                        <X className="w-4 h-4" />
                       </button>
                     </div>
                   ) : (

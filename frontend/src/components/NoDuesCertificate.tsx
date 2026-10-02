@@ -1,6 +1,9 @@
 'use client';
 
 import React from 'react';
+import { Inter } from 'next/font/google';
+
+const inter = Inter({ subsets: ['latin'] });
 
 export interface NoDuesCertificateProps {
   studentName: string;
@@ -24,7 +27,7 @@ export default function NoDuesCertificate({
   };
 
   return (
-    <div id="noc-container" className="bg-white text-black p-5 sm:p-10 md:p-12 max-w-3xl mx-auto shadow-2xl relative font-serif text-xs sm:text-sm leading-relaxed border border-gray-200">
+    <div id="noc-container" className={`${inter.className} bg-white text-black p-5 sm:p-10 md:p-12 max-w-3xl mx-auto shadow-2xl relative text-xs sm:text-sm leading-relaxed border border-gray-200`}>
       
       {/* Print Button (Hidden in Print View) */}
       <div className="flex justify-end mb-6 print:hidden">
@@ -45,41 +48,41 @@ export default function NoDuesCertificate({
 
       {/* Certificate Title */}
       <div className="text-center mb-8">
-        <h2 className="text-2xl sm:text-3xl font-bold uppercase underline decoration-2 underline-offset-4">No Dues Certificate</h2>
+        <h2 className="text-xl sm:text-2xl md:text-3xl font-bold uppercase underline decoration-2 underline-offset-4">No Dues Certificate</h2>
       </div>
 
       {/* Letter Body */}
       <div className="space-y-6 px-4">
-        <div className="text-right mb-6">
+        <div className="text-right mb-6 text-xs sm:text-sm">
           <p><strong>Date:</strong> {date}</p>
         </div>
 
-        <p className="text-justify leading-loose text-base">
+        <p className="text-justify leading-relaxed sm:leading-loose text-sm sm:text-base">
           This is to certify that <strong>Mr./Ms. {studentName}</strong>, bearing USN <strong>{usn}</strong>, 
           a student of the <strong>Department of {department}</strong>
           {semester ? ` in their ${semester} semester` : ''}, has successfully returned all laboratory components, tools, 
           and equipment borrowed from the Department Laboratory.
         </p>
         
-        <p className="text-justify leading-loose text-base">
+        <p className="text-justify leading-relaxed sm:leading-loose text-sm sm:text-base">
           We confirm that there are <strong>NO DUES</strong> pending against the aforementioned student concerning the lab inventory. 
           This certificate is issued upon the request of the student for their academic/administrative clearance.
         </p>
 
         {/* Signatures */}
-        <div className="flex flex-col sm:flex-row justify-between items-center sm:items-end gap-8 sm:gap-0 mt-16 sm:mt-24 mb-8">
+        <div className="flex flex-col sm:flex-row justify-between items-center sm:items-end gap-8 sm:gap-0 mt-12 sm:mt-24 mb-8">
           <div className="text-center sm:text-left flex flex-col items-center">
-            <div className="h-16 flex items-center justify-center font-serif italic text-2xl text-blue-800 mix-blend-multiply">
+            <div className="h-16 flex items-center justify-center font-serif italic text-xl sm:text-2xl text-blue-800 mix-blend-multiply">
               Verified
             </div>
-            <p className="font-bold border-t-2 border-black pt-1 mt-2 inline-block px-2 sm:px-4 text-sm sm:text-base">Lab Administrator</p>
+            <p className="font-bold border-t-2 border-black pt-1 mt-2 inline-block px-2 sm:px-4 text-xs sm:text-sm md:text-base">Lab Administrator</p>
           </div>
           
           <div className="text-center sm:text-right flex flex-col items-center">
-            <div className="h-16 flex items-center justify-center font-serif italic text-2xl text-blue-800 mix-blend-multiply">
+            <div className="h-16 flex items-center justify-center font-serif italic text-xl sm:text-2xl text-blue-800 mix-blend-multiply">
               Approved
             </div>
-            <p className="font-bold border-t-2 border-black pt-1 mt-2 inline-block px-2 sm:px-4 text-sm sm:text-base">Head of Department</p>
+            <p className="font-bold border-t-2 border-black pt-1 mt-2 inline-block px-2 sm:px-4 text-xs sm:text-sm md:text-base">Head of Department</p>
           </div>
         </div>
 
