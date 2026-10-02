@@ -10,7 +10,7 @@ import RequisitionLetter from '@/components/RequisitionLetter';
 import { isWorkingDay, getWorkingDaysCount } from '@/lib/dateValidator';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ChevronRight, ArrowLeft, Search, Plus, Minus, Trash2, 
+  ChevronRight, ArrowLeft, Search, Plus, Minus, Trash2, X,
   Calendar, Clock, AlertCircle, Upload, CheckCircle2, ShieldCheck, User, Zap, Box, Info,
   Cpu, Radio, Building2, Wrench
 } from 'lucide-react';
@@ -71,6 +71,9 @@ export default function StudentCheckout() {
   const [projectType, setProjectType] = useState('Course Assignment / Lab Work');
   const [projectTitle, setProjectTitle] = useState('');
   const [projectPurpose, setProjectPurpose] = useState('');
+  const [hackathonCollege, setHackathonCollege] = useState('');
+  const [hackathonVenueStr, setHackathonVenueStr] = useState('');
+  const [hackathonDate, setHackathonDate] = useState('');
   const [studentIdCardUrl, setStudentIdCardUrl] = useState('');
   const [idCardFile, setIdCardFile] = useState<File | null>(null);
   const [hasVerifiedProfileId, setHasVerifiedProfileId] = useState(false);
@@ -212,6 +215,12 @@ export default function StudentCheckout() {
     if (!agreedToUndertaking) return toast.error("You must agree to the undertaking");
     if (agreedToUndertaking && !signatureFile) return toast.error("Please upload your signature for the undertaking");
     
+    if (projectType === 'Hackathon / Competition') {
+      if (!hackathonCollege || !hackathonVenueStr || !hackathonDate) {
+        return toast.error("Please fill all Hackathon details (College, Venue, Date)");
+      }
+    }
+
     if (!isWorkingDay(date)) return toast.error('Pickup date must be a working day (Mon-Sat)');
 
     setIsLoading(true);
@@ -264,6 +273,9 @@ export default function StudentCheckout() {
         signature_url: finalSignatureUrl,
         project_title: projectTitle || projectType,
         project_description: projectPurpose,
+        project_type: projectType,
+        hackathon_date: projectType === 'Hackathon / Competition' ? hackathonDate : null,
+        hackathon_venue: projectType === 'Hackathon / Competition' ? `${hackathonCollege} - ${hackathonVenueStr}` : null,
         is_team_project: false
       }]).select().single();
 
@@ -311,7 +323,7 @@ export default function StudentCheckout() {
             <div className="flex items-center gap-4">
               <img src="/vvce-logo.png" alt="VVCE Logo" className="h-10 w-auto object-contain shrink-0" />
               <div>
-                <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-none mb-1 uppercase">Hardware Requisition</h1>
+                <h1 className="text-lg md:text-xl font-black text-slate-900 tracking-tight leading-none mb-1 uppercase">Hardware Requisition</h1>
                 <p className="text-xs text-slate-500 font-medium">Select components for your project</p>
               </div>
             </div>
@@ -373,7 +385,7 @@ export default function StudentCheckout() {
 
         {/* STEP 2: Select Components */}
         {step === 'components' && (
-          <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={transitionProps} className="flex flex-col lg:flex-row gap-6">
+          <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={transitionProps} className="flex flex-col-reverse lg:flex-row gap-6">
             <div className="flex-1">
               <div className="bg-white border border-slate-300 mb-6 relative">
                 <div className="absolute top-0 left-0 right-0 h-1 bg-teal-700" />
@@ -394,10 +406,10 @@ export default function StudentCheckout() {
                   ) : inventory.filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
                     <div className="py-12 text-center text-slate-500 text-xs font-mono uppercase tracking-widest">No items found.</div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
                       {inventory.filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase())).map(item => (
                         <div key={item.id} className="flex flex-col border border-slate-300 bg-white hover:border-teal-700 transition-colors shadow-sm group">
-                          <div className="h-40 bg-slate-100 flex items-center justify-center relative overflow-hidden border-b border-slate-200">
+                          <div className="h-28 sm:h-32 md:h-40 bg-slate-100 flex items-center justify-center relative overflow-hidden border-b border-slate-200">
                             {item.photo_url ? (
                               <img src={item.photo_url} alt={item.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                             ) : (
@@ -537,6 +549,23 @@ export default function StudentCheckout() {
                 </div>
               </div>
 
+              {projectType === 'Hackathon / Competition' && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-top-4 duration-300">
+                  <div>
+                    <label className={labelCls}>College Name</label>
+                    <input required type="text" value={hackathonCollege} onChange={e => setHackathonCollege(e.target.value)} className={inputCls} placeholder="E.g. IIT Madras" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Venue / City</label>
+                    <input required type="text" value={hackathonVenueStr} onChange={e => setHackathonVenueStr(e.target.value)} className={inputCls} placeholder="E.g. Chennai" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Participation Date</label>
+                    <input required type="date" value={hackathonDate} onChange={e => setHackathonDate(e.target.value)} className={inputCls} />
+                  </div>
+                </div>
+              )}
+
               <hr className="border-slate-200" />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -596,7 +625,20 @@ export default function StudentCheckout() {
                       </div>
                       <p className="text-sm font-bold text-slate-800 mb-1 uppercase tracking-wide">Upload ID Card</p>
                       <p className="text-xs text-slate-500">Required for checkout if not verified in profile</p>
-                      {idCardFile && <p className="text-xs font-mono font-bold text-teal-700 mt-3 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> {idCardFile.name}</p>}
+                      {idCardFile && (
+                        <div className="mt-3 flex items-center justify-center gap-2">
+                          <p className="text-xs font-mono font-bold text-teal-700 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" /> {idCardFile.name}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIdCardFile(null); (document.getElementById('idUpload') as HTMLInputElement).value = ''; }}
+                            className="p-1 text-red-500 hover:bg-red-50 rounded border border-transparent hover:border-red-200 transition-colors"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
                     </label>
                   </div>
                 )}
@@ -634,7 +676,20 @@ export default function StudentCheckout() {
                         </div>
                         <p className="text-sm font-bold text-slate-800 mb-1 uppercase tracking-wide">Upload Signature</p>
                         <p className="text-xs text-slate-500">Please provide a clear image of your signature for the undertaking letter</p>
-                        {signatureFile && <p className="text-xs font-mono font-bold text-teal-700 mt-3 flex items-center justify-center gap-1"><CheckCircle2 className="w-3 h-3" /> {signatureFile.name}</p>}
+                        {signatureFile && (
+                          <div className="mt-3 flex items-center justify-center gap-2">
+                            <p className="text-xs font-mono font-bold text-teal-700 flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" /> {signatureFile.name}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSignatureFile(null); (document.getElementById('sigUpload') as HTMLInputElement).value = ''; }}
+                              className="p-1 text-red-500 hover:bg-red-50 rounded border border-transparent hover:border-red-200 transition-colors"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
                       </label>
                     </div>
                   </motion.div>

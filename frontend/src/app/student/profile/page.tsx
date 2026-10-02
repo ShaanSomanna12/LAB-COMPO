@@ -363,7 +363,7 @@ export default function MyProfile() {
                   </div>
                 </div>
                 <div>
-                  <label className={labelCls}>Section Code</label>
+                  <label className={labelCls}>Section</label>
                   <div className="relative">
                     <select required value={section} onChange={e => setSection(e.target.value)} className={selectCls}>
                       <option value="" disabled>Select Section</option>
