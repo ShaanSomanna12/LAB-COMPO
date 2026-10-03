@@ -8,7 +8,7 @@ import { siteConfig } from '@/config/site';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LogOut, User, Microchip, Clock, ChevronRight,
-  QrCode, Eye, FileCheck, X, AlertTriangle, LayoutDashboard, Database, Calendar, Package
+  QrCode, Eye, FileCheck, X, AlertTriangle, LayoutDashboard, Database, Calendar, Package, Cpu
 } from 'lucide-react';
 import QRCode from 'react-qr-code';
 
@@ -17,6 +17,7 @@ const inter = Inter({ subsets: ['latin'] });
 const NAV_ITEMS = [
   { label: 'Overview', icon: LayoutDashboard, path: '/student/dashboard' },
   { label: 'Hardware', icon: Database, path: '/student/checkout' },
+  { label: 'IoT Lab', icon: Cpu, path: '/student/iot-checkout' },
   { label: 'Reservations', icon: Calendar, path: '/student/reservations' },
   { label: 'No Dues', icon: FileCheck, path: '/student/no-dues' },
   { label: 'Profile', icon: User, path: '/student/profile' },
@@ -24,9 +25,14 @@ const NAV_ITEMS = [
 
 const QUICK_ACTIONS = [
   {
-    id: 'hardware', label: 'Hardware Request', icon: Microchip,
+    id: 'iot-lab', label: 'Live Session Borrowing & Return', icon: Cpu,
+    path: '/student/iot-checkout', badge: 'M306 & M302',
+    desc: 'For CSE 3rd sem only. Borrow and return during your live 2-hour lab session.',
+  },
+  {
+    id: 'hardware', label: 'Hardware Request (Projects)', icon: Microchip,
     path: '/student/checkout', badge: null,
-    desc: 'Browse and reserve lab components.',
+    desc: 'Borrow components for long-term project work outside of lab hours.',
   },
   {
     id: 'reservations', label: 'My Reservations', icon: Calendar,
@@ -84,13 +90,13 @@ export default function StudentDashboard() {
           const { data: resData } = await supabase
             .from('reservations')
             .select('status, return_date, id, project_title, expected_return_date')
-            .eq('usn', userData.usn.toUpperCase());
+            .eq('user_id', user.id);
+
+          let active = 0, pending = 0, borrowed = 0, dueSoon = 0;
+          let urgent: any = null;
+          const now = new Date();
 
           if (resData) {
-            let active = 0, pending = 0, borrowed = 0, dueSoon = 0;
-            let urgent: any = null;
-            const now = new Date();
-
             resData.forEach(r => {
               if (r.status === 'PENDING_APPROVAL' || r.status === 'PENDING_HOD') pending++;
               if (r.status === 'APPROVED' || r.status === 'CHECKED_OUT') {
@@ -107,9 +113,34 @@ export default function StudentDashboard() {
                 }
               }
             });
-            setMetrics({ active, pending, borrowed, dueSoon });
-            setUrgentReturn(urgent);
           }
+
+          try {
+            const res = await fetch(`/api/student/iot-tx?user_id=${user.id}`);
+            if (res.ok) {
+              const result = await res.json();
+              if (result.data) {
+                result.data.forEach((tx: any) => {
+                  if (tx.status === 'borrowed') {
+                    active++;
+                    borrowed++;
+                  } else if (tx.status === 'overdue') {
+                    active++;
+                    borrowed++;
+                    dueSoon++;
+                    if (!urgent) {
+                      urgent = { id: tx.id, title: tx.project_title || 'IoT Kit', date: tx.created_at, daysLeft: 0 };
+                    }
+                  }
+                });
+              }
+            }
+          } catch (e) {
+            console.error("Failed to fetch IoT txs for dashboard");
+          }
+
+          setMetrics({ active, pending, borrowed, dueSoon });
+          setUrgentReturn(urgent);
         }
       } catch (err) {
         console.error("Dashboard fetch error:", err);
@@ -308,7 +339,7 @@ export default function StudentDashboard() {
 
                 {/* Actions */}
                 <section>
-                  <div className="flex items-center justify-between mb-3 border-b border-slate-200 pb-2">
+                  <div className="flex items-center justify-between mb-4 border-b border-slate-200 pb-2">
                     <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Quick Actions</h3>
                   </div>
                   

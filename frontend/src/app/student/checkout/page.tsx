@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import Image from 'next/image';
 import { Inter } from 'next/font/google';
 import { siteConfig } from '@/config/site';
 import RequisitionLetter from '@/components/RequisitionLetter';
@@ -305,7 +306,7 @@ export default function StudentCheckout() {
       
     } catch (err: any) {
       console.error(err);
-      toast.error(err.message || 'Submission failed');
+      toast.error('Submission failed. Please check your connection or contact the lab admin.');
     } finally {
       setIsLoading(false);
     }
@@ -324,7 +325,9 @@ export default function StudentCheckout() {
         {/* Header */}
         <div className="flex items-start justify-between mb-6 pb-4 border-b-2 border-slate-300 relative">
           <div className="flex items-center gap-3">
-            <img src="/vvce-logo.png" alt="VVCE Logo" className="h-8 w-auto object-contain shrink-0" />
+            <div className="relative h-8 w-12 sm:w-16 shrink-0">
+              <Image src="/vvce-logo.png" alt="VVCE Logo" fill className="object-contain" priority />
+            </div>
             <div>
               <h1 className="text-sm md:text-base font-black text-slate-900 tracking-tight leading-none mb-1 uppercase">Hardware Request</h1>
               <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest hidden sm:block">Select components for your project</p>
@@ -469,7 +472,7 @@ export default function StudentCheckout() {
                         <div key={item.id} className="flex flex-col border border-slate-300 bg-white hover:border-teal-700 transition-colors shadow-sm group">
                           <div className="h-20 sm:h-28 md:h-32 bg-slate-100 flex items-center justify-center relative overflow-hidden border-b border-slate-200">
                             {item.photo_url ? (
-                              <img src={item.photo_url} alt={item.name} className="w-full h-full object-contain p-2 transition-transform duration-500 group-hover:scale-105" />
+                              <Image src={item.photo_url} alt={item.name} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-contain p-2 transition-transform duration-500 group-hover:scale-105" />
                             ) : (
                               <Box className="w-8 h-8 text-slate-300" />
                             )}

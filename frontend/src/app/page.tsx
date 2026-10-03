@@ -172,9 +172,11 @@ export default function StudentAuth() {
 
           // Store department for UI context only — auth is enforced server-side
           if (roleType === 'admin') {
-            localStorage.setItem('admin_dept', loginData.user?.department ?? department);
+            const finalDept = loginData.user?.department ?? department;
+            localStorage.setItem('admin_dept', finalDept);
             setMessage('Entering Lab Admin Portal.. ⚡');
-            setTimeout(() => { window.location.href = '/admin'; }, 500);
+            const targetUrl = (finalDept.startsWith('IOT')) ? '/admin/iot-dashboard' : '/admin';
+            setTimeout(() => { window.location.href = targetUrl; }, 500);
           } else {
             localStorage.setItem('hod_dept', loginData.user?.department ?? department);
             setMessage('Entering HOD Workspace.. ⚡');

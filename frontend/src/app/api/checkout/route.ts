@@ -83,28 +83,19 @@ export async function POST(request: Request) {
     newDueDate.setDate(newDueDate.getDate() + originalDurationDays);
     newDueDate = getNextWorkingDay(newDueDate);
 
-    // 5. Update reservation status to CHECKED_OUT
-    const { data: updatedRes, error: updateResError } = await supabase
-      .from('reservations')
-      .update({
-        status: 'CHECKED_OUT',
-        borrowed_at: borrowedAt.toISOString(),
-        due_date: newDueDate.toISOString()
-      })
-      .eq('reservation_id', reservationId)
-      .select()
-      .single();
+    // 5. Update reservation status and log history atomically via RPC
+    const note = isAssetTracked ? `Asset ${assetId} checked out` : 'Quantity checked out';
+    
+    const { data: updatedRes, error: updateResError } = await supabase.rpc('checkout_reservation_safe', {
+      p_reservation_id: reservationId,
+      p_borrowed_at: borrowedAt.toISOString(),
+      p_due_date: newDueDate.toISOString(),
+      p_changed_by: payload.userId,
+      p_note: note,
+      p_old_status: reservation.status
+    });
 
     if (updateResError) throw updateResError;
-
-    // Log reservation status change
-    await supabase.from('reservation_status_history').insert([{
-      reservation_id: reservationId,
-      old_status: reservation.status,
-      new_status: 'CHECKED_OUT',
-      changed_by: payload.userId,
-      note: isAssetTracked ? `Asset ${assetId} checked out` : 'Quantity checked out'
-    }]);
 
     return NextResponse.json({ success: true, reservation: updatedRes });
 

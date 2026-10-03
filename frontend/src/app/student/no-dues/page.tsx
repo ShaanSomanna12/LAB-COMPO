@@ -21,7 +21,7 @@ export default function NoDuesPage() {
     name: '',
     usn: '',
     department: 'CSE', // Default or fetch from user profile if available
-    semester: '8th'
+    semester: ''
   });
 
   useEffect(() => {
@@ -170,6 +170,7 @@ export default function NoDuesPage() {
                     onChange={(e) => setStudentData({...studentData, semester: e.target.value})}
                     className="bg-slate-50 border border-slate-300 text-slate-700 rounded px-4 py-2 text-sm font-bold focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-colors uppercase"
                   >
+                    <option value="" disabled>Select Semester</option>
                     {['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'].map(sem => (
                       <option key={sem} value={sem}>{sem} Semester</option>
                     ))}

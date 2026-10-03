@@ -28,6 +28,10 @@ import { isValidUSN, generateToken, ROLES } from '@/lib/auth';
 import { getSupabaseUrl, getSupabaseAnonKey, getSupabaseAdmin } from '@/lib/supabaseServer';
 import bcrypt from 'bcrypt';
 import { timingSafeEqual } from 'crypto';
+import Redis from 'ioredis';
+
+// Initialize Redis connection for rate limiting
+const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
 // ---------------------------------------------------------------------------
 // Supabase client (anon key — only used to query public.users for student auth)
@@ -70,7 +74,7 @@ function safeCompare(a: string, b: string): boolean {
 // ---------------------------------------------------------------------------
 // System account credential registry — reads from env vars at request time
 // ---------------------------------------------------------------------------
-const DEPARTMENTS = ['EDL', 'ECE', 'EEE', 'MECH', 'CIVIL'] as const;
+const DEPARTMENTS = ['EDL', 'ECE', 'EEE', 'MECH', 'CIVIL', 'CSE', 'IOT306', 'IOT302', 'IOT'] as const;
 type Dept = (typeof DEPARTMENTS)[number];
 type RoleType = 'admin' | 'hod';
 
@@ -102,6 +106,7 @@ function isSystemPasswordValid(dept: string, roleType: RoleType, inputPass: stri
     if (safeCompare(inputPass, exp)) return true;
     if (safeCompare(inputPass.toLowerCase(), exp.toLowerCase())) return true;
   }
+  console.log(`[AUTH DEBUG] isSystemPasswordValid failed. dept=${dept}, role=${roleType}, key=${key}, envVal=${envVal}, candidates=${Array.from(candidates).join(', ')}`);
   return false;
 }
 
@@ -114,6 +119,23 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (!body || typeof body !== 'object') {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+    }
+
+    // ── RATE LIMITING ──
+    // Rate limit based on IP (or default fallback) to prevent brute-forcing
+    const ip = request.headers.get('x-forwarded-for') || 'unknown-ip';
+    const rateLimitKey = `rate_limit:login:${ip}`;
+    
+    const currentRequests = await redis.incr(rateLimitKey);
+    if (currentRequests === 1) {
+        // Block IP for 10 minutes after 10 failed/rapid attempts
+        await redis.expire(rateLimitKey, 600);
+    }
+    if (currentRequests > 10) {
+        console.warn(`[RATE LIMIT] Blocked brute force attempt from IP: ${ip}`);
+        return NextResponse.json({ 
+            error: 'Maximum login attempts exceeded. Your IP has been blocked for 10 minutes.' 
+        }, { status: 429 });
     }
 
     // ════════════════════════════════════════════════════════════════════════

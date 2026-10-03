@@ -328,6 +328,10 @@ export default function AdminDashboard() {
           if (data.success && data.department) {
             // JWT is authoritative — sync localStorage and apply dept
             localStorage.setItem('admin_dept', data.department);
+            if (data.department.startsWith('IOT')) {
+              window.location.href = '/admin/iot-dashboard';
+              return;
+            }
             setAdminDept(data.department);
             setIsLocked(true);
             return;
@@ -340,6 +344,10 @@ export default function AdminDashboard() {
       // Fallback: use localStorage only if JWT fetch fails
       const storedAdminDept = localStorage.getItem('admin_dept');
       if (storedAdminDept) {
+        if (storedAdminDept.startsWith('IOT')) {
+          window.location.href = '/admin/iot-dashboard';
+          return;
+        }
         setAdminDept(storedAdminDept);
         setIsLocked(true);
       }

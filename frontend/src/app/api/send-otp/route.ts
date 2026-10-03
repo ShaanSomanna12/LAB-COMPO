@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import Redis from 'ioredis';
 import nodemailer from 'nodemailer';
+
+// Initialize Redis connection
+const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
 export async function POST(request: Request) {
     try {
@@ -21,14 +25,13 @@ export async function POST(request: Request) {
         const formattedUSN = usn ? usn.trim().toUpperCase() : '';
         let targetEmail = email ? email.trim() : '';
         const otpCode = providedOtp || Math.floor(100000 + Math.random() * 900000).toString();
-        const expiryTime = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
         if (type === 'forgot_password') {
             if (!formattedUSN) {
                 return NextResponse.json({ success: false, error: "USN is required." }, { status: 400 });
             }
 
-            // 1. Fetch user by USN using Service Role (bypasses RLS)
+            // 1. Fetch user by USN using Service Role
             const { data: userData, error: fetchError } = await supabaseAdmin
                 .from('users')
                 .select('email, role_id')
@@ -45,17 +48,6 @@ export async function POST(request: Request) {
 
             targetEmail = userData.email;
 
-            // 2. Save OTP to DB using Service Role
-            const { error: dbError } = await supabaseAdmin
-                .from('users')
-                .update({ otp_code: otpCode, otp_expiry: expiryTime })
-                .eq('usn', formattedUSN);
-
-            if (dbError) {
-                console.error("DB OTP Update Error:", dbError);
-                return NextResponse.json({ success: false, error: "Failed to store OTP code in database." }, { status: 500 });
-            }
-
         } else if (type === 'register') {
             if (!formattedUSN || !targetEmail) {
                 return NextResponse.json({ success: false, error: "USN and Email are required for registration." }, { status: 400 });
@@ -66,31 +58,21 @@ export async function POST(request: Request) {
                 return NextResponse.json({ success: false, error: `A valid ${collegeDomain} email is required to register.` }, { status: 400 });
             }
 
-            // Upsert user into public.users using Service Role
+            // Upsert user into public.users using Service Role (without OTP logic)
             const { error: dbError } = await supabaseAdmin
                 .from('users')
                 .upsert({
                     usn: formattedUSN,
                     email: targetEmail,
-                    otp_code: otpCode,
-                    otp_expiry: expiryTime,
                     name: name || '',
                     role_id: 1
                 }, { onConflict: 'usn' });
 
             if (dbError) {
-                console.error("DB OTP Upsert Error:", dbError);
+                console.error("DB Upsert Error:", dbError);
                 return NextResponse.json({ success: false, error: `Database error: ${dbError.message}` }, { status: 500 });
             }
-        } else if (providedOtp && targetEmail) {
-            // Legacy/fallback mode: if usn provided, store it
-            if (formattedUSN) {
-                await supabaseAdmin
-                    .from('users')
-                    .update({ otp_code: otpCode, otp_expiry: expiryTime })
-                    .eq('usn', formattedUSN);
-            }
-        } else {
+        } else if (!providedOtp || !targetEmail) {
             return NextResponse.json({ success: false, error: "Invalid parameters provided for OTP generation." }, { status: 400 });
         }
 
@@ -98,7 +80,29 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: "No recipient email address found." }, { status: 400 });
         }
 
-        // Send Email via Nodemailer
+        // ── RATE LIMITING ──
+        // Limit to 3 OTP requests per 10 minutes per USN to prevent spam
+        const rateLimitKey = `rate_limit:otp:${formattedUSN}`;
+        const currentRequests = await redis.incr(rateLimitKey);
+        
+        if (currentRequests === 1) {
+            // Set the rate limit window to 10 minutes (600 seconds)
+            await redis.expire(rateLimitKey, 600);
+        }
+
+        if (currentRequests > 3) {
+            console.warn(`[RATE LIMIT] Blocked excessive OTP requests for USN: ${formattedUSN}`);
+            return NextResponse.json({ 
+                success: false, 
+                error: "Too many OTP requests. Please wait 10 minutes before trying again." 
+            }, { status: 429 });
+        }
+
+        // ── STORE OTP IN REDIS INSTEAD OF POSTGRES ──
+        // Save the OTP with an expiration of 10 minutes (600 seconds)
+        await redis.set(`otp:${formattedUSN}`, otpCode, 'EX', 600);
+
+        // ── SEND EMAIL VIA NODEMAILER ──
         const transporter = nodemailer.createTransport({
             service: 'gmail',
             auth: {

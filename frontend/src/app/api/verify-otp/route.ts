@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import Redis from 'ioredis';
+
+// Initialize Redis connection
+const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
 export async function POST(request: Request) {
     try {
@@ -23,27 +27,19 @@ export async function POST(request: Request) {
         const formattedUSN = usn.trim().toUpperCase();
         const cleanOtpCode = otpCode.toString().trim();
 
-        const { data: userData, error: fetchError } = await supabaseAdmin
-            .from('users')
-            .select('otp_code, otp_expiry')
-            .eq('usn', formattedUSN)
-            .maybeSingle();
+        // ── FETCH OTP FROM REDIS ──
+        const storedOtp = await redis.get(`otp:${formattedUSN}`);
 
-        if (fetchError || !userData) {
-            return NextResponse.json({ success: false, error: "USN not found. Please try again." }, { status: 400 });
+        if (!storedOtp) {
+            return NextResponse.json({ success: false, error: "OTP code has expired or was not requested." }, { status: 400 });
         }
 
-        if (!userData.otp_code) {
-            return NextResponse.json({ success: false, error: "No OTP was requested for this account." }, { status: 400 });
+        if (storedOtp !== cleanOtpCode) {
+            return NextResponse.json({ success: false, error: "Invalid OTP code. Please check and try again." }, { status: 400 });
         }
 
-        if (userData.otp_code.toString().trim() !== cleanOtpCode) {
-            return NextResponse.json({ success: false, error: "Invalid OTP code. Please check your email and try again." }, { status: 400 });
-        }
-
-        if (!userData.otp_expiry || new Date(userData.otp_expiry) < new Date()) {
-            return NextResponse.json({ success: false, error: "OTP code has expired. Please request a new code." }, { status: 400 });
-        }
+        // Optional: Delete OTP after successful verification to prevent reuse
+        await redis.del(`otp:${formattedUSN}`);
 
         return NextResponse.json({ success: true, message: 'OTP verified successfully.' });
 

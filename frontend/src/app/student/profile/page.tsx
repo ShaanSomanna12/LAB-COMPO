@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
-import Tesseract from 'tesseract.js';
+// Tesseract imported dynamically below to prevent massive bundle size
 import { Inter } from 'next/font/google';
 import { motion } from 'framer-motion';
 import {
@@ -97,6 +97,8 @@ export default function MyProfile() {
     if (!usn) { toast.error("Please enter your USN first to verify against the ID card."); return; }
     setIsScanning(true);
     try {
+      // Dynamically import Tesseract to avoid huge bundle size on initial load
+      const Tesseract = (await import('tesseract.js')).default;
       const result = await Tesseract.recognize(file, 'eng');
       const text = result.data.text.toUpperCase();
       

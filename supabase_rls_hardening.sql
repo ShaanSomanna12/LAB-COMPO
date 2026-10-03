@@ -198,174 +198,165 @@ CREATE POLICY "reservations_delete_blocked"
 
 -- =============================================================================
 -- SECTION 4 — LABS
---   • SELECT: public (lab catalogue)
---   • INSERT / DELETE: blocked for clients; service_role only
+-- (Commented out because the labs table doesn't exist in your database yet)
 -- =============================================================================
 
-ALTER TABLE public.labs ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE public.labs ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Allow public select for Labs"  ON public.labs;
-DROP POLICY IF EXISTS "Allow public insert for Labs"  ON public.labs;
-DROP POLICY IF EXISTS "Allow public delete for Labs"  ON public.labs;
+-- DROP POLICY IF EXISTS "Allow public select for Labs"  ON public.labs;
+-- DROP POLICY IF EXISTS "Allow public insert for Labs"  ON public.labs;
+-- DROP POLICY IF EXISTS "Allow public delete for Labs"  ON public.labs;
 
-CREATE POLICY "labs_select_public"
-  ON public.labs
-  FOR SELECT
-  USING (true);
+-- CREATE POLICY "labs_select_public"
+--   ON public.labs
+--   FOR SELECT
+--   USING (true);
 
-CREATE POLICY "labs_insert_blocked"
-  ON public.labs
-  FOR INSERT
-  WITH CHECK (false);
+-- CREATE POLICY "labs_insert_blocked"
+--   ON public.labs
+--   FOR INSERT
+--   WITH CHECK (false);
 
-CREATE POLICY "labs_delete_blocked"
-  ON public.labs
-  FOR DELETE
-  USING (false);
+-- CREATE POLICY "labs_delete_blocked"
+--   ON public.labs
+--   FOR DELETE
+--   USING (false);
 
 
 -- =============================================================================
 -- SECTION 5 — LAB_ACCESS_REQUESTS
---   • SELECT: open (admins/HODs need to read all without auth tokens in queries)
---   • INSERT: authenticated users only (students requesting access)
---   • UPDATE: blocked for clients (admin decisions go through server API)
+-- (Commented out because this feature was removed)
 -- =============================================================================
 
-ALTER TABLE public.lab_access_requests ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE public.lab_access_requests ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Allow public select for Lab Access Requests"  ON public.lab_access_requests;
-DROP POLICY IF EXISTS "Allow public insert for Lab Access Requests"  ON public.lab_access_requests;
-DROP POLICY IF EXISTS "Allow public update for Lab Access Requests"  ON public.lab_access_requests;
-DROP POLICY IF EXISTS "lab_access_select_public"                     ON public.lab_access_requests;
-DROP POLICY IF EXISTS "lab_access_insert_auth"                       ON public.lab_access_requests;
-DROP POLICY IF EXISTS "lab_access_update_service_only"               ON public.lab_access_requests;
+-- DROP POLICY IF EXISTS "Allow public select for Lab Access Requests"  ON public.lab_access_requests;
+-- DROP POLICY IF EXISTS "Allow public insert for Lab Access Requests"  ON public.lab_access_requests;
+-- DROP POLICY IF EXISTS "Allow public update for Lab Access Requests"  ON public.lab_access_requests;
+-- DROP POLICY IF EXISTS "lab_access_select_public"                     ON public.lab_access_requests;
+-- DROP POLICY IF EXISTS "lab_access_insert_auth"                       ON public.lab_access_requests;
+-- DROP POLICY IF EXISTS "lab_access_update_service_only"               ON public.lab_access_requests;
 
-CREATE POLICY "lab_access_select_public"
-  ON public.lab_access_requests
-  FOR SELECT
-  USING (true);
+-- CREATE POLICY "lab_access_select_public"
+--   ON public.lab_access_requests
+--   FOR SELECT
+--   USING (true);
 
-CREATE POLICY "lab_access_insert_blocked"
-  ON public.lab_access_requests
-  FOR INSERT
-  WITH CHECK (false);
+-- CREATE POLICY "lab_access_insert_blocked"
+--   ON public.lab_access_requests
+--   FOR INSERT
+--   WITH CHECK (false);
 
-CREATE POLICY "lab_access_update_blocked"
-  ON public.lab_access_requests
-  FOR UPDATE
-  USING (false);
+-- CREATE POLICY "lab_access_update_blocked"
+--   ON public.lab_access_requests
+--   FOR UPDATE
+--   USING (false);
 
 
 -- =============================================================================
--- SECTION 6 — WAITLISTS (added in v2 migration)
---   • SELECT: owner sees their own; service_role sees all
---   • INSERT: authenticated owner only
---   • UPDATE / DELETE: blocked for clients
+-- SECTION 6 — WAITLISTS
+-- (Commented out because this feature was removed)
 -- =============================================================================
 
-ALTER TABLE public.waitlists ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE public.waitlists ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Allow public select for Waitlists"  ON public.waitlists;
-DROP POLICY IF EXISTS "Allow public insert for Waitlists"  ON public.waitlists;
-DROP POLICY IF EXISTS "Allow public update for Waitlists"  ON public.waitlists;
-DROP POLICY IF EXISTS "Allow public delete for Waitlists"  ON public.waitlists;
+-- DROP POLICY IF EXISTS "Allow public select for Waitlists"  ON public.waitlists;
+-- DROP POLICY IF EXISTS "Allow public insert for Waitlists"  ON public.waitlists;
+-- DROP POLICY IF EXISTS "Allow public update for Waitlists"  ON public.waitlists;
+-- DROP POLICY IF EXISTS "Allow public delete for Waitlists"  ON public.waitlists;
 
-CREATE POLICY "waitlists_select_own"
-  ON public.waitlists
-  FOR SELECT
-  USING (auth.uid()::text = user_id::text);
+-- CREATE POLICY "waitlists_select_own"
+--   ON public.waitlists
+--   FOR SELECT
+--   USING (auth.uid()::text = user_id::text);
 
-CREATE POLICY "waitlists_insert_own"
-  ON public.waitlists
-  FOR INSERT
-  WITH CHECK (auth.uid()::text = user_id::text);
+-- CREATE POLICY "waitlists_insert_own"
+--   ON public.waitlists
+--   FOR INSERT
+--   WITH CHECK (auth.uid()::text = user_id::text);
 
-CREATE POLICY "waitlists_update_blocked"
-  ON public.waitlists
-  FOR UPDATE
-  USING (false);
+-- CREATE POLICY "waitlists_update_blocked"
+--   ON public.waitlists
+--   FOR UPDATE
+--   USING (false);
 
-CREATE POLICY "waitlists_delete_blocked"
-  ON public.waitlists
-  FOR DELETE
-  USING (false);
+-- CREATE POLICY "waitlists_delete_blocked"
+--   ON public.waitlists
+--   FOR DELETE
+--   USING (false);
 
 
 -- =============================================================================
--- SECTION 7 — NOTIFICATIONS (added in v2 migration)
---   • SELECT: owner sees only their own notifications
---   • INSERT: blocked for clients (server API creates notifications)
---   • UPDATE: owner can mark their own as read
---   • DELETE: blocked
+-- SECTION 7 — NOTIFICATIONS 
+-- (Commented out because this feature was removed)
 -- =============================================================================
 
-ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Allow public select for Notifications"  ON public.notifications;
-DROP POLICY IF EXISTS "Allow public insert for Notifications"  ON public.notifications;
-DROP POLICY IF EXISTS "Allow public update for Notifications"  ON public.notifications;
-DROP POLICY IF EXISTS "Allow public delete for Notifications"  ON public.notifications;
+-- DROP POLICY IF EXISTS "Allow public select for Notifications"  ON public.notifications;
+-- DROP POLICY IF EXISTS "Allow public insert for Notifications"  ON public.notifications;
+-- DROP POLICY IF EXISTS "Allow public update for Notifications"  ON public.notifications;
+-- DROP POLICY IF EXISTS "Allow public delete for Notifications"  ON public.notifications;
 
--- Users read only their own notifications
-CREATE POLICY "notifications_select_own"
-  ON public.notifications
-  FOR SELECT
-  USING (auth.uid()::text = user_id::text);
+-- -- Users read only their own notifications
+-- CREATE POLICY "notifications_select_own"
+--   ON public.notifications
+--   FOR SELECT
+--   USING (auth.uid()::text = user_id::text);
 
--- Notifications are created server-side only (service_role)
-CREATE POLICY "notifications_insert_blocked"
-  ON public.notifications
-  FOR INSERT
-  WITH CHECK (false);
+-- -- Notifications are created server-side only (service_role)
+-- CREATE POLICY "notifications_insert_blocked"
+--   ON public.notifications
+--   FOR INSERT
+--   WITH CHECK (false);
 
--- Users can mark their own notifications as read (is_read = true)
-CREATE POLICY "notifications_update_own_read"
-  ON public.notifications
-  FOR UPDATE
-  USING  (auth.uid()::text = user_id::text)
-  WITH CHECK (auth.uid()::text = user_id::text);
+-- -- Users can mark their own notifications as read (is_read = true)
+-- CREATE POLICY "notifications_update_own_read"
+--   ON public.notifications
+--   FOR UPDATE
+--   USING  (auth.uid()::text = user_id::text)
+--   WITH CHECK (auth.uid()::text = user_id::text);
 
-CREATE POLICY "notifications_delete_blocked"
-  ON public.notifications
-  FOR DELETE
-  USING (false);
+-- CREATE POLICY "notifications_delete_blocked"
+--   ON public.notifications
+--   FOR DELETE
+--   USING (false);
 
 
 -- =============================================================================
--- SECTION 8 — NOTICES (added in v5 migration)
---   • SELECT: public (all students need to see notices)
---   • INSERT / UPDATE / DELETE: blocked for clients; admin API uses service_role
+-- SECTION 8 — NOTICES 
+-- (Commented out because this feature was removed)
 -- =============================================================================
 
-ALTER TABLE public.notices ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE public.notices ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "notices_select_public"       ON public.notices;
-DROP POLICY IF EXISTS "notices_write_service_only"  ON public.notices;
-DROP POLICY IF EXISTS "notices_update_service_only" ON public.notices;
-DROP POLICY IF EXISTS "notices_delete_service_only" ON public.notices;
-DROP POLICY IF EXISTS "notices_insert_blocked"      ON public.notices;
-DROP POLICY IF EXISTS "notices_update_blocked"      ON public.notices;
-DROP POLICY IF EXISTS "notices_delete_blocked"      ON public.notices;
+-- DROP POLICY IF EXISTS "notices_select_public"       ON public.notices;
+-- DROP POLICY IF EXISTS "notices_write_service_only"  ON public.notices;
+-- DROP POLICY IF EXISTS "notices_update_service_only" ON public.notices;
+-- DROP POLICY IF EXISTS "notices_delete_service_only" ON public.notices;
+-- DROP POLICY IF EXISTS "notices_insert_blocked"      ON public.notices;
+-- DROP POLICY IF EXISTS "notices_update_blocked"      ON public.notices;
+-- DROP POLICY IF EXISTS "notices_delete_blocked"      ON public.notices;
 
-CREATE POLICY "notices_select_public"
-  ON public.notices
-  FOR SELECT
-  USING (true);
+-- CREATE POLICY "notices_select_public"
+--   ON public.notices
+--   FOR SELECT
+--   USING (true);
 
-CREATE POLICY "notices_insert_blocked"
-  ON public.notices
-  FOR INSERT
-  WITH CHECK (false);
+-- CREATE POLICY "notices_insert_blocked"
+--   ON public.notices
+--   FOR INSERT
+--   WITH CHECK (false);
 
-CREATE POLICY "notices_update_blocked"
-  ON public.notices
-  FOR UPDATE
-  USING (false);
+-- CREATE POLICY "notices_update_blocked"
+--   ON public.notices
+--   FOR UPDATE
+--   USING (false);
 
-CREATE POLICY "notices_delete_blocked"
-  ON public.notices
-  FOR DELETE
-  USING (false);
+-- CREATE POLICY "notices_delete_blocked"
+--   ON public.notices
+--   FOR DELETE
+--   USING (false);
 
 
 -- =============================================================================
@@ -388,6 +379,11 @@ CREATE POLICY "inventory_images_insert_auth"
   WITH CHECK (
     bucket_id = 'inventory-images'
     AND auth.uid() IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM public.users
+      WHERE user_id = auth.uid()
+      AND role_id IN (3, 4, 5) -- Only Admin, HOD, SuperAdmin
+    )
   );
 
 

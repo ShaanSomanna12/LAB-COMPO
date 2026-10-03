@@ -148,17 +148,63 @@ export default function MyReservations() {
           .order('created_at', { ascending: false });
 
         if (error) throw error;
-        
-        const mappedData = resData?.map((r: any) => ({
+        // Fetch IoT Transactions for the student via secure backend route
+        let iotTxData = null;
+        try {
+          const res = await fetch(`/api/student/iot-tx?user_id=${userData.user_id}`);
+          if (res.ok) {
+            const result = await res.json();
+            iotTxData = result.data;
+          } else {
+            console.error("Error fetching IoT transactions via API");
+          }
+        } catch (err: any) {
+          console.error("Error fetching IoT transactions:", err.message);
+        }
+
+        let mappedData: any[] = resData?.map((r: any) => ({
           ...r,
           extension_requested: r.extension_requested || false,
           extension_reason: r.extension_reason || null,
           extension_days: r.extension_days || null,
           extension_status: r.extension_status || null,
           assignedAssetId: r.component_instances?.[0]?.serial_number || (r.assigned_serial_numbers && r.assigned_serial_numbers.length > 0 ? r.assigned_serial_numbers[0] : null)
-        }));
-        
-        setReservations(mappedData || []);
+        })) || [];
+
+        // Map IoT transactions to look like Reservations
+        if (iotTxData && Array.isArray(iotTxData)) {
+          const mappedIot = iotTxData.map(tx => {
+            let itemsStr = 'Components';
+            if (Array.isArray(tx.iot_transaction_items)) {
+              itemsStr = tx.iot_transaction_items.map((i:any) => `${i.quantity}x ${i.iot_components?.name || 'Item'}`).join(', ');
+            } else if (tx.iot_transaction_items) {
+              const singleItem: any = tx.iot_transaction_items;
+              itemsStr = `${singleItem.quantity}x ${singleItem.iot_components?.name || 'Item'}`;
+            }
+
+            return {
+              reservation_id: tx.id,
+              status: tx.status === 'borrowed' ? 'CHECKED_OUT' : (tx.status === 'returned' ? 'COMPLETED' : 'OVERDUE'),
+              created_at: tx.created_at,
+              borrowed_at: tx.created_at,
+              project_title: tx.project_title,
+              request_mode: tx.type,
+              components: {
+                name: `IoT Kit (${itemsStr})`,
+                department: 'IOT',
+                lab_location: tx.session_time || 'Session',
+                value_tier: 'STANDARD'
+              },
+              // Default/empty fields for IoT
+              extension_requested: false,
+              assignedAssetId: null,
+              reservation_status_history: []
+            };
+          });
+          mappedData = [...mappedData, ...mappedIot].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        }
+
+        setReservations(mappedData);
       }
     } catch (err: any) {
       console.error("Error fetching reservations:", err.message);
@@ -552,7 +598,12 @@ export default function MyReservations() {
                                  )}
                                  {res.status === 'CHECKED_OUT' && (
                                     <>
-                                       <button onClick={() => handleReturnClick(res.reservation_id)} className="px-4 py-1.5 bg-teal-700 hover:bg-teal-800 text-white border border-teal-800 text-[10px] font-bold uppercase tracking-widest transition-colors shadow-sm">Return Item</button>
+                                       {res.components?.department !== 'IOT' ? (
+                                         <button onClick={() => handleReturnClick(res.reservation_id)} className="px-4 py-1.5 bg-teal-700 hover:bg-teal-800 text-white border border-teal-800 text-[10px] font-bold uppercase tracking-widest transition-colors shadow-sm">Return Item</button>
+                                       ) : (
+                                         <span className="px-4 py-1.5 bg-slate-100 text-slate-500 border border-slate-200 text-[10px] font-bold uppercase tracking-widest">Return at Admin Desk</span>
+                                       )}
+                                       
                                        {!res.extension_requested ? (
                                           <button onClick={() => openExtensionModal(res.reservation_id)} className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-[10px] font-bold uppercase tracking-widest transition-colors shadow-sm">Extend</button>
                                        ) : (

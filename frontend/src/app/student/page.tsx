@@ -162,7 +162,7 @@ export default function StudentAuth() {
           const loginData = await loginRes.json().catch(() => ({}));
 
           if (!loginRes.ok) {
-            throw new Error('Invalid department or password.');
+            throw new Error(loginData.error || 'Invalid department or password.');
           }
 
           if (roleType === 'admin') {
