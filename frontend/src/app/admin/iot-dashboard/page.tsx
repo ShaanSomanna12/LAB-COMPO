@@ -13,7 +13,7 @@ const COLORS = ['#1e3a8a', '#1e40af', '#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa'
 export default function AdminIotDashboard() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [components, setComponents] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'sessions' | 'defaulters' | 'inventory'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'sessions' | 'sections' | 'defaulters' | 'inventory'>('overview');
   const [labFilter, setLabFilter] = useState<'all' | 1 | 2>('all');
   const [adminLabId, setAdminLabId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
