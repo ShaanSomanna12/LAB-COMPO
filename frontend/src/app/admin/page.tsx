@@ -1627,31 +1627,33 @@ export default function AdminDashboard() {
 
                   {/* Bulk Actions Footer */}
                   <div className="flex flex-wrap items-center justify-between gap-2 mt-2 pt-3 border-t border-slate-200">
-                    <button onClick={() => {
-                        setInspectData({
-                          studentName: firstReq.studentName,
-                          usn: firstReq.usn,
-                          department: firstReq.studentDepartment || 'EDL',
-                          items: group.map(g => ({ name: g.component, quantity: g.quantity || 1 })),
-                          requestDate: firstReq.requestDate,
-                          duration: firstReq.duration,
-                          status: firstReq.status,
-                          section: firstReq.section,
-                          year: firstReq.year,
-                          mobile: firstReq.mobile,
-                          teamMembers: firstReq.teamMembers,
-                          projectType: firstReq.projectType,
-                          projectTitle: firstReq.projectTitle,
-                          projectPurpose: firstReq.projectPurpose,
-                          hackathonDate: firstReq.hackathonDate,
-                          hackathonVenue: firstReq.hackathonVenue,
-                          signatureUrl: firstReq.signatureUrl
-                        });
-                        setShowInspectModal(true);
-                      }} className="px-4 py-2 bg-slate-200 text-slate-600 hover:bg-slate-300 hover:text-slate-900 border border-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0" title="Inspect Bulk Letter">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                        Inspect Letter
-                    </button>
+                    {firstReq.studentDepartment !== 'IOT' && (
+                      <button onClick={() => {
+                          setInspectData({
+                            studentName: firstReq.studentName,
+                            usn: firstReq.usn,
+                            department: firstReq.studentDepartment || 'EDL',
+                            items: group.map(g => ({ name: g.component, quantity: g.quantity || 1 })),
+                            requestDate: firstReq.requestDate,
+                            duration: firstReq.duration,
+                            status: firstReq.status,
+                            section: firstReq.section,
+                            year: firstReq.year,
+                            mobile: firstReq.mobile,
+                            teamMembers: firstReq.teamMembers,
+                            projectType: firstReq.projectType,
+                            projectTitle: firstReq.projectTitle,
+                            projectPurpose: firstReq.projectPurpose,
+                            hackathonDate: firstReq.hackathonDate,
+                            hackathonVenue: firstReq.hackathonVenue,
+                            signatureUrl: firstReq.signatureUrl
+                          });
+                          setShowInspectModal(true);
+                        }} className="px-4 py-2 bg-slate-200 text-slate-600 hover:bg-slate-300 hover:text-slate-900 border border-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0" title="Inspect Bulk Letter">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                          Inspect Letter
+                      </button>
+                    )}
 
                     {allPending && (
                       <div className="flex gap-2">

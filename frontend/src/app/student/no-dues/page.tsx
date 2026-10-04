@@ -179,15 +179,25 @@ export default function NoDuesPage() {
               </div>
             </div>
 
-            <div className="bg-white p-2 rounded-xl w-full max-w-4xl mx-auto shadow-sm border border-slate-300 relative">
-              <NoDuesCertificate
-                studentName={studentData.name}
-                usn={studentData.usn}
-                department={studentData.department}
-                semester={studentData.semester}
-                date={new Date().toLocaleDateString('en-GB')}
-              />
-            </div>
+            {studentData.semester ? (
+              <div className="bg-white p-2 rounded-xl w-full max-w-4xl mx-auto shadow-sm border border-slate-300 relative">
+                <NoDuesCertificate
+                  studentName={studentData.name}
+                  usn={studentData.usn}
+                  department={studentData.department}
+                  semester={studentData.semester}
+                  date={new Date().toLocaleDateString('en-GB')}
+                />
+              </div>
+            ) : (
+              <div className="bg-white p-12 rounded-xl w-full max-w-4xl mx-auto shadow-sm border border-slate-300 border-dashed flex flex-col items-center justify-center text-center">
+                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 border border-slate-200">
+                  <CheckCircle className="w-8 h-8 text-slate-300" />
+                </div>
+                <h3 className="text-lg font-bold text-slate-700 mb-2 uppercase tracking-wide">Almost There</h3>
+                <p className="text-slate-500 text-sm max-w-md">Please select your current semester from the dropdown above to generate your No Dues Certificate.</p>
+              </div>
+            )}
           </motion.div>
         )}
 

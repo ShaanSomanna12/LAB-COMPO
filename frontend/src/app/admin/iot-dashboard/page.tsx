@@ -21,6 +21,8 @@ export default function AdminIotDashboard() {
   const [newComp, setNewComp] = useState({ name: '', description: '', total_quantity: 0 });
   const [sectionFilter, setSectionFilter] = useState<'current' | 'completed'>('current');
   const [selectedSectionTracker, setSelectedSectionTracker] = useState<string>('all');
+  const [selectedDateTracker, setSelectedDateTracker] = useState<string>('');
+  const [selectedSessionTracker, setSelectedSessionTracker] = useState<string>('all');
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const toggleRow = (id: string) => {
@@ -444,7 +446,13 @@ export default function AdminIotDashboard() {
                 <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2"><Users className="w-5 h-5 text-blue-500"/> Section Tracking</h3>
                 <p className="text-xs text-slate-500 mt-1">Track components borrowed by section.</p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <input type="date" value={selectedDateTracker} onChange={e => setSelectedDateTracker(e.target.value)} className="bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 shadow-sm cursor-pointer" />
+                <select value={selectedSessionTracker} onChange={e => setSelectedSessionTracker(e.target.value)} className="bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 shadow-sm cursor-pointer">
+                  <option value="all">All Sessions</option>
+                  <option value="Morning">Morning</option>
+                  <option value="Afternoon">Afternoon</option>
+                </select>
                 <select value={selectedSectionTracker} onChange={e => setSelectedSectionTracker(e.target.value)} className="bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 shadow-sm cursor-pointer">
                   <option value="all">All Sections</option>
                   {['A','B','C','D','E','F','G','H','I','J','K','L'].map(s => <option key={s} value={s}>Section {s}</option>)}
@@ -470,14 +478,28 @@ export default function AdminIotDashboard() {
                   {filteredTxs.filter(t => {
                     const matchesStatus = sectionFilter === 'current' ? ['active', 'borrowed', 'overdue'].includes(t.status) : t.status === 'returned';
                     const matchesSection = selectedSectionTracker === 'all' || (t.users?.section && t.users.section.toUpperCase() === selectedSectionTracker);
-                    return matchesStatus && matchesSection;
+                    let matchesDate = true;
+                    if (selectedDateTracker && t.created_at) {
+                      const txDate = new Date(t.created_at);
+                      const formattedDate = `${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}-${String(txDate.getDate()).padStart(2, '0')}`;
+                      matchesDate = formattedDate === selectedDateTracker;
+                    }
+                    const matchesSession = selectedSessionTracker === 'all' || t.session_time === selectedSessionTracker;
+                    return matchesStatus && matchesSection && matchesDate && matchesSession;
                   }).length === 0 && (
                     <tr><td colSpan={5} className="p-8 text-center text-slate-400">No {sectionFilter} checkouts found for this section.</td></tr>
                   )}
                   {filteredTxs.filter(t => {
                     const matchesStatus = sectionFilter === 'current' ? ['active', 'borrowed', 'overdue'].includes(t.status) : t.status === 'returned';
                     const matchesSection = selectedSectionTracker === 'all' || (t.users?.section && t.users.section.toUpperCase() === selectedSectionTracker);
-                    return matchesStatus && matchesSection;
+                    let matchesDate = true;
+                    if (selectedDateTracker && t.created_at) {
+                      const txDate = new Date(t.created_at);
+                      const formattedDate = `${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}-${String(txDate.getDate()).padStart(2, '0')}`;
+                      matchesDate = formattedDate === selectedDateTracker;
+                    }
+                    const matchesSession = selectedSessionTracker === 'all' || t.session_time === selectedSessionTracker;
+                    return matchesStatus && matchesSection && matchesDate && matchesSession;
                   }).map((tx, index) => (
                     <tr key={tx.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors text-slate-700">
                       <td className="p-4 align-top text-xs font-medium text-slate-400">

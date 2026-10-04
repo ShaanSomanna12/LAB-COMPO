@@ -222,8 +222,10 @@ export default function StudentCheckout() {
     if (!hasVerifiedProfileId && !idCardFile && !studentIdCardUrl) return toast.error("Please upload your ID Card");
     if (cart.length === 0) return toast.error("Cart is empty");
     if (!agreedToTerms) return toast.error("You must agree to the Terms & Conditions");
-    if (!agreedToUndertaking) return toast.error("You must agree to the undertaking");
-    if (agreedToUndertaking && !signatureFile) return toast.error("Please upload your signature for the undertaking");
+    if (selectedDept !== 'IOT') {
+      if (!agreedToUndertaking) return toast.error("You must agree to the undertaking");
+      if (agreedToUndertaking && !signatureFile) return toast.error("Please upload your signature for the undertaking");
+    }
     
     if (projectType === 'Hackathon / Competition') {
       if (!hackathonCollege || !hackathonVenueStr || !hackathonDate) {
@@ -472,7 +474,7 @@ export default function StudentCheckout() {
                         <div key={item.id} className="flex flex-col border border-slate-300 bg-white hover:border-teal-700 transition-colors shadow-sm group">
                           <div className="h-20 sm:h-28 md:h-32 bg-slate-100 flex items-center justify-center relative overflow-hidden border-b border-slate-200">
                             {item.photo_url ? (
-                              <Image src={item.photo_url} alt={item.name} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-contain p-2 transition-transform duration-500 group-hover:scale-105" />
+                              <img src={item.photo_url} alt={item.name} className="w-full h-full object-contain p-2 transition-transform duration-500 group-hover:scale-105" />
                             ) : (
                               <Box className="w-8 h-8 text-slate-300" />
                             )}
@@ -702,17 +704,19 @@ export default function StudentCheckout() {
                   </span>
                 </label>
                 
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input type="checkbox" required checked={agreedToUndertaking} onChange={e => setAgreedToUndertaking(e.target.checked)}
-                    className="mt-1 rounded-sm border-slate-400 text-teal-700 focus:ring-teal-700 w-4 h-4 bg-white shrink-0" />
-                  <span className="text-xs text-slate-700 leading-relaxed font-medium">
-                    I give my consent to the undertaking that I will replace the specific component on time, failing which I understand I may face issues in my hallticket issuing.
-                  </span>
-                </label>
+                {selectedDept !== 'IOT' && (
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input type="checkbox" required checked={agreedToUndertaking} onChange={e => setAgreedToUndertaking(e.target.checked)}
+                      className="mt-1 rounded-sm border-slate-400 text-teal-700 focus:ring-teal-700 w-4 h-4 bg-white shrink-0" />
+                    <span className="text-xs text-slate-700 leading-relaxed font-medium">
+                      I give my consent to the undertaking that I will replace the specific component on time, failing which I understand I may face issues in my hallticket issuing.
+                    </span>
+                  </label>
+                )}
               </div>
 
               <AnimatePresence>
-                {agreedToUndertaking && (
+                {selectedDept !== 'IOT' && agreedToUndertaking && (
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="space-y-4 border-slate-200 overflow-hidden">
                     <label className={labelCls}>Undertaking Signature</label>
                     <div className="border-2 border-dashed border-slate-300 p-6 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-slate-100 transition-colors">

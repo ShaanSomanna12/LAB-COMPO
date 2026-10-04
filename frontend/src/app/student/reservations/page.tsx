@@ -604,10 +604,14 @@ export default function MyReservations() {
                                          <span className="px-4 py-1.5 bg-slate-100 text-slate-500 border border-slate-200 text-[10px] font-bold uppercase tracking-widest">Return at Admin Desk</span>
                                        )}
                                        
-                                       {!res.extension_requested ? (
-                                          <button onClick={() => openExtensionModal(res.reservation_id)} className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-[10px] font-bold uppercase tracking-widest transition-colors shadow-sm">Extend</button>
-                                       ) : (
-                                          <span className="text-[10px] text-slate-600 font-bold bg-slate-100 px-2 py-1 border border-slate-300 uppercase tracking-widest">Ext. {res.extension_status || 'Pending'}</span>
+                                       {res.components?.department !== 'IOT' && (
+                                         <>
+                                           {!res.extension_requested ? (
+                                              <button onClick={() => openExtensionModal(res.reservation_id)} className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-[10px] font-bold uppercase tracking-widest transition-colors shadow-sm">Extend</button>
+                                           ) : (
+                                              <span className="text-[10px] text-slate-600 font-bold bg-slate-100 px-2 py-1 border border-slate-300 uppercase tracking-widest">Ext. {res.extension_status || 'Pending'}</span>
+                                           )}
+                                         </>
                                        )}
                                     </>
                                  )}
@@ -620,39 +624,41 @@ export default function MyReservations() {
                 </div>
 
                 <div className="px-5 py-4 border-t border-slate-200 bg-slate-50">
-                  <button
-                    onClick={() => {
-                      const durationDays = firstRes.due_date ? getWorkingDaysCount(firstRes.created_at, firstRes.due_date) : 1;
-                      
-                      const itemsMap: Record<string, number> = {};
-                      group.forEach(g => {
-                         const name = g.components?.name || 'Component';
-                         itemsMap[name] = (itemsMap[name] || 0) + 1;
-                      });
-                      const reqItems = Object.entries(itemsMap).map(([name, qty]) => ({ name, quantity: qty }));
+                  {firstRes.components?.department !== 'IOT' && (
+                    <button
+                      onClick={() => {
+                        const durationDays = firstRes.due_date ? getWorkingDaysCount(firstRes.created_at, firstRes.due_date) : 1;
+                        
+                        const itemsMap: Record<string, number> = {};
+                        group.forEach(g => {
+                           const name = g.components?.name || 'Component';
+                           itemsMap[name] = (itemsMap[name] || 0) + 1;
+                        });
+                        const reqItems = Object.entries(itemsMap).map(([name, qty]) => ({ name, quantity: qty }));
 
-                      setInspectData({
-                        studentName: studentName,
-                        usn: studentUsn || '',
-                        department: firstRes.components?.department || 'EDL',
-                        items: reqItems,
-                        requestDate: firstRes.created_at,
-                        duration: durationDays,
-                        status: group.every(g => g.status === firstRes.status) ? firstRes.status : 'MIXED',
-                        teamMembers: firstRes.team_members,
-                        signatureUrl: firstRes.signature_url,
-                        projectTitle: firstRes.project_title,
-                        projectType: firstRes.project_type,
-                        projectPurpose: firstRes.project_purpose,
-                        hackathonDate: firstRes.hackathon_date,
-                        hackathonVenue: firstRes.hackathon_venue
-                      });
-                      setShowInspectModal(true);
-                    }}
-                    className="w-full py-2.5 bg-white hover:bg-slate-100 text-slate-600 border border-slate-300 font-bold uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 transition-colors shadow-sm"
-                  >
-                    <Eye className="w-3.5 h-3.5" /> Inspect Letter
-                  </button>
+                        setInspectData({
+                          studentName: studentName,
+                          usn: studentUsn || '',
+                          department: firstRes.components?.department || 'EDL',
+                          items: reqItems,
+                          requestDate: firstRes.created_at,
+                          duration: durationDays,
+                          status: group.every(g => g.status === firstRes.status) ? firstRes.status : 'MIXED',
+                          teamMembers: firstRes.team_members,
+                          signatureUrl: firstRes.signature_url,
+                          projectTitle: firstRes.project_title,
+                          projectType: firstRes.project_type,
+                          projectPurpose: firstRes.project_purpose,
+                          hackathonDate: firstRes.hackathon_date,
+                          hackathonVenue: firstRes.hackathon_venue
+                        });
+                        setShowInspectModal(true);
+                      }}
+                      className="w-full py-2.5 bg-white hover:bg-slate-100 text-slate-600 border border-slate-300 font-bold uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 transition-colors shadow-sm"
+                    >
+                      <Eye className="w-3.5 h-3.5" /> Inspect Letter
+                    </button>
+                  )}
                 </div>
               </motion.div>
               )
