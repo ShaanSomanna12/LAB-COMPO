@@ -45,8 +45,13 @@ interface Reservation {
   request_mode?: string | null;
   project_type?: string | null;
   project_purpose?: string | null;
+  project_description?: string | null;
   hackathon_date?: string | null;
   hackathon_venue?: string | null;
+  student_department?: string | null;
+  section?: string | null;
+  branch?: string | null;
+  mobile?: string | null;
 }
 
 export default function MyReservations() {
