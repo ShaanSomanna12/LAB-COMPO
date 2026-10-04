@@ -35,17 +35,23 @@ async function requireAdmin(req: Request) {
 // ---------------------------------------------------------------------------
 // GET — public read (anyone can view the component catalogue)
 // ---------------------------------------------------------------------------
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const { data, error } = await supabase
+    const url = new URL(request.url || 'http://localhost/api/inventory');
+    const page = parseInt(url.searchParams.get('page') || '1', 10);
+    const limit = parseInt(url.searchParams.get('limit') || '500', 10);
+    const offset = (page - 1) * limit;
+
+    const { data, error, count } = await supabase
       .from('components')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (error) throw error;
 
-    return NextResponse.json(
-      data.map((item) => ({
+    return NextResponse.json({
+      data: data.map((item) => ({
         id:         item.component_id,
         name:       item.name,
         department: item.department,
@@ -57,8 +63,14 @@ export async function GET() {
         photo_url:  item.photo_url,
         value_tier: item.value_tier,
         tracking_type: item.tracking_type || 'QUANTITY',
-      }))
-    );
+      })),
+      pagination: {
+        page,
+        limit,
+        total: count || 0,
+        totalPages: Math.ceil((count || 0) / limit)
+      }
+    });
   } catch (err) {
     console.error('[inventory GET]', err);
     return NextResponse.json({ error: 'Failed to fetch inventory' }, { status: 500 });

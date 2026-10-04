@@ -182,7 +182,8 @@ export default function HodDashboard() {
   const fetchInventory = async () => {
     try {
       const res = await fetch('/api/inventory');
-      const data = await res.json();
+      const responseData = await res.json();
+      const data = responseData.data || responseData;
       setInventory(Array.isArray(data) ? data : []);
     } catch (e) {
       console.warn('Failed to fetch inventory', e);

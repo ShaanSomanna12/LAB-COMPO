@@ -85,79 +85,14 @@ export default function MyProfile() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 50 * 1024) {
-      toast.error(`File is too large (${(file.size / 1024).toFixed(1)}KB). Maximum allowed size is 50KB.`);
+    if (file.size > 100 * 1024) {
+      toast.error(`File is too large (${(file.size / 1024).toFixed(1)}KB). Maximum allowed size is 100KB.`);
       e.target.value = '';
       return;
     }
 
     setIdCardFile(file);
     setIdCardPreview(URL.createObjectURL(file));
-    setScanResult(null);
-    if (!usn) { toast.error("Please enter your USN first to verify against the ID card."); return; }
-    setIsScanning(true);
-    try {
-      // Dynamically import Tesseract to avoid huge bundle size on initial load
-      const Tesseract = (await import('tesseract.js')).default;
-      const result = await Tesseract.recognize(file, 'eng');
-      const text = result.data.text.toUpperCase();
-      
-      const cleanText = text.replace(/[^A-Z0-9]/g, '');
-      const normalizedText = cleanText.replace(/[O0Q]/g, '0').replace(/[I1L]/g, '1').replace(/[Z2]/g, '2').replace(/[S5]/g, '5').replace(/[UVY]/g, 'V');
-      const sanitizedUsn = usn.toUpperCase().replace(/[^A-Z0-9]/g, '');
-      const normalizedUsn = sanitizedUsn.replace(/[O0Q]/g, '0').replace(/[I1L]/g, '1').replace(/[Z2]/g, '2').replace(/[S5]/g, '5').replace(/[UVY]/g, 'V');
-      
-      let isMatch = false;
-      let detectedUsn = null;
-
-      // 1. Direct Match
-      if (sanitizedUsn && normalizedText.includes(normalizedUsn)) {
-        isMatch = true;
-        detectedUsn = sanitizedUsn;
-      } else if (sanitizedUsn.length >= 8) {
-        // 2. Fuzzy Match with Levenshtein distance (allow up to 2 typos, insertions, or deletions)
-        let foundMatch = false;
-        for (let len = Math.max(1, normalizedUsn.length - 2); len <= normalizedUsn.length + 2; len++) {
-          for (let i = 0; i <= normalizedText.length - len; i++) {
-            const sub = normalizedText.substring(i, i + len);
-            if (getLevenshteinDistance(sub, normalizedUsn) <= 2) {
-              isMatch = true;
-              detectedUsn = sanitizedUsn;
-              foundMatch = true;
-              break;
-            }
-          }
-          if (foundMatch) break;
-        }
-      }
-      
-
-      // Try to find year validity (e.g., 2021-2025)
-      const yearPattern = /20\d{2}-20\d{2}/g;
-      const yearMatches = text.replace(/\s/g, '').match(yearPattern);
-      const detectedValidity = yearMatches ? yearMatches[0] : null;
-
-      if (isMatch) {
-        toast.success("ID Card Verified successfully!");
-        setScanResult({ match: true, detectedUsn: detectedUsn || sanitizedUsn, detectedValidity });
-      } else {
-        // Try one last desperate search for a regex match in the raw text
-        const fallbackRegex = /[1-4][A-Z]{2}[0-9]{2}[A-Z]{2}[0-9]{3}/g;
-        const matches = text.replace(/\s/g, '').match(fallbackRegex);
-        if (matches && matches[0]) {
-           setScanResult({ match: false, detectedUsn: matches[0], detectedValidity });
-           toast.error(`USN mismatch. Found ${matches[0]}, expected ${sanitizedUsn}`);
-        } else {
-           setScanResult({ match: false, detectedUsn: null, detectedValidity });
-           toast.warning("Could not clearly read USN or College details from image.");
-        }
-      }
-    } catch (err) {
-      console.error("OCR Error:", err);
-      toast.error("Failed to scan ID card.");
-    } finally {
-      setIsScanning(false);
-    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -165,37 +100,27 @@ export default function MyProfile() {
     if (!userId) return;
     setIsSaving(true);
     try {
-      if (scanResult) {
-        if (!scanResult.match) {
-          if (!confirm("Your ID card verification failed or didn't match. Save anyway?")) { setIsSaving(false); return; }
-        }
-        if (scanResult.detectedValidity) {
-          const [startYearStr] = scanResult.detectedValidity.split('-');
-          const startYear = parseInt(startYearStr, 10);
-          const now = new Date();
-          const currentY = now.getFullYear();
-          const currentM = now.getMonth();
-          let calcYearNum = currentM >= 7 ? currentY - startYear + 1 : currentY - startYear;
-          if (calcYearNum < 1) calcYearNum = 1;
-          if (calcYearNum > 4) calcYearNum = 4;
-          const yearValues = { '1st Year': 1, '2nd Year': 2, '3rd Year': 3, '4th Year': 4 };
-          const selectedYearNum = yearValues[year as keyof typeof yearValues] || 1;
-          if (selectedYearNum > calcYearNum) {
-            toast.error(`Invalid Year Selection. Based on your ID validity (${scanResult.detectedValidity}), you should be in year ${calcYearNum}. You selected ${year}. Please correct it.`);
-            setIsSaving(false);
-            return;
-          }
-        }
-      }
-
       let uploadedIdUrl = null;
-      if (idCardFile && scanResult?.match) {
+      if (idCardFile) {
         const filePath = `student-ids/${usn.toUpperCase()}-verified-${Date.now()}.png`;
-        const { error: uploadError } = await supabase.storage.from('id_cards').upload(filePath, idCardFile);
-        if (!uploadError) {
-          const { data: publicUrlData } = supabase.storage.from('id_cards').getPublicUrl(filePath);
-          uploadedIdUrl = publicUrlData.publicUrl;
+        const formData = new FormData();
+        formData.append('file', idCardFile);
+        formData.append('path', filePath);
+        formData.append('bucket', 'id_cards');
+
+        const uploadRes = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+          credentials: 'include'
+        });
+
+        if (!uploadRes.ok) {
+          const errData = await uploadRes.json().catch(() => ({}));
+          throw new Error(`Upload failed: ${errData.error || 'Unknown error'}`);
         }
+        
+        const uploadData = await uploadRes.json();
+        uploadedIdUrl = uploadData.url;
       }
 
       const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -349,31 +274,6 @@ export default function MyProfile() {
                     </button>
                   )}
                   <input type="file" ref={fileInputRef} onChange={handleIdCardUpload} accept="image/*" className="hidden" />
-
-                  {/* Scan result box */}
-                  <div className="flex-1 w-full bg-slate-50 border border-slate-300 p-4 min-h-[96px] flex items-start">
-                    {isScanning ? (
-                      <div className="flex items-center gap-2 text-teal-700 text-xs font-mono uppercase tracking-widest font-bold">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Processing OCR Data...</span>
-                      </div>
-                    ) : scanResult ? (
-                      <div className="space-y-2 w-full font-mono text-xs">
-                        <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-2">Scan Analysis Output</p>
-                        {scanResult.match
-                          ? <p className="text-teal-700 font-bold border-l-2 border-teal-700 pl-2">MATCH DETECTED: {scanResult.detectedUsn}</p>
-                          : <p className="text-red-700 font-bold border-l-2 border-red-700 pl-2">MISMATCH OR NULL: {scanResult.detectedUsn || '---'}</p>
-                        }
-                        {scanResult.detectedValidity && (
-                          <p className="text-slate-600 border-l-2 border-slate-400 pl-2">VALIDITY: {scanResult.detectedValidity}</p>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-slate-400 font-mono leading-relaxed mt-1">
-                        System awaiting image input.
-                      </p>
-                    )}
-                  </div>
                 </div>
               </div>
             </div>

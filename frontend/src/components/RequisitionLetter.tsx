@@ -10,6 +10,7 @@ interface RequisitionItem {
 export interface RequisitionLetterProps {
   studentName: string;
   usn: string;
+  studentDepartment?: string;
   department: string;
   items: RequisitionItem[];
   requestDate: string;
@@ -31,6 +32,7 @@ export interface RequisitionLetterProps {
 export default function RequisitionLetter({
   studentName,
   usn,
+  studentDepartment,
   department,
   items,
   requestDate,
@@ -103,7 +105,7 @@ export default function RequisitionLetter({
           <br/>
           <p>Respected Sir/Madam,</p>
           <p className="mt-2 text-justify">
-            I, <strong>{studentName}</strong>, bearing USN <strong>{usn}</strong>{mobile ? ` (Mobile: ${mobile})` : ''}, am currently pursuing my studies in the Department of {department}{section ? `, Section ${section}` : ''}{year ? `, in my ${year} of engineering` : ''}. 
+            I, <strong>{studentName}</strong>, bearing USN <strong>{usn}</strong>{mobile ? ` (Mobile: ${mobile})` : ''}, am currently pursuing my studies in the <strong>Department of {studentDepartment || '__________'}</strong>{section ? <span>, <strong>Section {section}</strong></span> : ''}{year ? <span>, in my <strong>{year} of engineering</strong></span> : ''}. 
             I am writing to formally request the temporary issuance of the following laboratory components required for the execution of my {projectType ? projectType.toLowerCase() : 'academic project/assignment'}.
           </p>
           {projectPurpose && (
@@ -121,7 +123,7 @@ export default function RequisitionLetter({
               <p className="font-semibold mb-1">This project is being executed in a team comprising of the following members:</p>
               <ul className="list-disc pl-5 text-justify">
                 <li><strong>{studentName}</strong> (USN: <strong>{usn}</strong>) - Lead</li>
-                {teamMembers.map((tm, idx) => (
+                {teamMembers.filter(tm => tm.usn !== usn).map((tm, idx) => (
                   <li key={idx}>
                     <strong>{tm.name}</strong> (USN: <strong>{tm.usn || 'N/A'}</strong>)
                   </li>

@@ -16,13 +16,19 @@ type Component = {
 
 type CartItem = Component & { quantity: number };
 
+const getTodayLocal = () => {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().split('T')[0];
+};
+
 export default function IotCheckout() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [labId, setLabId] = useState<1 | 2 | null>(null);
   const [checkoutType, setCheckoutType] = useState<'session' | 'project' | null>(null);
   
   const [sessionTime, setSessionTime] = useState<string>('');
-  const [checkoutDate, setCheckoutDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [checkoutDate, setCheckoutDate] = useState<string>(getTodayLocal());
   const [teamMembers, setTeamMembers] = useState([{ name: '', usn: '' }, { name: '', usn: '' }]);
   const [teamSection, setTeamSection] = useState<string>('');
 
@@ -30,6 +36,29 @@ export default function IotCheckout() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const verifyAccess = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setIsAuthorized(false);
+        return;
+      }
+      const { data: userRecord } = await supabase
+        .from('users')
+        .select('department, branch')
+        .eq('email', user.email)
+        .maybeSingle();
+
+      if (userRecord && userRecord.department === 'CSE' && userRecord.branch === '2nd Year') {
+        setIsAuthorized(true);
+      } else {
+        setIsAuthorized(false);
+      }
+    };
+    verifyAccess();
+  }, []);
 
   useEffect(() => {
     const fetchComponents = async () => {
@@ -119,6 +148,31 @@ export default function IotCheckout() {
 
   const filteredComponents = components.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
+  if (isAuthorized === null) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (isAuthorized === false) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-20 h-20 bg-rose-100 rounded-full flex items-center justify-center mb-6">
+          <AlertTriangle className="w-10 h-10 text-rose-600" />
+        </div>
+        <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase mb-3">Access Denied</h1>
+        <p className="text-sm font-medium text-slate-600 mb-8 max-w-sm leading-relaxed">
+          The IoT Lab checkout system is strictly restricted to <strong className="text-slate-800">2nd Year CSE (3rd Semester)</strong> students only.
+        </p>
+        <Link href="/student/dashboard" className="px-8 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-colors shadow-lg">
+          Return to Dashboard
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-blue-100">
       <div className="max-w-md mx-auto relative pt-[calc(2rem+env(safe-area-inset-top,0px))] pb-24 px-5">
@@ -173,7 +227,7 @@ export default function IotCheckout() {
               <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
                 <div className="flex justify-between items-center border-b border-slate-100 pb-3">
                   <h2 className="text-base font-bold text-slate-900">Select Lab Session</h2>
-                  <input type="date" value={checkoutDate} onChange={(e) => setCheckoutDate(e.target.value)} min={new Date().toISOString().split('T')[0]} max={new Date().toISOString().split('T')[0]} className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-slate-50 font-medium outline-none focus:border-blue-500 cursor-not-allowed" title="Date is locked to today" />
+                  <input type="date" value={checkoutDate} onChange={(e) => setCheckoutDate(e.target.value)} min={getTodayLocal()} max={getTodayLocal()} className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-slate-50 font-medium outline-none focus:border-blue-500 cursor-not-allowed" title="Date is locked to today" />
                 </div>
                 <div className="space-y-3">
                   {['9:00 AM - 11:00 AM', '11:30 AM - 1:30 PM', '2:30 PM - 4:30 PM'].map(time => (

@@ -57,10 +57,11 @@ export default function StudentCheckout() {
   // Form State
   const [studentName, setStudentName] = useState('');
   const [usn, setUsn] = useState('');
+  const [userId, setUserId] = useState('');
   const [department, setDepartment] = useState('');
   const [section, setSection] = useState('');
   const [date, setDate] = useState('');
-  const [time, setTime] = useState('09:00 AM');
+  const [time, setTime] = useState('08:00 AM');
   const [returnDate, setReturnDate] = useState('');
   const [mobile, setMobile] = useState('');
   const [year, setYear] = useState('');
@@ -81,6 +82,9 @@ export default function StudentCheckout() {
   const [hasVerifiedProfileId, setHasVerifiedProfileId] = useState(false);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   
+  const [isTeamProject, setIsTeamProject] = useState(false);
+  const [teamMembers, setTeamMembers] = useState([{ name: '', usn: '' }, { name: '', usn: '' }]);
+  
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingInventory, setIsLoadingInventory] = useState(true);
@@ -92,17 +96,22 @@ export default function StudentCheckout() {
       
       const { data: userData } = await supabase
         .from('users')
-        .select('name, usn, department, branch, section, mobile, id_card_url')
+        .select('user_id, name, usn, department, branch, section, mobile, id_card_url')
         .eq('email', user.email)
         .maybeSingle();
 
       if (userData) {
+        if (userData.user_id) setUserId(userData.user_id);
         setStudentName(userData.name || '');
         setUsn(userData.usn || '');
         setDepartment(userData.department || '');
         setYear(userData.branch || '');
         setSection(userData.section || '');
         setMobile(userData.mobile || '');
+        setTeamMembers([
+          { name: userData.name || '', usn: userData.usn || '' },
+          { name: '', usn: '' }
+        ]);
         
         // Prioritize DB id_card_url, fallback to local storage
         if (userData.id_card_url) {
@@ -149,6 +158,10 @@ export default function StudentCheckout() {
   const loadInventory = async (deptId: string) => {
     setIsLoadingInventory(true);
     setStep('components');
+    if (selectedDept !== 'ALL' && selectedDept !== deptId && cart.length > 0) {
+      setCart([]);
+      toast.info('Cart cleared due to department change');
+    }
     setSelectedDept(deptId);
     
     try {
@@ -186,6 +199,10 @@ export default function StudentCheckout() {
     setCart(prev => {
       const existing = prev.find(i => i.id === item.id);
       if (existing) {
+        if (existing.requestedQty >= 3) {
+          toast.error("Maximum 3 quantity allowed per item");
+          return prev;
+        }
         if (existing.requestedQty >= item.available) {
           toast.error(`Only ${item.available} available`);
           return prev;
@@ -206,6 +223,10 @@ export default function StudentCheckout() {
       if (i.id === id) {
         const newQty = i.requestedQty + delta;
         if (newQty < 1) return i;
+        if (newQty > 3) {
+          toast.error("Maximum 3 quantity allowed per item");
+          return i;
+        }
         if (newQty > i.available) {
           toast.error(`Only ${i.available} available`);
           return i;
@@ -233,6 +254,13 @@ export default function StudentCheckout() {
       }
     }
 
+    if (isTeamProject) {
+      const validMembers = teamMembers.filter(m => m.name.trim() && m.usn.trim());
+      if (validMembers.length === 0) {
+        return toast.error("Please add at least one team member with Name and USN");
+      }
+    }
+
     if (!isWorkingDay(date)) return toast.error('Pickup date must be a working day (Mon-Sat)');
 
     setIsLoading(true);
@@ -243,19 +271,27 @@ export default function StudentCheckout() {
       // Upload new ID card if provided and not already verified
       if (idCardFile && !hasVerifiedProfileId) {
         const filePath = `student-ids/${usn}-${Date.now()}.png`;
-        const { error: uploadError } = await supabase.storage.from('id_cards').upload(filePath, idCardFile);
-        if (uploadError) throw new Error(`Failed to upload ID Card: ${uploadError.message}`);
-        const { data: publicUrlData } = supabase.storage.from('id_cards').getPublicUrl(filePath);
-        finalIdCardUrl = publicUrlData.publicUrl;
+        const formData = new FormData();
+        formData.append('file', idCardFile);
+        formData.append('path', filePath);
+        formData.append('bucket', 'id_cards');
+        const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData, credentials: 'include' });
+        if (!uploadRes.ok) throw new Error("Failed to upload ID Card");
+        const uploadData = await uploadRes.json();
+        finalIdCardUrl = uploadData.url;
       }
 
       let finalSignatureUrl = null;
       if (signatureFile) {
         const sigPath = `signatures/${usn}-${Date.now()}.png`;
-        const { error: sigUploadError } = await supabase.storage.from('id_cards').upload(sigPath, signatureFile);
-        if (sigUploadError) throw new Error(`Failed to upload Signature: ${sigUploadError.message}`);
-        const { data: sigUrlData } = supabase.storage.from('id_cards').getPublicUrl(sigPath);
-        finalSignatureUrl = sigUrlData.publicUrl;
+        const formData = new FormData();
+        formData.append('file', signatureFile);
+        formData.append('path', sigPath);
+        formData.append('bucket', 'signatures');
+        const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData, credentials: 'include' });
+        if (!uploadRes.ok) throw new Error("Failed to upload Signature");
+        const uploadData = await uploadRes.json();
+        finalSignatureUrl = uploadData.url;
       }
 
       // Check max value limit
@@ -268,47 +304,52 @@ export default function StudentCheckout() {
       const needsHodApproval = highValueCount > 2;
       const initialStatus = needsHodApproval ? 'PENDING_HOD' : 'PENDING_APPROVAL';
 
-      // Insert Reservation
-      const { data: resData, error: resError } = await supabase.from('reservations').insert([{
-        student_name: studentName,
-        usn: usn.toUpperCase(),
-        department,
-        branch: year,
-        section,
-        mobile,
-        target_department: selectedDept,
-        request_date: date,
-        time_slot: time,
-        duration: getWorkingDaysCount(date, returnDate),
+      // Insert one Reservation row per cart item
+      const reservationsToInsert = cart.map(item => ({
+        user_id: userId,
+        component_id: item.id,
+        quantity: item.requestedQty,
         status: initialStatus,
+        section,
+        student_department: department,
+        project_title: projectTitle || projectType,
+        due_date: returnDate ? new Date(returnDate).toISOString() : null,
+        collection_time: time,
+        target_department: selectedDept,
+        request_date: date ? new Date(date).toISOString() : null,
+        duration: getWorkingDaysCount(date, returnDate),
         id_card_url: finalIdCardUrl,
         signature_url: finalSignatureUrl,
-        project_title: projectTitle || projectType,
         project_description: projectPurpose,
         project_type: projectType,
-        hackathon_date: projectType === 'Hackathon / Competition' ? hackathonDate : null,
+        hackathon_date: (projectType === 'Hackathon / Competition' && hackathonDate) ? hackathonDate : null,
         hackathon_venue: projectType === 'Hackathon / Competition' ? `${hackathonCollege} - ${hackathonVenueStr}` : null,
-        is_team_project: false
-      }]).select().single();
-
-      if (resError) throw resError;
-
-      // Insert Items
-      const itemsToInsert = cart.map(item => ({
-        reservation_id: resData.id,
-        component_id: item.id,
-        quantity: item.requestedQty
+        is_team_project: isTeamProject,
+        team_members: isTeamProject ? teamMembers.filter(m => m.name.trim() && m.usn.trim()) : null,
+        student_name: studentName,
+        usn: usn.toUpperCase(),
+        branch: year,
+        mobile
       }));
-      
-      const { error: itemsError } = await supabase.from('reservation_items').insert(itemsToInsert);
-      if (itemsError) throw itemsError;
+
+      const response = await fetch('/api/student/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reservationsToInsert })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Supabase Insert Error:", errorData);
+        throw new Error(errorData.error || "Failed to submit request");
+      }
 
       toast.success("Request Submitted Successfully!");
-      router.push('/student/dashboard');
+      router.push('/student/reservations?new=true');
       
     } catch (err: any) {
-      console.error(err);
-      toast.error('Submission failed. Please check your connection or contact the lab admin.');
+      console.error("Submission Error Complete Object:", JSON.stringify(err, null, 2));
+      toast.error(err?.message || err?.error_description || err?.details || 'Submission failed. Please check your connection or contact the lab admin.');
     } finally {
       setIsLoading(false);
     }
@@ -559,19 +600,68 @@ export default function StudentCheckout() {
             <form onSubmit={handleSubmit} className="p-6 md:p-8 space-y-8">
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div><label className={labelCls}>Full Name</label><input required type="text" value={studentName} onChange={e => setStudentName(e.target.value)} className={inputCls} /></div>
-                <div><label className={labelCls}>USN</label><input required type="text" value={usn} onChange={e => setUsn(e.target.value)} className={`${inputCls} font-mono uppercase`} /></div>
+                <div><label className={labelCls}>Full Name</label><input required type="text" value={studentName} readOnly className={`${inputCls} bg-slate-100 text-slate-500 cursor-not-allowed`} /></div>
+                <div><label className={labelCls}>USN</label><input required type="text" value={usn} readOnly className={`${inputCls} font-mono uppercase bg-slate-100 text-slate-500 cursor-not-allowed`} /></div>
                 <div>
                   <label className={labelCls}>Department</label>
-                  <select required value={department} onChange={e => setDepartment(e.target.value)} className={inputCls}>
+                  <select required value={department} disabled className={`${inputCls} bg-slate-100 text-slate-500 cursor-not-allowed`}>
                     <option value="" disabled>Select Department</option>
                     {['CSE', 'ISE', 'ECE', 'EEE', 'MECH', 'CIVIL', 'AI_ML'].map(d => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
-                <div><label className={labelCls}>Year of Engineering</label><input required type="text" value={year} onChange={e => setYear(e.target.value)} className={inputCls} /></div>
-                <div><label className={labelCls}>Section</label><input required type="text" value={section} onChange={e => setSection(e.target.value)} className={inputCls} /></div>
-                <div><label className={labelCls}>Mobile No.</label><input required type="tel" value={mobile} onChange={e => setMobile(e.target.value)} className={inputCls} /></div>
+                <div>
+                  <label className={labelCls}>Year of Engineering</label>
+                  <select required value={year} disabled className={`${inputCls} bg-slate-100 text-slate-500 cursor-not-allowed`}>
+                    <option value="" disabled>Select Year</option>
+                    <option value="1st Year">1st Year</option>
+                    <option value="2nd Year">2nd Year</option>
+                    <option value="3rd Year">3rd Year</option>
+                    <option value="4th Year">4th Year</option>
+                  </select>
+                </div>
+                <div><label className={labelCls}>Section</label><input required type="text" value={section} readOnly className={`${inputCls} bg-slate-100 text-slate-500 cursor-not-allowed`} /></div>
+                <div><label className={labelCls}>Mobile No.</label><input required type="tel" value={mobile} readOnly className={`${inputCls} bg-slate-100 text-slate-500 cursor-not-allowed`} /></div>
               </div>
+
+              <hr className="border-slate-200" />
+
+              <div className="space-y-4">
+                <label className={labelCls}>Project Type: Individual or Team?</label>
+                <div className="flex gap-6 items-center">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="teamMode" checked={!isTeamProject} onChange={() => setIsTeamProject(false)} className="text-teal-700 w-4 h-4 focus:ring-teal-700 border-slate-300" />
+                    <span className="text-sm font-medium text-slate-700">Individual</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="teamMode" checked={isTeamProject} onChange={() => setIsTeamProject(true)} className="text-teal-700 w-4 h-4 focus:ring-teal-700 border-slate-300" />
+                    <span className="text-sm font-medium text-slate-700">Team (Group Project)</span>
+                  </label>
+                </div>
+              </div>
+              
+              <AnimatePresence>
+                {isTeamProject && (
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="space-y-4 overflow-hidden">
+                    <label className={labelCls}>Team Members</label>
+                    {teamMembers.map((member, idx) => (
+                      <div key={idx} className="flex flex-col sm:flex-row gap-3 sm:items-center bg-slate-50 p-3 sm:p-0 sm:bg-transparent border sm:border-0 border-slate-200 rounded-md">
+                        <input type="text" placeholder={`Member ${idx + 1} Name`} value={member.name} onChange={e => { const newMembers = [...teamMembers]; newMembers[idx].name = e.target.value; setTeamMembers(newMembers); }} disabled={idx === 0} className={`${inputCls} ${idx === 0 ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`} />
+                        <input type="text" placeholder={`Member ${idx + 1} USN`} value={member.usn} onChange={e => { const newMembers = [...teamMembers]; newMembers[idx].usn = e.target.value; setTeamMembers(newMembers); }} disabled={idx === 0} className={`${inputCls} font-mono uppercase ${idx === 0 ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`} />
+                        {idx > 1 && (
+                          <button type="button" onClick={() => setTeamMembers(teamMembers.filter((_, i) => i !== idx))} className="p-2.5 text-red-500 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors self-end sm:self-auto rounded-md">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {teamMembers.length < 4 && (
+                      <button type="button" onClick={() => setTeamMembers([...teamMembers, {name: '', usn: ''}])} className="text-xs font-bold text-teal-700 hover:text-teal-800 transition-colors flex items-center gap-1 mt-2">
+                        <Plus className="w-3 h-3" /> Add Member
+                      </button>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               <hr className="border-slate-200" />
 
@@ -627,10 +717,24 @@ export default function StudentCheckout() {
                 <div>
                   <label className={labelCls}>Pickup Time</label>
                   <select required value={time} onChange={e => setTime(e.target.value)} className={inputCls}>
+                    <option value="08:00 AM">08:00 AM</option>
+                    <option value="08:30 AM">08:30 AM</option>
                     <option value="09:00 AM">09:00 AM</option>
-                    <option value="11:15 AM">11:15 AM</option>
+                    <option value="09:30 AM">09:30 AM</option>
+                    <option value="10:00 AM">10:00 AM</option>
+                    <option value="10:30 AM">10:30 AM</option>
+                    <option value="11:00 AM">11:00 AM</option>
+                    <option value="11:30 AM">11:30 AM</option>
+                    <option value="12:00 PM">12:00 PM</option>
+                    <option value="12:30 PM">12:30 PM</option>
+                    <option value="01:00 PM">01:00 PM</option>
                     <option value="01:30 PM">01:30 PM</option>
+                    <option value="02:00 PM">02:00 PM</option>
+                    <option value="02:30 PM">02:30 PM</option>
+                    <option value="03:00 PM">03:00 PM</option>
+                    <option value="03:30 PM">03:30 PM</option>
                     <option value="04:00 PM">04:00 PM</option>
+                    <option value="04:30 PM">04:30 PM</option>
                   </select>
                 </div>
               </div>
@@ -662,8 +766,8 @@ export default function StudentCheckout() {
                     <input type="file" id="idUpload" className="hidden" accept="image/*" onChange={e => {
                       if (e.target.files && e.target.files[0]) {
                         const file = e.target.files[0];
-                        if (file.size > 50 * 1024) {
-                          toast.error(`File is too large (${(file.size / 1024).toFixed(1)}KB). Maximum allowed size is 50KB.`);
+                        if (file.size > 100 * 1024) {
+                          toast.error(`File is too large (${(file.size / 1024).toFixed(1)}KB). Maximum allowed size is 100KB.`);
                           e.target.value = '';
                           return;
                         }
@@ -675,6 +779,7 @@ export default function StudentCheckout() {
                         <Upload className="w-4 h-4" />
                       </div>
                       <p className="text-sm font-bold text-slate-800 mb-1 uppercase tracking-wide">Upload ID Card</p>
+                      <p className="text-xs text-slate-500 font-bold text-red-500">Max size 100KB.</p>
                       <p className="text-xs text-slate-500">Required for checkout if not verified in profile</p>
                       {idCardFile && (
                         <div className="mt-3 flex items-center justify-center gap-2">
@@ -723,8 +828,8 @@ export default function StudentCheckout() {
                       <input type="file" id="sigUpload" className="hidden" accept="image/*" onChange={e => {
                         if (e.target.files && e.target.files[0]) {
                           const file = e.target.files[0];
-                          if (file.size > 50 * 1024) {
-                            toast.error(`File is too large (${(file.size / 1024).toFixed(1)}KB). Maximum allowed size is 50KB.`);
+                          if (file.size > 100 * 1024) {
+                            toast.error(`File is too large (${(file.size / 1024).toFixed(1)}KB). Maximum allowed size is 100KB.`);
                             e.target.value = '';
                             return;
                           }
@@ -736,6 +841,7 @@ export default function StudentCheckout() {
                           <Upload className="w-4 h-4" />
                         </div>
                         <p className="text-sm font-bold text-slate-800 mb-1 uppercase tracking-wide">Upload Signature</p>
+                        <p className="text-xs text-slate-500 font-bold text-red-500">Max size 100KB.</p>
                         <p className="text-xs text-slate-500">Please provide a clear image of your signature for the undertaking letter</p>
                         {signatureFile && (
                           <div className="mt-3 flex items-center justify-center gap-2">
@@ -756,6 +862,13 @@ export default function StudentCheckout() {
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              <div className="p-3 bg-red-50 border border-red-200 rounded flex gap-3 items-start">
+                <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
+                <p className="text-[11px] text-red-800 leading-relaxed font-semibold">
+                  Note: This is strictly for <span className="font-black">borrowing</span> lab components, not purchasing. All items must be returned on time.
+                </p>
+              </div>
 
               <button type="submit" disabled={isLoading}
                 className="w-full py-4 bg-teal-800 hover:bg-teal-900 disabled:bg-slate-300 disabled:text-slate-500 text-white font-bold text-sm uppercase tracking-widest transition-colors flex justify-center items-center gap-2">

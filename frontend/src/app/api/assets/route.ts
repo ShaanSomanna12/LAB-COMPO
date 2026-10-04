@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     const componentId = searchParams.get('componentId');
     const assetId = searchParams.get('assetId');
 
-    let query = supabase.from('assets').select('*, components(name, department, tracking_type)');
+    let query = supabase.from('assets').select('*, components(name, department)');
 
     if (componentId) {
       query = query.eq('component_id', componentId);

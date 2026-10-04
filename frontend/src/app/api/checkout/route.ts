@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     // 1. Verify reservation
     const { data: reservation, error: resError } = await supabase
       .from('reservations')
-      .select('*, components(tracking_type)')
+      .select('*, components()')
       .eq('reservation_id', reservationId)
       .single();
 

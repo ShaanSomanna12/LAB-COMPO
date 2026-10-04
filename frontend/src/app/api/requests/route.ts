@@ -34,15 +34,21 @@ export async function GET(request: Request) {
   }
 
   try {
-    const { data, error } = await supabase
+    const url = new URL(request.url);
+    const page = parseInt(url.searchParams.get('page') || '1', 10);
+    const limit = parseInt(url.searchParams.get('limit') || '500', 10);
+    const offset = (page - 1) * limit;
+
+    const { data, error, count } = await supabase
       .from('reservations')
       .select(`
         *,
-        users(name, usn, mobile, branch),
-        components(name, department, lab_location, value_tier, tracking_type),
+        users(name, usn, mobile, branch, id_card_url),
+        components(name, department, lab_location),
         reservation_status_history(old_status, new_status, changed_at, note, changed_by, users(name))
-      `)
-      .order('created_at', { ascending: false });
+      `, { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (error) throw error;
 
@@ -76,7 +82,7 @@ export async function GET(request: Request) {
       projectPurpose: res.project_purpose || null,
       hackathonDate: res.hackathon_date || null,
       hackathonVenue: res.hackathon_venue || null,
-      idCardUrl: res.id_card_url || null,
+      idCardUrl: res.users?.id_card_url || res.id_card_url || null,
       signatureUrl: res.signature_url || null,
       requestMode: res.request_mode || 'individual',
       teamMembers: res.team_members || [],
@@ -96,7 +102,15 @@ export async function GET(request: Request) {
         (res.assigned_serial_numbers?.length > 0 ? res.assigned_serial_numbers[0] : null),
     }));
 
-    return NextResponse.json(formattedData);
+    return NextResponse.json({
+      data: formattedData,
+      pagination: {
+        page,
+        limit,
+        total: count || 0,
+        totalPages: Math.ceil((count || 0) / limit)
+      }
+    });
   } catch (err: any) {
     console.error('[requests GET]', err);
     return NextResponse.json({ error: 'Failed to fetch requests' }, { status: 500 });
@@ -317,7 +331,7 @@ export async function POST(request: Request) {
     const itemNames = items.map((i: any) => i.name);
     const { data: componentsRaw, error: compError } = await supabase
       .from('components')
-      .select('component_id, name, value_tier, available_quantity, tracking_type')
+      .select('component_id, name, available_quantity')
       .in('name', itemNames);
 
     if (compError) throw compError;

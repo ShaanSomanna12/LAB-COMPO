@@ -25,7 +25,7 @@ const NAV_ITEMS = [
 
 const QUICK_ACTIONS = [
   {
-    id: 'iot-lab', label: 'Live Session Borrowing & Return', icon: Cpu,
+    id: 'iot-lab', label: 'IOT LAB: Live Session Borrowing & Return', icon: Cpu,
     path: '/student/iot-checkout', badge: 'M306 & M302',
     desc: 'For CSE 3rd sem only. Borrow and return during your live 2-hour lab session.',
   },

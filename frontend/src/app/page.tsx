@@ -398,7 +398,7 @@ export default function StudentAuth() {
                 type="submit"
                 className="w-full flex justify-center py-4 px-4 rounded-2xl text-sm font-bold text-white bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black focus:ring-cyan-500 transition-all duration-200 shadow-[0_0_20px_rgba(6,182,212,0.3)] hover:shadow-[0_0_30px_rgba(6,182,212,0.5)] active:scale-[0.98]"
               >
-                {isOtpStep ? (isForgotPassword ? 'Reset Password' : 'Verify & Enter') : isForgotPassword ? 'Send Reset OTP' : isRegistering ? "Let's Go 🚀" : 'Log In ⚡'}
+                {isOtpStep ? (isForgotPassword ? 'Reset Password' : 'Verify & Enter') : isForgotPassword ? 'Send Reset OTP' : isRegistering ? "Let's Go 🚀" : 'Log In'}
               </button>
             </div>
           </form>

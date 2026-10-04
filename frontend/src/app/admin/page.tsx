@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
 import ImageCropper from './ImageCropper';
 import { siteConfig } from '@/config/site';
@@ -304,7 +305,8 @@ export default function AdminDashboard() {
   const fetchRequestsData = async () => {
     try {
       const res = await fetch('/api/requests');
-      const data = await res.json();
+      const responseData = await res.json();
+      const data = responseData.data || responseData; // Handle both paginated and legacy arrays
       setRequests(Array.isArray(data) ? data : []);
     } catch (err) {
       console.warn('Failed to fetch requests:', err);
@@ -358,7 +360,10 @@ export default function AdminDashboard() {
     // Fetch unified data from API
     fetch('/api/inventory')
       .then(res => res.json())
-      .then(data => setInventory(Array.isArray(data) ? data : []))
+      .then(data => {
+        const invData = data.data || data;
+        setInventory(Array.isArray(invData) ? invData : []);
+      })
       .catch(err => {
         console.warn('Failed to fetch inventory:', err);
         setInventory([]);
@@ -1654,6 +1659,16 @@ export default function AdminDashboard() {
                           Inspect Letter
                       </button>
                     )}
+                    {firstReq.idCardUrl && (
+                      <button onClick={() => {
+                        setPreviewImgUrl(firstReq.idCardUrl!);
+                        setPreviewType(null);
+                        setPreviewModalOpen(true);
+                      }} className="px-4 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0" title="View ID Card">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" /></svg>
+                        ID Card
+                      </button>
+                    )}
 
                     {allPending && (
                       <div className="flex gap-2">
@@ -1800,10 +1815,12 @@ export default function AdminDashboard() {
                 >
                   {/* Photo Header */}
                   <div className="relative w-full h-36 bg-white overflow-hidden border-b border-slate-850 flex items-center justify-center">
-                    <img
+                    <Image
                       src={item.photo_url || 'https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?q=80&w=600&auto=format&fit=crop'}
                       alt={item.name}
-                      className="max-w-full max-h-full object-contain group-hover:scale-102 transition-transform duration-500 opacity-90"
+                      fill
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                      className="object-contain group-hover:scale-102 transition-transform duration-500 opacity-90"
                     />
                     {item.status === 'Under Repair' && (
                       <div className="absolute inset-0 bg-rose-950/45 backdrop-blur-[1px] flex items-center justify-center">

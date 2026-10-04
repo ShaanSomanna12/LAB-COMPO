@@ -62,6 +62,7 @@ export default function MyReservations() {
 
   // Tab State
   const [activeTab, setActiveTab] = useState<'CURRENT' | 'COMPLETED'>('CURRENT');
+  const [deptMode, setDeptMode] = useState<'HARDWARE' | 'IOT'>('HARDWARE');
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFilter, setDateFilter] = useState<'ALL' | 'WEEK' | 'MONTH_1' | 'MONTH_3' | 'MONTH_6' | 'MONTH_12'>('ALL');
 
@@ -119,35 +120,12 @@ export default function MyReservations() {
         setStudentUsn(userData.usn);
         setStudentName(userData.name || 'Student');
         
-        const { data: resData, error } = await supabase
-          .from('reservations')
-          .select(`
-            reservation_id,
-            status,
-            created_at,
-            due_date,
-            project_title,
-            after_img_url,
-            borrowed_at,
-            components(name, department, lab_location, value_tier),
-            assigned_serial_numbers,
-            extension_requested,
-            extension_reason,
-            extension_days,
-            extension_status,
-            team_members,
-            signature_url,
-            request_mode,
-            project_type,
-            project_purpose,
-            hackathon_date,
-            hackathon_venue,
-            reservation_status_history(new_status, changed_at)
-          `)
-          .eq('user_id', userData.user_id)
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
+        const resRoute = await fetch(`/api/student/reservations?user_id=${userData.user_id}`);
+        if (!resRoute.ok) {
+          const errorData = await resRoute.json();
+          throw new Error(errorData.error || "Failed to fetch reservations");
+        }
+        const { data: resData } = await resRoute.json();
         // Fetch IoT Transactions for the student via secure backend route
         let iotTxData = null;
         try {
@@ -205,6 +183,49 @@ export default function MyReservations() {
         }
 
         setReservations(mappedData);
+
+        // Auto-open letter if returning from checkout
+        if (typeof window !== 'undefined' && window.location.search.includes('new=true') && mappedData.length > 0) {
+          const firstRes = mappedData[0];
+          if (firstRes.components?.department !== 'IOT') {
+            const reqItems = mappedData
+              .filter(r => (r.project_title || r.created_at) === (firstRes.project_title || firstRes.created_at))
+              .map(r => ({ name: r.components?.name || 'Component', quantity: 1 }))
+              .reduce((acc, curr) => {
+                const existing = acc.find(item => item.name === curr.name);
+                if (existing) existing.quantity += curr.quantity;
+                else acc.push(curr);
+                return acc;
+              }, [] as any[]);
+
+            const durationDays = firstRes.due_date ? getWorkingDaysCount(firstRes.created_at, firstRes.due_date) : 1;
+            
+            setInspectData({
+              studentName: userData.name || 'Student',
+              usn: userData.usn || '',
+              studentDepartment: firstRes.student_department,
+              section: firstRes.section,
+              year: firstRes.branch,
+              mobile: firstRes.mobile,
+              department: firstRes.components?.department || 'EDL',
+              items: reqItems,
+              requestDate: firstRes.created_at,
+              duration: durationDays,
+              status: firstRes.status,
+              teamMembers: firstRes.team_members,
+              signatureUrl: firstRes.signature_url,
+              projectTitle: firstRes.project_title,
+              projectType: firstRes.project_type,
+              projectPurpose: firstRes.project_description,
+              hackathonDate: firstRes.hackathon_date,
+              hackathonVenue: firstRes.hackathon_venue
+            });
+            setShowInspectModal(true);
+            
+            // Clean up URL without refreshing
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        }
       }
     } catch (err: any) {
       console.error("Error fetching reservations:", err.message);
@@ -359,6 +380,11 @@ export default function MyReservations() {
   }, [reservations]);
 
   const filteredGroups = groupedReservations.filter(group => {
+    const isIotGroup = group.some(r => r.components?.department === 'IOT');
+    
+    if (deptMode === 'HARDWARE' && isIotGroup) return false;
+    if (deptMode === 'IOT' && !isIotGroup) return false;
+
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const matchProj = group[0].project_title?.toLowerCase().includes(q) || false;
@@ -447,7 +473,8 @@ export default function MyReservations() {
           <div>
             <h4 className="text-slate-900 font-bold text-[10px] uppercase tracking-widest mb-0.5">Collection Instructions</h4>
             <p className="text-slate-600 text-[10px] leading-relaxed">
-              After receiving admin approval, proceed to the lab. Carry your physical ID and show your Digital Pass (QR icon) to collect the component.
+              After receiving admin approval, proceed to the lab. Carry your physical ID and show your Digital Pass (QR icon) to collect the component. <br/>
+              <strong className="text-red-600">Note: This is strictly for borrowing lab components, not purchasing. All items must be returned on time.</strong>
             </p>
           </div>
         </div>
@@ -472,6 +499,21 @@ export default function MyReservations() {
               <span className={`px-1.5 py-0.5 rounded-sm text-[9px] ${activeTab === 'COMPLETED' ? 'bg-teal-700 text-white' : 'bg-slate-200 text-slate-600'}`}>
                 {completedGroups.length}
               </span>
+            </button>
+          </div>
+
+          <div className="flex gap-2 bg-white p-1 border border-slate-300 shadow-sm w-fit rounded">
+            <button
+              onClick={() => setDeptMode('HARDWARE')}
+              className={`px-3 py-1.5 text-[10px] font-bold transition-all uppercase tracking-widest flex items-center gap-1.5 rounded-sm ${deptMode === 'HARDWARE' ? 'bg-slate-100 text-teal-800 shadow-sm' : 'bg-transparent text-slate-500 hover:text-slate-900'}`}
+            >
+              Requested Hardware
+            </button>
+            <button
+              onClick={() => setDeptMode('IOT')}
+              className={`px-3 py-1.5 text-[10px] font-bold transition-all uppercase tracking-widest flex items-center gap-1.5 rounded-sm ${deptMode === 'IOT' ? 'bg-slate-100 text-teal-800 shadow-sm' : 'bg-transparent text-slate-500 hover:text-slate-900'}`}
+            >
+              M306/M302 Labs
             </button>
           </div>
 
@@ -639,6 +681,10 @@ export default function MyReservations() {
                         setInspectData({
                           studentName: studentName,
                           usn: studentUsn || '',
+                          studentDepartment: firstRes.student_department,
+                          section: firstRes.section,
+                          year: firstRes.branch,
+                          mobile: firstRes.mobile,
                           department: firstRes.components?.department || 'EDL',
                           items: reqItems,
                           requestDate: firstRes.created_at,
@@ -648,7 +694,7 @@ export default function MyReservations() {
                           signatureUrl: firstRes.signature_url,
                           projectTitle: firstRes.project_title,
                           projectType: firstRes.project_type,
-                          projectPurpose: firstRes.project_purpose,
+                          projectPurpose: firstRes.project_description,
                           hackathonDate: firstRes.hackathon_date,
                           hackathonVenue: firstRes.hackathon_venue
                         });

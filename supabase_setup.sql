@@ -4,6 +4,13 @@
 -- Enable UUID extension if not exists
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- 0. Create Storage Buckets (if they do not exist)
+INSERT INTO storage.buckets (id, name, public, file_size_limit)
+VALUES 
+  ('id_cards', 'id_cards', true, 104857600),
+  ('signatures', 'signatures', true, 104857600)
+ON CONFLICT (id) DO UPDATE SET file_size_limit = EXCLUDED.file_size_limit;
+
 -- 1. Create Users Table
 CREATE TABLE IF NOT EXISTS public.users (
     user_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -67,45 +74,6 @@ ALTER TABLE public.reservations ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow public select for Reservations" ON public.reservations FOR SELECT USING (true);
 CREATE POLICY "Allow public insert for Reservations" ON public.reservations FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow public update for Reservations" ON public.reservations FOR UPDATE USING (true);
-
--- 4. Create Labs Table
-CREATE TABLE IF NOT EXISTS public.labs (
-    lab_id VARCHAR(100) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    room_number VARCHAR(100),
-    department VARCHAR(100),
-    description TEXT,
-    photo_url TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- Enable RLS and insert/select/delete policy for Labs
-ALTER TABLE public.labs ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow public select for Labs" ON public.labs FOR SELECT USING (true);
-CREATE POLICY "Allow public insert for Labs" ON public.labs FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public delete for Labs" ON public.labs FOR DELETE USING (true);
-
--- 5. Create Lab Access Requests Table
-CREATE TABLE IF NOT EXISTS public.lab_access_requests (
-    request_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    student_name VARCHAR(255) NOT NULL,
-    usn VARCHAR(50) NOT NULL,
-    lab_name VARCHAR(255) NOT NULL,
-    department VARCHAR(100) NOT NULL,
-    access_date DATE NOT NULL,
-    time_slot VARCHAR(100) NOT NULL,
-    purpose TEXT,
-    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
-    admin_remarks TEXT,
-    hod_remarks TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- Enable RLS and insert/select/update policy for Lab Access Requests
-ALTER TABLE public.lab_access_requests ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow public select for Lab Access Requests" ON public.lab_access_requests FOR SELECT USING (true);
-CREATE POLICY "Allow public insert for Lab Access Requests" ON public.lab_access_requests FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public update for Lab Access Requests" ON public.lab_access_requests FOR UPDATE USING (true);
 
 -- 6. Create Reservation Status History Table
 CREATE TABLE IF NOT EXISTS public.reservation_status_history (
@@ -179,3 +147,54 @@ ADD COLUMN extension_reason TEXT,
 ADD COLUMN extension_days INTEGER,
 ADD COLUMN extension_status VARCHAR(50);
 
+-- Support for multi-field checkout form
+ALTER TABLE public.reservations
+ADD COLUMN IF NOT EXISTS student_name VARCHAR(255),
+ADD COLUMN IF NOT EXISTS usn VARCHAR(50),
+ADD COLUMN IF NOT EXISTS branch VARCHAR(50),
+ADD COLUMN IF NOT EXISTS mobile VARCHAR(50),
+ADD COLUMN IF NOT EXISTS target_department VARCHAR(100),
+ADD COLUMN IF NOT EXISTS request_date TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS duration INTEGER,
+ADD COLUMN IF NOT EXISTS id_card_url TEXT,
+ADD COLUMN IF NOT EXISTS signature_url TEXT,
+ADD COLUMN IF NOT EXISTS project_description TEXT,
+ADD COLUMN IF NOT EXISTS project_type VARCHAR(100),
+ADD COLUMN IF NOT EXISTS hackathon_date DATE,
+ADD COLUMN IF NOT EXISTS hackathon_venue VARCHAR(255),
+ADD COLUMN IF NOT EXISTS is_team_project BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS team_members JSONB;
+
+
+
+ALTER TABLE public.components ADD COLUMN IF NOT EXISTS value_tier VARCHAR(50) DEFAULT 'STANDARD';
+ALTER TABLE public.reservations ADD COLUMN IF NOT EXISTS assigned_serial_numbers TEXT[], ADD COLUMN IF NOT EXISTS request_mode VARCHAR(50) DEFAULT 'NORMAL';
+
+ - -   4 .   S t o r a g e   P o l i c i e s   f o r   U p l o a d s 
+ C R E A T E   P O L I C Y   \  
+ A l l o w  
+ p u b l i c  
+ i n s e r t  
+ t o  
+ i d _ c a r d s  
+ b u c k e t \   O N   s t o r a g e . o b j e c t s   F O R   I N S E R T   W I T H   C H E C K   ( b u c k e t _ i d   =   ' i d _ c a r d s ' ) ; 
+ C R E A T E   P O L I C Y   \ A l l o w  
+ p u b l i c  
+ s e l e c t  
+ f r o m  
+ i d _ c a r d s  
+ b u c k e t \   O N   s t o r a g e . o b j e c t s   F O R   S E L E C T   U S I N G   ( b u c k e t _ i d   =   ' i d _ c a r d s ' ) ; 
+ C R E A T E   P O L I C Y   \ A l l o w  
+ p u b l i c  
+ i n s e r t  
+ t o  
+ s i g n a t u r e s  
+ b u c k e t \   O N   s t o r a g e . o b j e c t s   F O R   I N S E R T   W I T H   C H E C K   ( b u c k e t _ i d   =   ' s i g n a t u r e s ' ) ; 
+ C R E A T E   P O L I C Y   \ A l l o w  
+ p u b l i c  
+ s e l e c t  
+ f r o m  
+ s i g n a t u r e s  
+ b u c k e t \   O N   s t o r a g e . o b j e c t s   F O R   S E L E C T   U S I N G   ( b u c k e t _ i d   =   ' s i g n a t u r e s ' ) ; 
+  
+ 
