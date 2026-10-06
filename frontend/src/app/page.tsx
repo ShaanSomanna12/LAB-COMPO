@@ -141,7 +141,7 @@ export default function StudentAuth() {
         // Credentials are never stored in client JS.
         // Dispatch to /api/auth with { department, password, roleType }.
         const isAdminUSN = formattedUSN.startsWith('ADMIN');
-        const isHodUSN   = formattedUSN.startsWith('HOD');
+        const isHodUSN = formattedUSN.startsWith('HOD');
 
         if (isAdminUSN || isHodUSN) {
           // Derive department and roleType from the typed USN
@@ -216,7 +216,7 @@ export default function StudentAuth() {
 
   return (
     <div className="relative min-h-screen bg-[#020617] flex flex-col justify-start md:justify-center pt-[calc(3rem+env(safe-area-inset-top,0px))] pb-12 md:py-12 px-4 sm:px-6 lg:px-8 selection:bg-cyan-500/30 overflow-x-hidden">
-      
+
       {/* 3D Particle Network Background */}
       <ParticleNetwork />
 
